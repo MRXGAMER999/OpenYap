@@ -5,8 +5,10 @@ import com.openyap.model.HotkeyCapture
 import com.openyap.model.HotkeyConfig
 import com.openyap.model.HotkeyEvent
 import com.openyap.model.HotkeyModifier
-import com.openyap.platform.WindowsHotkeyManager.Companion.CAPTURE_TIMEOUT_MS
+import com.sun.jna.platform.win32.Kernel32
 import com.sun.jna.platform.win32.User32
+import com.sun.jna.platform.win32.WinDef
+import com.sun.jna.platform.win32.WinUser
 import com.sun.jna.platform.win32.WinUser.MSG
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -22,28 +24,31 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.newSingleThreadContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.Closeable
 
+private const val WH_KEYBOARD_LL = 13
+private const val WM_KEYDOWN = 0x0100
+private const val WM_KEYUP = 0x0101
+private const val WM_SYSKEYDOWN = 0x0104
+private const val WM_SYSKEYUP = 0x0105
+private const val VK_ESCAPE = 0x1B
+private const val CAPTURE_TIMEOUT_MS = 10_000L
+
 /**
- * Windows hotkey manager using Win32 RegisterHotKey / PeekMessage.
+ * Windows hotkey manager using a WH_KEYBOARD_LL low-level keyboard hook
+ * to detect key-down **and** key-up events for hold-to-record.
  *
  * All Win32 calls run on a single dedicated thread ([win32Dispatcher]) to
- * satisfy the Win32 thread-affinity requirement: RegisterHotKey,
- * UnregisterHotKey, and PeekMessage must all execute on the same thread.
+ * satisfy the Win32 thread-affinity requirement for the message pump that
+ * drives the hook callback.
  */
 class WindowsHotkeyManager : HotkeyManager, Closeable {
 
     companion object {
-        private const val HOTKEY_ID_START = 1
-        private const val HOTKEY_ID_STOP = 2
-        private const val HOTKEY_ID_HOLD = 3
-        private const val WM_HOTKEY = 0x0312
-        private const val MOD_NOREPEAT = 0x4000
-        private const val CAPTURE_TIMEOUT_MS = 10_000L
-
-        /** Virtual key codes for modifier keys — ignored during capture. */
         private val MODIFIER_VK_CODES = setOf(
             0x10, 0x11, 0x12,   // VK_SHIFT, VK_CONTROL, VK_MENU
             0xA0, 0xA1,         // VK_LSHIFT, VK_RSHIFT
@@ -52,13 +57,10 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
         )
     }
 
-    /**
-     * Single-thread dispatcher guarantees Win32 thread affinity.
-     * Every RegisterHotKey / UnregisterHotKey / PeekMessage call is
-     * dispatched here, so they always execute on the same OS thread.
-     */
-    @OptIn(DelicateCoroutinesApi::class)
+    @OptIn(DelicateCoroutinesApi::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     private val win32Dispatcher = newSingleThreadContext("HotkeyThread")
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     private val scope = CoroutineScope(win32Dispatcher + SupervisorJob())
 
     private val _hotkeyEvents = MutableSharedFlow<HotkeyEvent>(extraBufferCapacity = 16)
@@ -68,32 +70,105 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
     private var listenerJob: Job? = null
     private val formatter = WindowsHotkeyDisplayFormatter()
 
-    /**
-     * When non-null the message loop enters capture mode: it unregisters
-     * hotkeys, polls for a raw key-down, completes the [CompletableDeferred],
-     * and re-registers hotkeys.
-     */
     @Volatile
     private var pendingCapture: CompletableDeferred<HotkeyCapture>? = null
 
+    private val captureMutex = Mutex()
+
+    // Low-level keyboard hook handle — must be unhooked on shutdown.
+    @Volatile
+    private var keyboardHook: WinUser.HHOOK? = null
+
+    // Debounce flag: Windows sends repeated WM_KEYDOWN while held.
+    @Volatile
+    private var isHoldDown = false
+
     /**
-     * Updates the hotkey configuration. If the listener is active the
-     * hotkeys are unregistered, the config is swapped, and they are
-     * re-registered — all on the Win32 thread.
+     * Stored as a class field to prevent garbage collection of the JNA callback.
+     * If the GC collects the callback reference, the native side will crash.
      */
+    private val keyboardProc = WinUser.LowLevelKeyboardProc { nCode, wParam, info ->
+        if (nCode >= 0) {
+            val vkCode = info.vkCode
+            val msgType = wParam.toInt()
+
+            val capture = pendingCapture
+            if (capture != null) {
+                handleCaptureKeyEvent(vkCode, msgType, capture)
+            } else {
+                val consumed = handleHotkeyEvent(vkCode, msgType)
+                if (consumed) {
+                    return@LowLevelKeyboardProc WinDef.LRESULT(1)
+                }
+            }
+        }
+        User32.INSTANCE.CallNextHookEx(
+            keyboardHook, nCode, wParam,
+            WinDef.LPARAM(com.sun.jna.Pointer.nativeValue(info.pointer)),
+        )
+    }
+
+    private fun handleHotkeyEvent(vkCode: Int, msgType: Int): Boolean {
+        val currentModifiers = detectCurrentModifiers()
+        val binding = config.startHotkey ?: return false
+        if (!binding.enabled) return false
+
+        if (matchesConfiguredHotkey(vkCode, currentModifiers, binding)) {
+            when (msgType) {
+                WM_KEYDOWN, WM_SYSKEYDOWN -> {
+                    if (!isHoldDown) {
+                        isHoldDown = true
+                        _hotkeyEvents.tryEmit(HotkeyEvent.HoldDown)
+                    }
+                }
+                WM_KEYUP, WM_SYSKEYUP -> {
+                    isHoldDown = false
+                    _hotkeyEvents.tryEmit(HotkeyEvent.HoldUp)
+                }
+            }
+            return true
+        }
+
+        // Escape key cancellation while recording
+        if (vkCode == VK_ESCAPE && isHoldDown && (msgType == WM_KEYDOWN || msgType == WM_SYSKEYDOWN)) {
+            isHoldDown = false
+            _hotkeyEvents.tryEmit(HotkeyEvent.CancelRecording)
+            return true
+        }
+
+        return false
+    }
+
+    private fun handleCaptureKeyEvent(
+        vkCode: Int,
+        msgType: Int,
+        capture: CompletableDeferred<HotkeyCapture>,
+    ) {
+        if (vkCode in MODIFIER_VK_CODES) return
+        if (msgType != WM_KEYDOWN && msgType != WM_SYSKEYDOWN) return
+
+        val modifiers = detectCurrentModifiers()
+        val binding = HotkeyBinding(vkCode, modifiers)
+        capture.complete(
+            HotkeyCapture(
+                platformKeyCode = vkCode,
+                modifiers = modifiers,
+                displayLabel = formatter.format(binding),
+            )
+        )
+    }
+
+    private fun matchesConfiguredHotkey(
+        vkCode: Int,
+        currentModifiers: Set<HotkeyModifier>,
+        binding: HotkeyBinding,
+    ): Boolean {
+        return vkCode == binding.platformKeyCode && currentModifiers == binding.modifiers
+    }
+
     override fun setConfig(config: HotkeyConfig) {
-        // Dispatch to the win32 thread so register/unregister calls
-        // satisfy thread affinity. Coroutines on a single-thread
-        // dispatcher are serialised, so rapid calls cannot interleave.
         scope.launch {
-            val wasListening = listenerJob?.isActive == true
-            if (wasListening) {
-                unregisterHotkeys()
-            }
             this@WindowsHotkeyManager.config = config
-            if (wasListening) {
-                registerHotkeys()
-            }
         }
     }
 
@@ -103,51 +178,17 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
         listenerJob = scope.launch {
             try {
                 ensureMessageQueue()
-                registerHotkeys()
+                installHook()
 
                 val msg = MSG()
                 while (isActive) {
-                    // ── Capture mode ──────────────────────────────
-                    val captureDeferred = pendingCapture
-                    if (captureDeferred != null) {
-                        unregisterHotkeys()
-                        try {
-                            val capture = runCaptureLoop(captureDeferred)
-                            captureDeferred.complete(capture)
-                        } catch (e: CancellationException) {
-                            captureDeferred.cancel(e)
-                        } catch (e: Exception) {
-                            captureDeferred.completeExceptionally(e)
-                        } finally {
-                            pendingCapture = null
-                            registerHotkeys()
-                        }
-                        continue
-                    }
-
-                    // ── Normal hotkey processing ─────────────────
                     val result = User32.INSTANCE.PeekMessage(msg, null, 0, 0, 1)
-                    if (result) {
-                        if (msg.message == WM_HOTKEY) {
-                            val id = msg.wParam.toInt()
-                            val event = when (id) {
-                                HOTKEY_ID_START -> HotkeyEvent.ToggleRecording
-                                HOTKEY_ID_STOP -> HotkeyEvent.StopRecording
-                                // Hold hotkey is registered as a toggle because
-                                // RegisterHotKey cannot detect key-up. True
-                                // hold-to-record requires SetWindowsHookEx which
-                                // is not yet implemented.
-                                HOTKEY_ID_HOLD -> HotkeyEvent.ToggleRecording
-                                else -> null
-                            }
-                            event?.let { _hotkeyEvents.tryEmit(it) }
-                        }
-                    } else {
+                    if (!result) {
                         delay(10)
                     }
                 }
             } finally {
-                unregisterHotkeys()
+                uninstallHook()
             }
         }
     }
@@ -157,123 +198,66 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
         listenerJob = null
     }
 
-    /**
-     * Captures the next key the user presses and returns it as a
-     * [HotkeyCapture]. Times out after [CAPTURE_TIMEOUT_MS] ms.
-     *
-     * If the listener is active the capture runs inside the existing
-     * message loop (same Win32 thread). Otherwise a temporary loop
-     * is created on the Win32 thread.
-     */
-    override suspend fun captureNextHotkey(): HotkeyCapture {
-        return withTimeout(CAPTURE_TIMEOUT_MS) {
+    override suspend fun captureNextHotkey(): HotkeyCapture = captureMutex.withLock {
+        withTimeout(CAPTURE_TIMEOUT_MS) {
             if (listenerJob?.isActive == true) {
-                // Signal the message loop to enter capture mode
                 val deferred = CompletableDeferred<HotkeyCapture>()
                 pendingCapture = deferred
                 try {
                     deferred.await()
                 } finally {
-                    // On timeout / cancellation: cancel the deferred so the
-                    // capture loop sees isCancelled and exits promptly.
                     deferred.cancel()
                     pendingCapture = null
                 }
             } else {
-                // No active listener — run capture directly on the Win32 thread
+                @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
                 withContext(win32Dispatcher) {
                     ensureMessageQueue()
-                    val sentinel = CompletableDeferred<HotkeyCapture>()
-                    runCaptureLoop(sentinel)
-                }
-            }
-        }
-    }
-
-    // ────────────────────────────────────────────────────────────────
-    //  Capture loop (runs on win32Dispatcher)
-    // ────────────────────────────────────────────────────────────────
-
-    /**
-     * Polls the Win32 message queue for WM_KEYDOWN / WM_SYSKEYDOWN,
-     * ignoring pure modifier presses. Returns as soon as a real key
-     * is pressed, or throws [CancellationException] when the
-     * [deferred] is cancelled (e.g. by a timeout).
-     */
-    private suspend fun runCaptureLoop(
-        deferred: CompletableDeferred<HotkeyCapture>,
-    ): HotkeyCapture {
-        // We poll GetAsyncKeyState since our background thread doesn't own
-        // the foreground window and therefore never receives WM_KEYDOWN messages.
-        while (!deferred.isCancelled) {
-            // Check all virtual keys from 0x08 (Backspace) to 0xFE
-            for (vkCode in 0x08..0xFE) {
-                if (vkCode in MODIFIER_VK_CODES) continue
-
-                val state = User32.INSTANCE.GetAsyncKeyState(vkCode).toInt()
-                // If the most significant bit is set, the key is currently down
-                if ((state and 0x8000) != 0) {
-                    val modifiers = detectCurrentModifiers()
-                    val binding = HotkeyBinding(vkCode, modifiers)
-
-                    // Wait until they release the key so we don't immediately trigger it
-                    // if it happens to be the same as the new hotkey.
-                    while ((User32.INSTANCE.GetAsyncKeyState(vkCode).toInt() and 0x8000) != 0) {
-                        delay(10)
+                    installHook()
+                    try {
+                        val deferred = CompletableDeferred<HotkeyCapture>()
+                        pendingCapture = deferred
+                        try {
+                            val msg = MSG()
+                            while (!deferred.isCompleted && !deferred.isCancelled) {
+                                User32.INSTANCE.PeekMessage(msg, null, 0, 0, 1)
+                                delay(10)
+                            }
+                            deferred.await()
+                        } finally {
+                            pendingCapture = null
+                        }
+                    } finally {
+                        uninstallHook()
                     }
-
-                    return HotkeyCapture(
-                        platformKeyCode = vkCode,
-                        modifiers = modifiers,
-                        displayLabel = formatter.format(binding),
-                    )
                 }
             }
-            delay(10)
         }
-        throw CancellationException("Hotkey capture cancelled")
     }
 
-    // ────────────────────────────────────────────────────────────────
-    //  Win32 helpers — ALL called on win32Dispatcher
-    // ────────────────────────────────────────────────────────────────
+    // ── Win32 helpers — ALL called on win32Dispatcher ──
 
-    private fun registerHotkeys() {
-        var anyRegistered = false
+    private fun installHook() {
+        if (keyboardHook != null) return
+        val hMod = Kernel32.INSTANCE.GetModuleHandle(null)
+        keyboardHook = User32.INSTANCE.SetWindowsHookEx(
+            WH_KEYBOARD_LL,
+            keyboardProc,
+            hMod,
+            0,
+        )
+        if (keyboardHook == null) {
+            val err = Kernel32.INSTANCE.GetLastError()
+            throw IllegalStateException("SetWindowsHookEx(WH_KEYBOARD_LL) failed: Win32 error code $err")
+        }
+    }
 
-        config.startHotkey?.let { binding ->
-            if (binding.enabled) {
-                anyRegistered = User32.INSTANCE.RegisterHotKey(
-                    null, HOTKEY_ID_START,
-                    modifiersToFlags(binding.modifiers) or MOD_NOREPEAT,
-                    binding.platformKeyCode,
-                ) || anyRegistered
-            }
+    private fun uninstallHook() {
+        keyboardHook?.let { hook ->
+            User32.INSTANCE.UnhookWindowsHookEx(hook)
         }
-        config.stopHotkey?.let { binding ->
-            if (binding.enabled) {
-                anyRegistered = User32.INSTANCE.RegisterHotKey(
-                    null, HOTKEY_ID_STOP,
-                    modifiersToFlags(binding.modifiers) or MOD_NOREPEAT,
-                    binding.platformKeyCode,
-                ) || anyRegistered
-            }
-        }
-        config.holdHotkey?.let { binding ->
-            if (binding.enabled) {
-                anyRegistered = User32.INSTANCE.RegisterHotKey(
-                    null, HOTKEY_ID_HOLD,
-                    modifiersToFlags(binding.modifiers) or MOD_NOREPEAT,
-                    binding.platformKeyCode,
-                ) || anyRegistered
-            }
-        }
-
-        if (!anyRegistered) {
-            // Graceful warning instead of crashing — the user may have
-            // disabled all hotkeys intentionally.
-            System.err.println("Warning: No global hotkeys were registered. Check your hotkey settings.")
-        }
+        keyboardHook = null
+        isHoldDown = false
     }
 
     private fun ensureMessageQueue() {
@@ -281,47 +265,22 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
         User32.INSTANCE.PeekMessage(msg, null, 0, 0, 0)
     }
 
-    private fun unregisterHotkeys() {
-        User32.INSTANCE.UnregisterHotKey(null, HOTKEY_ID_START)
-        User32.INSTANCE.UnregisterHotKey(null, HOTKEY_ID_STOP)
-        User32.INSTANCE.UnregisterHotKey(null, HOTKEY_ID_HOLD)
-    }
-
-    private fun buildModFlags(): Int {
+    private fun detectCurrentModifiers(): Set<HotkeyModifier> {
         val user32 = User32.INSTANCE
-        var flags = 0
-        if (user32.GetAsyncKeyState(0x11).toInt() and 0x8000 != 0) flags = flags or 0x0002 // CTRL
-        if (user32.GetAsyncKeyState(0x10).toInt() and 0x8000 != 0) flags = flags or 0x0004 // SHIFT
-        if (user32.GetAsyncKeyState(0x12).toInt() and 0x8000 != 0) flags = flags or 0x0001 // ALT
-        if (user32.GetAsyncKeyState(0x5B).toInt() and 0x8000 != 0 ||
-            user32.GetAsyncKeyState(0x5C).toInt() and 0x8000 != 0
-        ) flags = flags or 0x0008 // WIN
-        return flags
+        return buildSet {
+            if (user32.GetAsyncKeyState(0x11).toInt() and 0x8000 != 0) add(HotkeyModifier.CTRL)
+            if (user32.GetAsyncKeyState(0x10).toInt() and 0x8000 != 0) add(HotkeyModifier.SHIFT)
+            if (user32.GetAsyncKeyState(0x12).toInt() and 0x8000 != 0) add(HotkeyModifier.ALT)
+            if (user32.GetAsyncKeyState(0x5B).toInt() and 0x8000 != 0 ||
+                user32.GetAsyncKeyState(0x5C).toInt() and 0x8000 != 0
+            ) add(HotkeyModifier.META)
+        }
     }
 
-    private fun detectCurrentModifiers(): Set<HotkeyModifier> = modFlagsToModifiers(buildModFlags())
-
-    private fun modifiersToFlags(modifiers: Set<HotkeyModifier>): Int {
-        var flags = 0
-        if (HotkeyModifier.ALT in modifiers) flags = flags or 0x0001
-        if (HotkeyModifier.CTRL in modifiers) flags = flags or 0x0002
-        if (HotkeyModifier.SHIFT in modifiers) flags = flags or 0x0004
-        if (HotkeyModifier.META in modifiers) flags = flags or 0x0008
-        return flags
-    }
-
-    private fun modFlagsToModifiers(flags: Int): Set<HotkeyModifier> = buildSet {
-        if (flags and 0x0001 != 0) add(HotkeyModifier.ALT)
-        if (flags and 0x0002 != 0) add(HotkeyModifier.CTRL)
-        if (flags and 0x0004 != 0) add(HotkeyModifier.SHIFT)
-        if (flags and 0x0008 != 0) add(HotkeyModifier.META)
-    }
-
-    /** Releases the Win32 thread and cancels all coroutines. */
     override fun close() {
         stopListening()
         scope.cancel()
-        @OptIn(DelicateCoroutinesApi::class)
+        @OptIn(DelicateCoroutinesApi::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
         win32Dispatcher.close()
     }
 }

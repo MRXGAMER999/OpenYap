@@ -3,12 +3,14 @@ package com.openyap.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.openyap.model.HotkeyEvent
+import com.openyap.model.OverlayState
 import com.openyap.model.PermissionStatus
 import com.openyap.model.RecordingEntry
 import com.openyap.model.RecordingState
 import com.openyap.platform.AudioRecorder
 import com.openyap.platform.ForegroundAppDetector
 import com.openyap.platform.HotkeyManager
+import com.openyap.platform.OverlayController
 import com.openyap.platform.PasteAutomation
 import com.openyap.platform.PermissionManager
 import com.openyap.repository.DictionaryRepository
@@ -56,6 +58,24 @@ sealed interface RecordingEvent {
     data object RefreshState : RecordingEvent
 }
 
+/**
+ * Callback interface for audio feedback — defined in commonMain so RecordingViewModel
+ * stays platform-agnostic. The JVM implementation delegates to AudioFeedbackService.
+ */
+interface AudioFeedbackPlayer {
+    fun playStart()
+    fun playStop()
+    fun playTooShort()
+    fun playError()
+}
+
+class NoOpAudioFeedbackPlayer : AudioFeedbackPlayer {
+    override fun playStart() {}
+    override fun playStop() {}
+    override fun playTooShort() {}
+    override fun playError() {}
+}
+
 class RecordingViewModel(
     private val hotkeyManager: HotkeyManager,
     private val audioRecorder: AudioRecorder,
@@ -68,6 +88,8 @@ class RecordingViewModel(
     private val userProfileRepository: UserProfileRepository,
     private val permissionManager: PermissionManager,
     private val dictionaryEngine: DictionaryEngine,
+    private val overlayController: OverlayController,
+    private val audioFeedbackPlayer: AudioFeedbackPlayer = NoOpAudioFeedbackPlayer(),
     private val tempDirProvider: () -> String,
     private val fileReader: (String) -> ByteArray,
     private val fileDeleter: (String) -> Unit,
@@ -88,7 +110,6 @@ class RecordingViewModel(
     private var durationJob: Job? = null
     private var currentRecordingPath: String? = null
 
-    // Holds the path of the audio file currently being processed so cancel can clean it up
     @Volatile
     private var currentProcessingPath: String? = null
     private var recordingStartedAt: TimeMark? = null
@@ -97,11 +118,12 @@ class RecordingViewModel(
         viewModelScope.launch {
             hotkeyManager.hotkeyEvents.collect { event ->
                 when (event) {
+                    is HotkeyEvent.HoldDown -> startRecording()
+                    is HotkeyEvent.HoldUp -> stopRecording()
+                    is HotkeyEvent.CancelRecording -> cancelRecording()
                     is HotkeyEvent.ToggleRecording -> toggleRecording()
                     is HotkeyEvent.StartRecording -> startRecording()
                     is HotkeyEvent.StopRecording -> stopRecording()
-                    is HotkeyEvent.HoldDown -> startRecording()
-                    is HotkeyEvent.HoldUp -> stopRecording()
                 }
             }
         }
@@ -109,6 +131,7 @@ class RecordingViewModel(
         viewModelScope.launch {
             audioRecorder.amplitudeFlow.collect { amplitude ->
                 _state.update { it.copy(amplitude = amplitude) }
+                overlayController.updateLevel(amplitude)
             }
         }
 
@@ -148,20 +171,37 @@ class RecordingViewModel(
 
     private suspend fun startRecording() {
         val currentState = _state.value.recordingState
+
+        if (currentState is RecordingState.Processing) {
+            overlayController.flashProcessing()
+            return
+        }
+
         if (currentState !is RecordingState.Idle &&
             currentState !is RecordingState.Error &&
             currentState !is RecordingState.Success
         ) return
 
+        val settings = settingsRepository.loadSettings()
+
         val apiKey = settingsRepository.loadApiKey()
         if (apiKey.isNullOrBlank()) {
             _state.update { it.copy(error = "Please set your Gemini API key in Settings.") }
+            if (settings.audioFeedbackEnabled) {
+                audioFeedbackPlayer.playError()
+            }
             return
         }
 
         if (!audioRecorder.hasPermission()) {
             _state.update { it.copy(error = "Microphone permission denied.") }
+            if (settings.audioFeedbackEnabled) {
+                audioFeedbackPlayer.playError()
+            }
             return
+        }
+        if (settings.audioFeedbackEnabled) {
+            audioFeedbackPlayer.playStart()
         }
 
         val timestamp = Clock.System.now().toEpochMilliseconds()
@@ -179,6 +219,8 @@ class RecordingViewModel(
             )
         }
 
+        overlayController.show()
+
         durationJob = viewModelScope.launch {
             var seconds = 0
             while (isActive) {
@@ -187,11 +229,10 @@ class RecordingViewModel(
                 _state.update {
                     val rs = it.recordingState
                     if (rs is RecordingState.Recording) {
-                        it.copy(
-                            recordingState = rs.copy(durationSeconds = seconds),
-                        )
+                        it.copy(recordingState = rs.copy(durationSeconds = seconds))
                     } else it
                 }
+                overlayController.updateDuration(seconds)
             }
         }
     }
@@ -213,15 +254,27 @@ class RecordingViewModel(
 
         if (elapsedSeconds < MIN_DURATION_SECONDS) {
             audioRecorder.stopRecording()
+
+            val settings = settingsRepository.loadSettings()
+            if (settings.audioFeedbackEnabled) {
+                audioFeedbackPlayer.playTooShort()
+            }
+
             _state.update {
                 it.copy(
                     recordingState = RecordingState.Error("Recording too short. Please speak for at least 0.5 seconds."),
                     error = "Recording too short.",
                 )
             }
+            overlayController.dismiss()
             currentRecordingPath?.let { deleteFile(it) }
             currentRecordingPath = null
             return
+        }
+
+        val settings = settingsRepository.loadSettings()
+        if (settings.audioFeedbackEnabled) {
+            audioFeedbackPlayer.playStop()
         }
 
         val duration = elapsedSeconds.roundToInt().coerceAtLeast(1)
@@ -231,11 +284,11 @@ class RecordingViewModel(
         val generation = ++processingGeneration
 
         _state.update { it.copy(recordingState = RecordingState.Processing) }
+        overlayController.updateState(OverlayState.PROCESSING)
 
         viewModelScope.launch {
             try {
                 val targetApp = foregroundAppDetector.getForegroundAppName()
-                val settings = settingsRepository.loadSettings()
                 val appKey = targetApp ?: "Default"
                 val tone = settingsRepository.loadAppTone(appKey) ?: "normal"
                 val customPrompt = settingsRepository.loadAppPrompt(appKey)
@@ -303,13 +356,18 @@ class RecordingViewModel(
                 }
                 _effects.emit(RecordingEffect.PasteSuccess)
 
+                overlayController.updateState(OverlayState.SUCCESS)
+
                 try {
                     dictionaryEngine.ingestObservedText(expandedResponse)
                 } catch (_: Exception) {
                 }
 
                 currentProcessingPath = null
-                delay(3000)
+                delay(2000)
+                overlayController.dismiss()
+
+                delay(1000)
                 _state.update {
                     if (it.recordingState is RecordingState.Success) {
                         it.copy(recordingState = RecordingState.Idle)
@@ -319,6 +377,7 @@ class RecordingViewModel(
                 deleteFile(path)
             } catch (e: Exception) {
                 currentProcessingPath = null
+                overlayController.dismiss()
                 if (generation == processingGeneration) {
                     _state.update {
                         it.copy(
@@ -343,14 +402,15 @@ class RecordingViewModel(
                 audioRecorder.stopRecording()
                 currentRecordingPath?.let { deleteFile(it) }
                 currentRecordingPath = null
+                overlayController.dismiss()
                 _state.update { it.copy(recordingState = RecordingState.Idle) }
             }
 
             is RecordingState.Processing -> {
                 processingGeneration++
-                // Clean up the audio file that was being processed
                 currentProcessingPath?.let { deleteFile(it) }
                 currentProcessingPath = null
+                overlayController.dismiss()
                 _state.update { it.copy(recordingState = RecordingState.Idle) }
             }
 

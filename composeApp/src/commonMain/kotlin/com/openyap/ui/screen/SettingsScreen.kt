@@ -256,6 +256,26 @@ fun SettingsScreen(
                 )
             }
 
+            HorizontalDivider()
+
+            Text("Recording", style = MaterialTheme.typography.headlineSmall)
+            FeatureToggleRow(
+                label = "Audio feedback",
+                description = "Play a short tone when recording starts and stops.",
+                checked = state.audioFeedbackEnabled,
+                onCheckedChange = { onEvent(SettingsEvent.ToggleAudioFeedback(it)) },
+            )
+
+            HorizontalDivider()
+
+            Text("Startup", style = MaterialTheme.typography.headlineSmall)
+            FeatureToggleRow(
+                label = "Start minimized to tray",
+                description = "Launch directly to the system tray without showing the main window.",
+                checked = state.startMinimized,
+                onCheckedChange = { onEvent(SettingsEvent.ToggleStartMinimized(it)) },
+            )
+
             Text(
                 text = "OpenYap v${state.appVersion.ifBlank { "1.0.0" }}",
                 style = MaterialTheme.typography.labelMedium,

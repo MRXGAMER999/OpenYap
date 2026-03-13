@@ -10,4 +10,6 @@ data class AppSettings(
     val phraseExpansionEnabled: Boolean = true,
     val dismissedUpdateVersion: String? = null,
     val onboardingCompleted: Boolean = false,
+    val audioFeedbackEnabled: Boolean = true,
+    val startMinimized: Boolean = false,
 )

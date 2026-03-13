@@ -264,13 +264,18 @@ fun AppShell(
                 }
             }
 
-            RecordingIndicator(
-                recordingState = recordingState.recordingState,
-                amplitude = recordingState.amplitude,
-                onCancel = { onRecordingEvent(RecordingEvent.CancelRecording) },
-                onErrorDismissed = { onRecordingEvent(RecordingEvent.DismissError) },
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = Spacing.md),
-            )
+            // In-window indicator — secondary to the floating overlay.
+            // Only shown for error states (overlay doesn't persist errors).
+            val showInWindowIndicator = recordingState.recordingState is RecordingState.Error
+            if (showInWindowIndicator) {
+                RecordingIndicator(
+                    recordingState = recordingState.recordingState,
+                    amplitude = recordingState.amplitude,
+                    onCancel = { onRecordingEvent(RecordingEvent.CancelRecording) },
+                    onErrorDismissed = { onRecordingEvent(RecordingEvent.DismissError) },
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = Spacing.md),
+                )
+            }
         }
     }
 }

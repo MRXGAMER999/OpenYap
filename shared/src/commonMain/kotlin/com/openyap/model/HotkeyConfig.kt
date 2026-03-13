@@ -34,4 +34,5 @@ sealed interface HotkeyEvent {
     data object StopRecording : HotkeyEvent
     data object HoldDown : HotkeyEvent
     data object HoldUp : HotkeyEvent
+    data object CancelRecording : HotkeyEvent
 }

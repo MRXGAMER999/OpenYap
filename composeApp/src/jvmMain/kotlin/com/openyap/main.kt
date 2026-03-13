@@ -19,6 +19,10 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberTrayState
 import androidx.compose.ui.window.rememberWindowState
+import com.openyap.model.RecordingState
+import com.openyap.platform.AudioFeedbackService
+import com.openyap.platform.ComposeOverlayController
+import com.openyap.platform.ComposeOverlayWindow
 import com.openyap.platform.HttpClientFactory
 import com.openyap.platform.JvmAudioRecorder
 import com.openyap.platform.PlatformInit
@@ -37,6 +41,7 @@ import com.openyap.service.DictionaryEngine
 import com.openyap.ui.navigation.AppShell
 import com.openyap.ui.navigation.Route
 import com.openyap.ui.theme.AppTheme
+import com.openyap.viewmodel.AudioFeedbackPlayer
 import com.openyap.viewmodel.DictionaryViewModel
 import com.openyap.viewmodel.HistoryViewModel
 import com.openyap.viewmodel.OnboardingEvent
@@ -49,12 +54,11 @@ import com.openyap.viewmodel.SettingsViewModel
 import com.openyap.viewmodel.StatsViewModel
 import com.openyap.viewmodel.UserProfileViewModel
 import kotlinx.coroutines.launch
+import java.awt.Color
+import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 
 fun main() {
-    // Prevent AWT from erasing the window background to white during resize.
-    // Without this, Windows sends WM_ERASEBKGND which fills newly-exposed
-    // areas with white before Compose/Skia can repaint them.
     System.setProperty("sun.awt.noerasebackground", "true")
 
     application {
@@ -71,6 +75,17 @@ fun main() {
         val geminiClient = remember { HttpClientFactory.createGeminiClient() }
         val dictionaryEngine = remember { DictionaryEngine(dictionaryRepo) }
         val hotkeyFormatter = remember { WindowsHotkeyDisplayFormatter() }
+        val overlayController = remember { ComposeOverlayController() }
+        val audioFeedbackService = remember { AudioFeedbackService() }
+
+        val audioFeedbackPlayer = remember {
+            object : AudioFeedbackPlayer {
+                override fun playStart() = audioFeedbackService.play(AudioFeedbackService.Tone.START)
+                override fun playStop() = audioFeedbackService.play(AudioFeedbackService.Tone.STOP)
+                override fun playTooShort() = audioFeedbackService.play(AudioFeedbackService.Tone.TOO_SHORT)
+                override fun playError() = audioFeedbackService.play(AudioFeedbackService.Tone.ERROR)
+            }
+        }
 
         val recordingViewModel = remember {
             RecordingViewModel(
@@ -85,6 +100,8 @@ fun main() {
                 userProfileRepository = userProfileRepo,
                 permissionManager = permissionManager,
                 dictionaryEngine = dictionaryEngine,
+                overlayController = overlayController,
+                audioFeedbackPlayer = audioFeedbackPlayer,
                 tempDirProvider = { PlatformInit.tempDir.toString() },
                 fileReader = { path -> java.io.File(path).readBytes() },
                 fileDeleter = { path -> java.io.File(path).delete() },
@@ -108,27 +125,45 @@ fun main() {
         var appTones by remember { mutableStateOf(emptyMap<String, String>()) }
         var appPrompts by remember { mutableStateOf(emptyMap<String, String>()) }
 
+        var isVisible by remember { mutableStateOf(true) }
+
         LaunchedEffect(Unit) {
             val settings = settingsRepo.loadSettings()
             hotkeyManager.setConfig(settings.hotkeyConfig)
             hotkeyManager.startListening()
             appTones = settingsRepo.loadAllAppTones()
             appPrompts = settingsRepo.loadAllAppPrompts()
+
+            if (settings.startMinimized) {
+                isVisible = false
+            }
+
+            // Preload audio tones using resource files from composeResources
+            try {
+                val startToneBytes = javaClass.getResourceAsStream("/composeResources/openyap.composeapp.generated.resources/files/start_tone.wav")?.use { it.readBytes() }
+                val stopToneBytes = javaClass.getResourceAsStream("/composeResources/openyap.composeapp.generated.resources/files/stop_tone.wav")?.use { it.readBytes() }
+
+                val toneMap = buildMap {
+                    startToneBytes?.let { put(AudioFeedbackService.Tone.START, it) }
+                    stopToneBytes?.let {
+                        put(AudioFeedbackService.Tone.STOP, it)
+                        put(AudioFeedbackService.Tone.TOO_SHORT, it)
+                    }
+                }
+                audioFeedbackService.preload(toneMap)
+            } catch (_: Exception) {
+                // Audio feedback unavailable — visual-only fallback
+            }
         }
 
-        var isVisible by remember { mutableStateOf(true) }
         val trayState = rememberTrayState()
         val windowState = rememberWindowState(size = DpSize(1100.dp, 800.dp))
         val backStack = remember { mutableStateListOf<Route>(Route.Home) }
 
-        val trayIcon = remember {
-            val img = BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB).apply {
-                val g = createGraphics()
-                g.color = java.awt.Color(21, 101, 192)
-                g.fillOval(0, 0, 16, 16)
-                g.dispose()
-            }
-            BitmapPainter(img.toComposeImageBitmap())
+        val recordingState by recordingViewModel.state.collectAsState()
+
+        val trayIcon = remember(recordingState.recordingState) {
+            BitmapPainter(createTrayIcon(recordingState.recordingState).toComposeImageBitmap())
         }
 
         Tray(
@@ -138,11 +173,16 @@ fun main() {
             menu = {
                 Item("Show", onClick = { isVisible = true })
                 Item("Quit", onClick = {
+                    overlayController.close()
+                    audioFeedbackService.close()
                     hotkeyManager.close()
                     exitApplication()
                 })
             },
         )
+
+        val overlayState by overlayController.uiState.collectAsState()
+        ComposeOverlayWindow(overlayState)
 
         LaunchedEffect(recordingViewModel, historyViewModel, statsViewModel) {
             recordingViewModel.effects.collect { effect ->
@@ -163,33 +203,24 @@ fun main() {
                 title = "OpenYap",
                 state = windowState,
             ) {
-                // Match native window chrome + background to the app theme
                 val isDark = isSystemInDarkTheme()
                 DisposableEffect(isDark) {
                     val bgColor = if (isDark) {
-                        java.awt.Color(0x1F, 0x29, 0x37) // matches DarkColorScheme.surface
+                        java.awt.Color(0x1F, 0x29, 0x37)
                     } else {
-                        java.awt.Color(0xFB, 0xFC, 0xFF) // matches LightColorScheme.surface
+                        java.awt.Color(0xFB, 0xFC, 0xFF)
                     }
-                    // Set background on every AWT layer to eliminate any white surface
                     window.background = bgColor
                     window.rootPane.background = bgColor
                     window.contentPane.background = bgColor
                     window.layeredPane.background = bgColor
                     window.glassPane.background = bgColor
 
-                    // Set dark/light title bar via Windows DWM API.
-                    // Schedule on the AWT event thread so the native HWND is
-                    // guaranteed to exist (DisposableEffect can fire before the
-                    // window peer is fully realised).
                     val applyTitleBar = Runnable {
                         WindowsThemeHelper.setDarkTitleBar(window, isDark)
                     }
                     javax.swing.SwingUtilities.invokeLater(applyTitleBar)
 
-                    // Also re-apply when the window is first shown / re-activated
-                    // to cover edge cases where the HWND is not yet available on
-                    // the first invokeLater.
                     val windowListener = object : java.awt.event.WindowAdapter() {
                         override fun windowOpened(e: java.awt.event.WindowEvent?) {
                             applyTitleBar.run()
@@ -206,7 +237,6 @@ fun main() {
                     }
                 }
 
-                val recordingState by recordingViewModel.state.collectAsState()
                 val settingsState by settingsViewModel.state.collectAsState()
                 val historyState by historyViewModel.state.collectAsState()
                 val onboardingState by onboardingViewModel.state.collectAsState()
@@ -266,4 +296,19 @@ fun main() {
             }
         }
     }
+}
+
+private fun createTrayIcon(state: RecordingState): BufferedImage {
+    val size = 16
+    val image = BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB)
+    val g = image.createGraphics()
+    g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+    g.color = when (state) {
+        is RecordingState.Recording -> Color(0xE5, 0x39, 0x35)  // Red
+        is RecordingState.Processing -> Color(0xFF, 0xA7, 0x26) // Orange
+        else -> Color(0x15, 0x65, 0xC0)                         // Blue (idle/success/error)
+    }
+    g.fillOval(2, 2, size - 4, size - 4)
+    g.dispose()
+    return image
 }

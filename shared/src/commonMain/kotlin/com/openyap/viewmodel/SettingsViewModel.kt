@@ -19,6 +19,8 @@ data class SettingsUiState(
     val geminiModel: String = "gemini-2.0-flash",
     val genZEnabled: Boolean = false,
     val phraseExpansionEnabled: Boolean = true,
+    val audioFeedbackEnabled: Boolean = true,
+    val startMinimized: Boolean = false,
     val isSaving: Boolean = false,
     val saveMessage: String? = null,
     val availableModels: List<GeminiModelInfo> = emptyList(),
@@ -35,6 +37,8 @@ sealed interface SettingsEvent {
     data class SelectModel(val modelId: String) : SettingsEvent
     data class ToggleGenZ(val enabled: Boolean) : SettingsEvent
     data class TogglePhraseExpansion(val enabled: Boolean) : SettingsEvent
+    data class ToggleAudioFeedback(val enabled: Boolean) : SettingsEvent
+    data class ToggleStartMinimized(val enabled: Boolean) : SettingsEvent
     data object RefreshModels : SettingsEvent
     data object CaptureHotkey : SettingsEvent
     data object ClearHotkeyMessage : SettingsEvent
@@ -72,6 +76,8 @@ class SettingsViewModel(
                     geminiModel = settings.geminiModel,
                     genZEnabled = settings.genZEnabled,
                     phraseExpansionEnabled = settings.phraseExpansionEnabled,
+                    audioFeedbackEnabled = settings.audioFeedbackEnabled,
+                    startMinimized = settings.startMinimized,
                     hotkeyLabel = formatHotkey(settings.hotkeyConfig.startHotkey),
                     appVersion = version,
                 )
@@ -86,6 +92,8 @@ class SettingsViewModel(
             is SettingsEvent.SelectModel -> selectModel(event.modelId)
             is SettingsEvent.ToggleGenZ -> toggleGenZ(event.enabled)
             is SettingsEvent.TogglePhraseExpansion -> togglePhraseExpansion(event.enabled)
+            is SettingsEvent.ToggleAudioFeedback -> toggleAudioFeedback(event.enabled)
+            is SettingsEvent.ToggleStartMinimized -> toggleStartMinimized(event.enabled)
             is SettingsEvent.RefreshModels -> refreshModels()
             is SettingsEvent.CaptureHotkey -> captureHotkey()
             is SettingsEvent.ClearHotkeyMessage -> _state.update { it.copy(hotkeyError = null) }
@@ -202,6 +210,22 @@ class SettingsViewModel(
             val settings = settingsRepository.loadSettings()
             settingsRepository.saveSettings(settings.copy(phraseExpansionEnabled = enabled))
             _state.update { it.copy(phraseExpansionEnabled = enabled) }
+        }
+    }
+
+    private fun toggleAudioFeedback(enabled: Boolean) {
+        viewModelScope.launch {
+            val settings = settingsRepository.loadSettings()
+            settingsRepository.saveSettings(settings.copy(audioFeedbackEnabled = enabled))
+            _state.update { it.copy(audioFeedbackEnabled = enabled) }
+        }
+    }
+
+    private fun toggleStartMinimized(enabled: Boolean) {
+        viewModelScope.launch {
+            val settings = settingsRepository.loadSettings()
+            settingsRepository.saveSettings(settings.copy(startMinimized = enabled))
+            _state.update { it.copy(startMinimized = enabled) }
         }
     }
 
