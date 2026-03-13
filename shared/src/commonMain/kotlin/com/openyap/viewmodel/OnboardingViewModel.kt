@@ -6,7 +6,7 @@ import com.openyap.model.PermissionStatus
 import com.openyap.platform.PermissionManager
 import com.openyap.repository.SettingsRepository
 import com.openyap.service.GeminiClient
-import com.openyap.service.GeminiModelInfo
+import com.openyap.service.ModelInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,7 +19,7 @@ data class OnboardingUiState(
     val isLoaded: Boolean = false,
     val isComplete: Boolean = false,
     val currentStep: Int = 0,
-    val availableModels: List<GeminiModelInfo> = emptyList(),
+    val availableModels: List<ModelInfo> = emptyList(),
     val selectedModel: String = "gemini-3.1-flash-lite-preview",
     val isLoadingModels: Boolean = false,
     val modelsFetchError: String? = null,

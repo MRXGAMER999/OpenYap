@@ -7,6 +7,7 @@ import com.openyap.model.OverlayState
 import com.openyap.model.PermissionStatus
 import com.openyap.model.RecordingEntry
 import com.openyap.model.RecordingState
+import com.openyap.model.TranscriptionProvider
 import com.openyap.platform.AudioRecorder
 import com.openyap.platform.AudioRecorderDiagnostics
 import com.openyap.platform.ForegroundAppDetector
@@ -22,6 +23,7 @@ import com.openyap.service.DictionaryEngine
 import com.openyap.service.GeminiClient
 import com.openyap.service.PhraseExpansionEngine
 import com.openyap.service.PromptBuilder
+import com.openyap.service.TranscriptionService
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -81,6 +83,7 @@ class RecordingViewModel(
     private val hotkeyManager: HotkeyManager,
     private val audioRecorder: AudioRecorder,
     private val geminiClient: GeminiClient,
+    private val groqWhisperClient: TranscriptionService,
     private val pasteAutomation: PasteAutomation,
     private val foregroundAppDetector: ForegroundAppDetector,
     private val settingsRepository: SettingsRepository,
@@ -145,11 +148,11 @@ class RecordingViewModel(
         }
 
         viewModelScope.launch {
-            val apiKey = settingsRepository.loadApiKey()
+            val settings = settingsRepository.loadSettings()
             val micPerm = permissionManager.checkMicrophonePermission()
             _state.update {
                 it.copy(
-                    hasApiKey = !apiKey.isNullOrBlank(),
+                    hasApiKey = hasRequiredApiKeys(settings.transcriptionProvider),
                     hasMicPermission = micPerm == PermissionStatus.GRANTED,
                 )
             }
@@ -193,9 +196,20 @@ class RecordingViewModel(
 
         val settings = settingsRepository.loadSettings()
 
-        val apiKey = settingsRepository.loadApiKey()
-        if (apiKey.isNullOrBlank()) {
-            _state.update { it.copy(error = "Please set your Gemini API key in Settings.") }
+        val geminiApiKey = settingsRepository.loadApiKey()
+        val groqApiKey = settingsRepository.loadGroqApiKey()
+        val apiKeyError = when (settings.transcriptionProvider) {
+            TranscriptionProvider.GEMINI -> if (geminiApiKey.isNullOrBlank()) "Please set your Gemini API key in Settings." else null
+            TranscriptionProvider.GROQ_WHISPER -> if (groqApiKey.isNullOrBlank()) "Please set your Groq API key in Settings." else null
+            TranscriptionProvider.GROQ_WHISPER_GEMINI -> when {
+                groqApiKey.isNullOrBlank() && geminiApiKey.isNullOrBlank() -> "Please set both Groq and Gemini API keys in Settings."
+                groqApiKey.isNullOrBlank() -> "Please set your Groq API key in Settings."
+                geminiApiKey.isNullOrBlank() -> "Please set your Gemini API key in Settings."
+                else -> null
+            }
+        }
+        if (apiKeyError != null) {
+            _state.update { it.copy(error = apiKeyError) }
             if (settings.audioFeedbackEnabled) {
                 audioFeedbackPlayer.playError()
             }
@@ -333,6 +347,14 @@ class RecordingViewModel(
         viewModelScope.launch {
             try {
                 val targetApp = foregroundAppDetector.getForegroundAppName()
+                val geminiApiKey = settingsRepository.loadApiKey()
+                val groqApiKey = settingsRepository.loadGroqApiKey()
+                val audioBytes = readFileBytes(path)
+
+                if (audioBytes.size < 100) {
+                    throw IllegalStateException("Recording appears to be empty or corrupted. Please try again.")
+                }
+
                 val appKey = targetApp ?: "Default"
                 val tone = settingsRepository.loadAppTone(appKey) ?: "normal"
                 val customPrompt = settingsRepository.loadAppPrompt(appKey)
@@ -342,20 +364,50 @@ class RecordingViewModel(
                     customPrompt = customPrompt,
                     genZ = settings.genZEnabled,
                 )
-                val apiKey = settingsRepository.loadApiKey()!!
-                val audioBytes = readFileBytes(path)
 
-                if (audioBytes.size < 100) {
-                    throw IllegalStateException("Recording appears to be empty or corrupted. Please try again.")
+                val response = when (settings.transcriptionProvider) {
+                    TranscriptionProvider.GEMINI -> {
+                        geminiClient.transcribe(
+                            audioBytes = audioBytes,
+                            mimeType = audioMimeType,
+                            systemPrompt = systemPrompt,
+                            apiKey = geminiApiKey!!,
+                            model = settings.geminiModel,
+                        )
+                    }
+
+                    TranscriptionProvider.GROQ_WHISPER -> {
+                        groqWhisperClient.transcribe(
+                            audioBytes = audioBytes,
+                            mimeType = audioMimeType,
+                            systemPrompt = "", // ignored by Whisper
+                            apiKey = groqApiKey!!,
+                            model = settings.groqModel,
+                        )
+                    }
+
+                    TranscriptionProvider.GROQ_WHISPER_GEMINI -> {
+                        val transcript = groqWhisperClient.transcribe(
+                            audioBytes = audioBytes,
+                            mimeType = audioMimeType,
+                            systemPrompt = "", // ignored by Whisper
+                            apiKey = groqApiKey!!,
+                            model = settings.groqModel,
+                        )
+                        geminiClient.rewriteText(
+                            text = transcript,
+                            systemPrompt = systemPrompt,
+                            apiKey = geminiApiKey!!,
+                            model = settings.geminiModel,
+                        )
+                    }
                 }
 
-                val response = geminiClient.processAudio(
-                    audioBytes = audioBytes,
-                    mimeType = audioMimeType,
-                    systemPrompt = systemPrompt,
-                    apiKey = apiKey,
-                    model = settings.geminiModel,
-                )
+                val modelUsed = when (settings.transcriptionProvider) {
+                    TranscriptionProvider.GEMINI -> settings.geminiModel
+                    TranscriptionProvider.GROQ_WHISPER -> settings.groqModel
+                    TranscriptionProvider.GROQ_WHISPER_GEMINI -> "${settings.groqModel} -> ${settings.geminiModel}"
+                }
 
                 if (generation != processingGeneration) {
                     deleteFile(path)
@@ -394,7 +446,7 @@ class RecordingViewModel(
                         durationSeconds = duration,
                         response = expandedResponse,
                         targetApp = targetApp ?: "",
-                        model = settings.geminiModel,
+                        model = modelUsed,
                     )
                 )
 
@@ -475,14 +527,24 @@ class RecordingViewModel(
 
     fun refreshPermissions() {
         viewModelScope.launch {
-            val apiKey = settingsRepository.loadApiKey()
+            val settings = settingsRepository.loadSettings()
             val micPerm = permissionManager.checkMicrophonePermission()
             _state.update {
                 it.copy(
-                    hasApiKey = !apiKey.isNullOrBlank(),
+                    hasApiKey = hasRequiredApiKeys(settings.transcriptionProvider),
                     hasMicPermission = micPerm == PermissionStatus.GRANTED,
                 )
             }
+        }
+    }
+
+    private suspend fun hasRequiredApiKeys(provider: TranscriptionProvider): Boolean {
+        val geminiApiKey = settingsRepository.loadApiKey()
+        val groqApiKey = settingsRepository.loadGroqApiKey()
+        return when (provider) {
+            TranscriptionProvider.GEMINI -> !geminiApiKey.isNullOrBlank()
+            TranscriptionProvider.GROQ_WHISPER -> !groqApiKey.isNullOrBlank()
+            TranscriptionProvider.GROQ_WHISPER_GEMINI -> !geminiApiKey.isNullOrBlank() && !groqApiKey.isNullOrBlank()
         }
     }
 

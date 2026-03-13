@@ -78,8 +78,8 @@ fun main() {
                 System.err.println("Native audio pipeline available")
                 AudioPipelineConfig(
                     audioRecorder = NativeAudioRecorder(nativeAudio),
-                    audioMimeType = "audio/aac",
-                    audioFileExtension = ".aac",
+                    audioMimeType = "audio/mp4",
+                    audioFileExtension = ".m4a",
                 )
             } else {
                 System.err.println("Native audio pipeline unavailable, using fallback")
@@ -95,6 +95,7 @@ fun main() {
         val foregroundDetector = remember { WindowsForegroundAppDetector() }
         val permissionManager = remember { WindowsPermissionManager() }
         val geminiClient = remember { HttpClientFactory.createGeminiClient() }
+        val groqWhisperClient = remember { HttpClientFactory.createGroqWhisperClient() }
         val dictionaryEngine = remember { DictionaryEngine(dictionaryRepo) }
         val hotkeyFormatter = remember { WindowsHotkeyDisplayFormatter() }
         val overlayController = remember { ComposeOverlayController() }
@@ -126,6 +127,7 @@ fun main() {
                 hotkeyManager = hotkeyManager,
                 audioRecorder = audioRecorder,
                 geminiClient = geminiClient,
+                groqWhisperClient = groqWhisperClient,
                 pasteAutomation = pasteAutomation,
                 foregroundAppDetector = foregroundDetector,
                 settingsRepository = settingsRepo,
@@ -147,6 +149,7 @@ fun main() {
             SettingsViewModel(
                 settingsRepo,
                 geminiClient,
+                groqWhisperClient,
                 hotkeyManager,
                 hotkeyFormatter,
                 audioRecorder,
@@ -309,7 +312,7 @@ fun main() {
                         onRecordingEvent = recordingViewModel::onEvent,
                         onSettingsEvent = { event ->
                             settingsViewModel.onEvent(event)
-                            if (event is SettingsEvent.SaveApiKey) {
+                            if (event is SettingsEvent.SaveApiKey || event is SettingsEvent.SaveGroqApiKey || event is SettingsEvent.SelectProvider) {
                                 recordingViewModel.onEvent(RecordingEvent.RefreshState)
                             }
                             if (event is SettingsEvent.ResetAppData) {

@@ -27,6 +27,19 @@ in your IDE’s toolbar or run it directly from the terminal:
   .\gradlew.bat :composeApp:run
   ```
 
+### Engineering Guardrails
+
+- Keep domain logic, models, service contracts, and view models in
+  `shared/src/commonMain`; put platform integrations in the narrowest platform
+  source set that owns them.
+- Keep Compose UI declarative: composables render state and emit events, while
+  view models and services own mutation, orchestration, and IO.
+- Use manual verification only: define the verification checklist for each
+  behavior change and record the outcome before merge.
+- Provide fallbacks and diagnostics for Windows APIs, JNA bindings, native
+  binaries, and remote AI services.
+- Never commit API keys, recordings, or other sensitive user data.
+
 ---
 
 Learn more

@@ -128,7 +128,7 @@ namespace openyap::encoder {
         output_type->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, static_cast<UINT32>(sample_rate));
         output_type->SetUINT32(MF_MT_AUDIO_NUM_CHANNELS, static_cast<UINT32>(channels));
         output_type->SetUINT32(MF_MT_AUDIO_AVG_BYTES_PER_SECOND, avg_bytes_per_second);
-        output_type->SetUINT32(MF_MT_AAC_PAYLOAD_TYPE, 1);
+        output_type->SetUINT32(MF_MT_AAC_PAYLOAD_TYPE, 0);
         output_type->SetUINT32(MF_MT_AAC_AUDIO_PROFILE_LEVEL_INDICATION, 0x29);
 
         DWORD stream_index = 0;

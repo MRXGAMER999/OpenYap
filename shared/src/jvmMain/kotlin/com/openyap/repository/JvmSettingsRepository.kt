@@ -40,6 +40,10 @@ class JvmSettingsRepository(
 
     override suspend fun saveApiKey(key: String) = secureStorage.save("gemini_api_key", key)
 
+    override suspend fun loadGroqApiKey(): String? = secureStorage.load("groq_api_key")
+
+    override suspend fun saveGroqApiKey(key: String) = secureStorage.save("groq_api_key", key)
+
     override suspend fun loadAppTone(appName: String): String? = withContext(Dispatchers.IO) {
         loadAllAppTones()[appName]
     }

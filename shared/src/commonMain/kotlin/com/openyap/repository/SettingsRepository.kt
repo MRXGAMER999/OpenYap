@@ -9,6 +9,9 @@ interface SettingsRepository {
     suspend fun loadApiKey(): String?
     suspend fun saveApiKey(key: String)
 
+    suspend fun loadGroqApiKey(): String?
+    suspend fun saveGroqApiKey(key: String)
+
     suspend fun loadAppTone(appName: String): String?
     suspend fun saveAppTone(appName: String, tone: String)
     suspend fun loadAllAppTones(): Map<String, String>

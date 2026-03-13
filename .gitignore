@@ -19,6 +19,8 @@ out/
 Thumbs.db
 .vscode/
 native/.vs/
+native/.cache/
+native/.caches/
 *.xcodeproj/*
 !*.xcodeproj/project.pbxproj
 !*.xcodeproj/xcshareddata/
@@ -28,3 +30,4 @@ native/.vs/
 node_modules/
 .opencode
 .cursor
+.specify

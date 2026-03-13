@@ -5,12 +5,14 @@ import androidx.lifecycle.viewModelScope
 import com.openyap.model.AppSettings
 import com.openyap.model.AudioDevice
 import com.openyap.model.HotkeyBinding
+import com.openyap.model.TranscriptionProvider
 import com.openyap.platform.AudioRecorder
 import com.openyap.platform.HotkeyDisplayFormatter
 import com.openyap.platform.HotkeyManager
 import com.openyap.repository.SettingsRepository
 import com.openyap.service.GeminiClient
-import com.openyap.service.GeminiModelInfo
+import com.openyap.service.GroqWhisperClient
+import com.openyap.service.ModelInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,8 +20,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class SettingsUiState(
+    val transcriptionProvider: TranscriptionProvider = TranscriptionProvider.GEMINI,
     val apiKey: String = "",
-    val geminiModel: String = "gemini-2.0-flash",
+    val groqApiKey: String = "",
+    val geminiModel: String = "gemini-3.1-flash-lite-preview",
+    val groqModel: String = "whisper-large-v3",
     val genZEnabled: Boolean = false,
     val phraseExpansionEnabled: Boolean = false,
     val dictionaryEnabled: Boolean = true,
@@ -28,7 +33,11 @@ data class SettingsUiState(
     val isSaving: Boolean = false,
     val isResettingData: Boolean = false,
     val saveMessage: String? = null,
-    val availableModels: List<GeminiModelInfo> = emptyList(),
+    val availableModels: List<ModelInfo> = emptyList(),
+    val groqModels: List<ModelInfo> = listOf(
+        ModelInfo("whisper-large-v3", "Whisper Large V3"),
+        ModelInfo("whisper-large-v3-turbo", "Whisper Large V3 Turbo"),
+    ),
     val isLoadingModels: Boolean = false,
     val modelsFetchError: String? = null,
     val hotkeyLabel: String = "Ctrl+Shift+R",
@@ -42,8 +51,11 @@ data class SettingsUiState(
 )
 
 sealed interface SettingsEvent {
+    data class SelectProvider(val provider: TranscriptionProvider) : SettingsEvent
     data class SaveApiKey(val key: String) : SettingsEvent
+    data class SaveGroqApiKey(val key: String) : SettingsEvent
     data class SelectModel(val modelId: String) : SettingsEvent
+    data class SelectGroqModel(val modelId: String) : SettingsEvent
     data class ToggleGenZ(val enabled: Boolean) : SettingsEvent
     data class TogglePhraseExpansion(val enabled: Boolean) : SettingsEvent
     data class ToggleDictionary(val enabled: Boolean) : SettingsEvent
@@ -61,6 +73,7 @@ sealed interface SettingsEvent {
 class SettingsViewModel(
     private val settingsRepository: SettingsRepository,
     private val geminiClient: GeminiClient,
+    private val groqWhisperClient: GroqWhisperClient,
     private val hotkeyManager: HotkeyManager,
     private val hotkeyDisplayFormatter: HotkeyDisplayFormatter,
     private val audioRecorder: AudioRecorder,
@@ -73,6 +86,7 @@ class SettingsViewModel(
     init {
         viewModelScope.launch {
             val apiKey = settingsRepository.loadApiKey() ?: ""
+            val groqApiKey = settingsRepository.loadGroqApiKey() ?: ""
             val settings = settingsRepository.loadSettings()
             // Read version from manifest/resources
             val version = runCatching {
@@ -87,8 +101,11 @@ class SettingsViewModel(
             }.getOrDefault("")
             _state.update {
                 it.copy(
+                    transcriptionProvider = settings.transcriptionProvider,
                     apiKey = apiKey,
+                    groqApiKey = groqApiKey,
                     geminiModel = settings.geminiModel,
+                    groqModel = settings.groqModel,
                     genZEnabled = settings.genZEnabled,
                     phraseExpansionEnabled = settings.phraseExpansionEnabled,
                     dictionaryEnabled = settings.dictionaryEnabled,
@@ -106,8 +123,11 @@ class SettingsViewModel(
 
     fun onEvent(event: SettingsEvent) {
         when (event) {
+            is SettingsEvent.SelectProvider -> selectProvider(event.provider)
             is SettingsEvent.SaveApiKey -> saveApiKey(event.key)
+            is SettingsEvent.SaveGroqApiKey -> saveGroqApiKey(event.key)
             is SettingsEvent.SelectModel -> selectModel(event.modelId)
+            is SettingsEvent.SelectGroqModel -> selectGroqModel(event.modelId)
             is SettingsEvent.ToggleGenZ -> toggleGenZ(event.enabled)
             is SettingsEvent.TogglePhraseExpansion -> togglePhraseExpansion(event.enabled)
             is SettingsEvent.ToggleDictionary -> toggleDictionary(event.enabled)
@@ -193,6 +213,33 @@ class SettingsViewModel(
         }
     }
 
+    private fun selectProvider(provider: TranscriptionProvider) {
+        viewModelScope.launch {
+            val settings = settingsRepository.loadSettings()
+            settingsRepository.saveSettings(settings.copy(transcriptionProvider = provider))
+            _state.update { it.copy(transcriptionProvider = provider) }
+            if (provider != TranscriptionProvider.GROQ_WHISPER && _state.value.apiKey.isNotBlank() && _state.value.availableModels.isEmpty()) {
+                fetchModels(_state.value.apiKey)
+            }
+        }
+    }
+
+    private fun saveGroqApiKey(key: String) {
+        viewModelScope.launch {
+            val trimmed = key.trim()
+            settingsRepository.saveGroqApiKey(trimmed)
+            _state.update { it.copy(groqApiKey = trimmed, saveMessage = "Groq API key saved") }
+        }
+    }
+
+    private fun selectGroqModel(modelId: String) {
+        viewModelScope.launch {
+            val settings = settingsRepository.loadSettings()
+            settingsRepository.saveSettings(settings.copy(groqModel = modelId))
+            _state.update { it.copy(groqModel = modelId) }
+        }
+    }
+
     private fun refreshModels() {
         val apiKey = _state.value.apiKey
         if (apiKey.isNotBlank()) {
@@ -268,8 +315,11 @@ class SettingsViewModel(
                 hotkeyManager.setConfig(defaults.hotkeyConfig)
                 _state.update {
                     it.copy(
+                        transcriptionProvider = defaults.transcriptionProvider,
                         apiKey = "",
+                        groqApiKey = "",
                         geminiModel = defaults.geminiModel,
+                        groqModel = defaults.groqModel,
                         genZEnabled = defaults.genZEnabled,
                         phraseExpansionEnabled = defaults.phraseExpansionEnabled,
                         dictionaryEnabled = defaults.dictionaryEnabled,

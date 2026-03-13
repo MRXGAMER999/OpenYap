@@ -1,7 +1,12 @@
 package com.openyap.ui.screen
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,6 +24,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -26,6 +34,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -54,6 +63,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.openyap.ui.theme.Spacing
 import com.openyap.model.AudioDevice
+import com.openyap.model.TranscriptionProvider
 import com.openyap.viewmodel.SettingsEvent
 import com.openyap.viewmodel.SettingsUiState
 
@@ -64,7 +74,9 @@ fun SettingsScreen(
     onEvent: (SettingsEvent) -> Unit,
 ) {
     var apiKeyInput by remember(state.apiKey) { mutableStateOf(state.apiKey) }
+    var groqApiKeyInput by remember(state.groqApiKey) { mutableStateOf(state.groqApiKey) }
     var showKey by remember { mutableStateOf(false) }
+    var showGroqKey by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -94,7 +106,7 @@ fun SettingsScreen(
         ) {
             Text("Settings", style = MaterialTheme.typography.headlineLarge)
             Text(
-                "Tune the voice pipeline, choose the Gemini model, and control how OpenYap rewrites what you say.",
+                "Choose a transcription provider, configure API keys, pick a model, and control how OpenYap processes what you say.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.widthIn(max = 620.dp),
@@ -134,35 +146,86 @@ fun SettingsScreen(
 
             HorizontalDivider()
 
-            // ── Gemini API key ───────────────────────────────────
-            Text("Gemini API key", style = MaterialTheme.typography.headlineSmall)
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedTextField(
-                    value = apiKeyInput,
-                    onValueChange = { apiKeyInput = it },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    placeholder = { Text("Enter your Gemini API key") },
-                    visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
-                )
-                TextButton(onClick = {
-                    showKey = !showKey
-                }) { Text(if (showKey) "Hide" else "Show") }
-                FilledTonalButton(
-                    onClick = { onEvent(SettingsEvent.SaveApiKey(apiKeyInput)) },
-                    enabled = apiKeyInput.isNotBlank(),
-                ) {
-                    Text("Save")
-                }
-            }
+            // ── Transcription Provider ──────────────────────────
+            Text("Transcription Provider", style = MaterialTheme.typography.headlineSmall)
             Text(
-                "The key is stored locally and used only for Gemini requests.",
+                "Gemini can transcribe and rewrite directly, Groq Whisper gives fast raw transcription, and the combined mode uses Groq first then Gemini for conservative context-aware correction.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            ProviderDropdown(
+                selectedProvider = state.transcriptionProvider,
+                onProviderSelected = { onEvent(SettingsEvent.SelectProvider(it)) },
+            )
+
+            HorizontalDivider()
+
+            // ── API Key ─────────────────────────────────────────
+            if (state.transcriptionProvider != TranscriptionProvider.GROQ_WHISPER) {
+                Text("Gemini API key", style = MaterialTheme.typography.headlineSmall)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedTextField(
+                        value = apiKeyInput,
+                        onValueChange = { apiKeyInput = it },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        placeholder = { Text("Enter your Gemini API key") },
+                        visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                    )
+                    TextButton(onClick = {
+                        showKey = !showKey
+                    }) { Text(if (showKey) "Hide" else "Show") }
+                    FilledTonalButton(
+                        onClick = { onEvent(SettingsEvent.SaveApiKey(apiKeyInput)) },
+                        enabled = apiKeyInput.isNotBlank(),
+                    ) {
+                        Text("Save")
+                    }
+                }
+                Text(
+                    "The key is stored locally and used only for Gemini requests.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            if (state.transcriptionProvider == TranscriptionProvider.GROQ_WHISPER_GEMINI) {
+                Spacer(Modifier.height(Spacing.sm))
+            }
+
+            if (state.transcriptionProvider != TranscriptionProvider.GEMINI) {
+                Text("Groq API key", style = MaterialTheme.typography.headlineSmall)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedTextField(
+                        value = groqApiKeyInput,
+                        onValueChange = { groqApiKeyInput = it },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        placeholder = { Text("Enter your Groq API key") },
+                        visualTransformation = if (showGroqKey) VisualTransformation.None else PasswordVisualTransformation(),
+                    )
+                    TextButton(onClick = {
+                        showGroqKey = !showGroqKey
+                    }) { Text(if (showGroqKey) "Hide" else "Show") }
+                    FilledTonalButton(
+                        onClick = { onEvent(SettingsEvent.SaveGroqApiKey(groqApiKeyInput)) },
+                        enabled = groqApiKeyInput.isNotBlank(),
+                    ) {
+                        Text("Save")
+                    }
+                }
+                Text(
+                    "The key is stored locally and used only for Groq Whisper requests.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             SaveMessage(state.saveMessage) { onEvent(SettingsEvent.DismissSaveMessage) }
 
             HorizontalDivider()
@@ -170,50 +233,129 @@ fun SettingsScreen(
             // ── Model ────────────────────────────────────────────
             Text("Model", style = MaterialTheme.typography.headlineSmall)
 
-            AnimatedVisibility(
-                visible = state.isLoadingModels,
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.md),
-                    verticalAlignment = Alignment.CenterVertically,
+            if (state.transcriptionProvider == TranscriptionProvider.GEMINI) {
+                AnimatedVisibility(
+                    visible = state.isLoadingModels,
+                    enter = fadeIn(),
+                    exit = fadeOut()
                 ) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Text(
-                        "Loading available models...",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            state.modelsFetchError?.let { error ->
-                Surface(color = MaterialTheme.colorScheme.errorContainer) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(Spacing.md),
-                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                         Text(
-                            text = error,
-                            modifier = Modifier.weight(1f),
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            style = MaterialTheme.typography.bodySmall,
+                            "Loading available models...",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        TextButton(onClick = { onEvent(SettingsEvent.RefreshModels) }) { Text("Retry") }
                     }
                 }
-            }
 
-            AnimatedVisibility(
-                visible = !state.isLoadingModels && state.availableModels.isNotEmpty(),
-                enter = fadeIn(),
-                exit = fadeOut(),
-            ) {
-                TooltipBox(
-                    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
-                    tooltip = { PlainTooltip { Text("Select which Gemini model powers transcription and rewriting") } },
-                    state = rememberTooltipState(),
+                state.modelsFetchError?.let { error ->
+                    Surface(color = MaterialTheme.colorScheme.errorContainer) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(Spacing.md),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = error,
+                                modifier = Modifier.weight(1f),
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            TextButton(onClick = { onEvent(SettingsEvent.RefreshModels) }) { Text("Retry") }
+                        }
+                    }
+                }
+
+                AnimatedVisibility(
+                    visible = !state.isLoadingModels && state.availableModels.isNotEmpty(),
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                ) {
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+                        tooltip = { PlainTooltip { Text("Select which Gemini model powers transcription and rewriting") } },
+                        state = rememberTooltipState(),
+                    ) {
+                        ModelDropdown(
+                            models = state.availableModels.map { it.id to it.displayName },
+                            selectedModelId = state.geminiModel,
+                            onModelSelected = { onEvent(SettingsEvent.SelectModel(it)) },
+                        )
+                    }
+                }
+
+                if (!state.isLoadingModels && state.availableModels.isEmpty() && state.modelsFetchError == null && state.apiKey.isBlank()) {
+                    Text(
+                        "Save your API key to load available models.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else if (state.transcriptionProvider == TranscriptionProvider.GROQ_WHISPER) {
+                ModelDropdown(
+                    models = state.groqModels.map { it.id to it.displayName },
+                    selectedModelId = state.groqModel,
+                    onModelSelected = { onEvent(SettingsEvent.SelectGroqModel(it)) },
+                )
+            } else {
+                Text(
+                    "Groq transcription model",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                ModelDropdown(
+                    models = state.groqModels.map { it.id to it.displayName },
+                    selectedModelId = state.groqModel,
+                    onModelSelected = { onEvent(SettingsEvent.SelectGroqModel(it)) },
+                )
+
+                Spacer(Modifier.height(Spacing.sm))
+
+                Text(
+                    "Gemini correction model",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                AnimatedVisibility(
+                    visible = state.isLoadingModels,
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Text(
+                            "Loading available Gemini models...",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                state.modelsFetchError?.let { error ->
+                    Surface(color = MaterialTheme.colorScheme.errorContainer) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(Spacing.md),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = error,
+                                modifier = Modifier.weight(1f),
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            TextButton(onClick = { onEvent(SettingsEvent.RefreshModels) }) { Text("Retry") }
+                        }
+                    }
+                }
+
+                AnimatedVisibility(
+                    visible = !state.isLoadingModels && state.availableModels.isNotEmpty(),
+                    enter = fadeIn(),
+                    exit = fadeOut(),
                 ) {
                     ModelDropdown(
                         models = state.availableModels.map { it.id to it.displayName },
@@ -221,14 +363,14 @@ fun SettingsScreen(
                         onModelSelected = { onEvent(SettingsEvent.SelectModel(it)) },
                     )
                 }
-            }
 
-            if (!state.isLoadingModels && state.availableModels.isEmpty() && state.modelsFetchError == null && state.apiKey.isBlank()) {
-                Text(
-                    "Save your API key to load available models.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (!state.isLoadingModels && state.availableModels.isEmpty() && state.modelsFetchError == null && state.apiKey.isBlank()) {
+                    Text(
+                        "Save your Gemini API key to load correction models.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             HorizontalDivider()
@@ -539,6 +681,46 @@ private fun MicrophoneDropdown(
                     },
                     onClick = {
                         onDeviceSelected(device.id)
+                        expanded = false
+                    },
+                    contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm),
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProviderDropdown(
+    selectedProvider: TranscriptionProvider,
+    onProviderSelected: (TranscriptionProvider) -> Unit,
+) {
+    val providers = listOf(
+        TranscriptionProvider.GEMINI to "Gemini (Transcribe + Rewrite)",
+        TranscriptionProvider.GROQ_WHISPER to "Groq Whisper (Raw Transcription)",
+        TranscriptionProvider.GROQ_WHISPER_GEMINI to "Groq + Gemini (Context Correction)",
+    )
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = providers.firstOrNull { it.first == selectedProvider }?.second ?: selectedProvider.name
+
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = selectedLabel,
+            onValueChange = {},
+            readOnly = true,
+            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth(),
+            singleLine = true,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            providers.forEach { (provider, label) ->
+                DropdownMenuItem(
+                    text = { Text(label, style = MaterialTheme.typography.bodyMedium) },
+                    onClick = {
+                        onProviderSelected(provider)
                         expanded = false
                     },
                     contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm),
