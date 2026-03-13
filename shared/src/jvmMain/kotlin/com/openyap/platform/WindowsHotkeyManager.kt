@@ -36,6 +36,7 @@ private const val WM_SYSKEYDOWN = 0x0104
 private const val WM_SYSKEYUP = 0x0105
 private const val VK_ESCAPE = 0x1B
 private const val CAPTURE_TIMEOUT_MS = 10_000L
+private const val LLKHF_INJECTED = 0x10
 
 /**
  * Windows hotkey manager using a WH_KEYBOARD_LL low-level keyboard hook
@@ -53,6 +54,7 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
             0xA0, 0xA1,         // VK_LSHIFT, VK_RSHIFT
             0xA2, 0xA3,         // VK_LCONTROL, VK_RCONTROL
             0xA4, 0xA5,         // VK_LMENU, VK_RMENU
+            0x5B, 0x5C,         // VK_LWIN, VK_RWIN
         )
     }
 
@@ -90,6 +92,14 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
         if (nCode >= 0) {
             val vkCode = info.vkCode
             val msgType = wParam.toInt()
+            val isInjected = (info.flags and LLKHF_INJECTED) != 0
+
+            if (isInjected) {
+                return@LowLevelKeyboardProc User32.INSTANCE.CallNextHookEx(
+                    keyboardHook, nCode, wParam,
+                    WinDef.LPARAM(com.sun.jna.Pointer.nativeValue(info.pointer)),
+                )
+            }
 
             val capture = pendingCapture
             if (capture != null) {

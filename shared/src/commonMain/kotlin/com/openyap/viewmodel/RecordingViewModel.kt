@@ -484,7 +484,6 @@ class RecordingViewModel(
                 deleteFile(path)
             } catch (e: Exception) {
                 currentProcessingPath = null
-                overlayController.dismiss()
                 if (generation == processingGeneration) {
                     _state.update {
                         it.copy(
@@ -492,7 +491,10 @@ class RecordingViewModel(
                             error = e.message,
                         )
                     }
+                    overlayController.updateState(OverlayState.ERROR)
                     _effects.emit(RecordingEffect.ShowError(e.message ?: "Processing failed"))
+                    delay(2000)
+                    overlayController.dismiss()
                 }
                 deleteFile(path)
             }

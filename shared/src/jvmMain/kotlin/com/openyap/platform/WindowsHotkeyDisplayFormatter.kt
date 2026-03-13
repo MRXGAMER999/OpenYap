@@ -14,7 +14,18 @@ class WindowsHotkeyDisplayFormatter : HotkeyDisplayFormatter {
                 HotkeyModifier.META -> "Win"
             }
         }
-        val keyName = KeyEvent.getKeyText(binding.platformKeyCode)
+        val keyName = getKeyName(binding.platformKeyCode)
         return if (mods.isNotEmpty()) "$mods+$keyName" else keyName
+    }
+
+    /**
+     * Maps a Win32 virtual-key code to a human-readable name.
+     * Falls back to [KeyEvent.getKeyText] for standard keys, but overrides
+     * codes that Java AWT maps incorrectly (e.g. VK_LWIN 0x5B → "Open Bracket").
+     */
+    private fun getKeyName(vkCode: Int): String = when (vkCode) {
+        0x5B -> "Left Win"
+        0x5C -> "Right Win"
+        else -> KeyEvent.getKeyText(vkCode)
     }
 }

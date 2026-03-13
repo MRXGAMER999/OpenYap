@@ -59,7 +59,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -229,6 +231,12 @@ fun AppShell(
                                 HomeContent(
                                     recordingState,
                                     settingsState,
+                                    onNavigateToSettings = {
+                                        if (currentRoute != Route.Settings) {
+                                            backStack.clear()
+                                            backStack.add(Route.Settings)
+                                        }
+                                    },
                                     onRecordingEvent,
                                     snackbarHostState,
                                 )
@@ -293,10 +301,10 @@ fun AppShell(
 private fun HomeContent(
     state: RecordingUiState,
     settingsState: SettingsUiState,
+    onNavigateToSettings: () -> Unit,
     onEvent: (RecordingEvent) -> Unit,
     snackbarHostState: SnackbarHostState,
 ) {
-    val lastResultText = state.lastResultText
     val errorMessage = state.error
     val statusTitle = when (state.recordingState) {
         is RecordingState.Idle -> "Ready to speak"
@@ -316,6 +324,20 @@ private fun HomeContent(
     val canStart = state.recordingState is RecordingState.Idle ||
             state.recordingState is RecordingState.Success ||
             state.recordingState is RecordingState.Error
+    var latestResultText by remember { mutableStateOf(state.lastResultText) }
+
+    LaunchedEffect(state.recordingState) {
+        when (val recordingState = state.recordingState) {
+            is RecordingState.Recording -> {
+                if (recordingState.durationSeconds == 0) {
+                    latestResultText = null
+                }
+            }
+
+            is RecordingState.Success -> latestResultText = recordingState.text
+            else -> Unit
+        }
+    }
 
     // Snackbar for errors instead of inline error banner
     LaunchedEffect(errorMessage) {
@@ -382,12 +404,41 @@ private fun HomeContent(
                     ) { title ->
                         Text(title, style = MaterialTheme.typography.displaySmallEmphasized)
                     }
-                    Text(
-                        text = statusBody,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.widthIn(max = 620.dp),
-                    )
+                    AnimatedContent(
+                        targetState = statusBody,
+                        transitionSpec = {
+                            (slideInVertically { it / 5 } + fadeIn()) togetherWith
+                                    (slideOutVertically { -it / 5 } + fadeOut())
+                        },
+                        label = "homeStatusBody",
+                    ) { body ->
+                        Text(
+                            text = body,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.widthIn(max = 620.dp),
+                        )
+                    }
+
+                    AnimatedVisibility(
+                        visible = state.recordingState is RecordingState.Idle,
+                        enter = fadeIn(),
+                        exit = fadeOut(),
+                    ) {
+                        val pulseTransition = rememberInfiniteTransition(label = "idleMicPulse")
+                        val pulseAlpha by pulseTransition.animateFloat(
+                            initialValue = 0.45f,
+                            targetValue = 1f,
+                            animationSpec = infiniteRepeatable(tween(1100), RepeatMode.Reverse),
+                            label = "idleMicAlpha",
+                        )
+                        Icon(
+                            imageVector = Icons.Default.Mic,
+                            contentDescription = null,
+                            modifier = Modifier.size(44.dp),
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = pulseAlpha),
+                        )
+                    }
 
                     // Interactive status chips
                     FlowRow(
@@ -406,7 +457,7 @@ private fun HomeContent(
                                         modifier = Modifier.size(16.dp)
                                     )
                                 },
-                                label = { Text("✓ All systems go") },
+                                label = { Text("All systems go") },
                                 colors = AssistChipDefaults.assistChipColors(
                                     disabledContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
                                     disabledLabelColor = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -415,8 +466,8 @@ private fun HomeContent(
                             )
                         } else {
                             AssistChip(
-                                onClick = {},
-                                enabled = false,
+                                onClick = onNavigateToSettings,
+                                enabled = true,
                                 leadingIcon = {
                                     Icon(
                                         Icons.Default.SettingsVoice,
@@ -427,8 +478,8 @@ private fun HomeContent(
                                 label = { Text(if (state.hasMicPermission) "Mic ready" else "Mic needed") },
                             )
                             AssistChip(
-                                onClick = {},
-                                enabled = false,
+                                onClick = onNavigateToSettings,
+                                enabled = true,
                                 leadingIcon = {
                                     Icon(
                                         Icons.Default.AutoAwesome,
@@ -466,7 +517,7 @@ private fun HomeContent(
 
                 Box(
                     modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.CenterStart,
+                    contentAlignment = Alignment.Center,
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         // Outer pulse ring (visible only during recording)
@@ -515,7 +566,7 @@ private fun HomeContent(
 
                 // Latest result
                 AnimatedVisibility(
-                    visible = lastResultText != null && state.recordingState is RecordingState.Success,
+                    visible = latestResultText != null,
                     enter = fadeIn() + scaleIn(),
                     exit = fadeOut() + scaleOut(),
                 ) {
@@ -530,7 +581,7 @@ private fun HomeContent(
                                 color = MaterialTheme.colorScheme.primary,
                             )
                             Text(
-                                text = lastResultText.orEmpty(),
+                                text = latestResultText.orEmpty(),
                                 style = MaterialTheme.typography.bodyLarge,
                             )
                         }

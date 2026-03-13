@@ -14,7 +14,6 @@ val nativeDll =
 val copyNativeDll by tasks.registering(Copy::class) {
     from(nativeDll)
     into(layout.projectDirectory.dir("resources/windows-x64"))
-    onlyIf { nativeDll.asFile.exists() }
 }
 
 kotlin {
@@ -70,4 +69,11 @@ tasks.matching {
             it.name == "createDistributable"
 }.configureEach {
     dependsOn(copyNativeDll)
+}
+
+gradle.projectsEvaluated {
+    tasks.findByName("jvmRun")?.let { task ->
+        task.dependsOn("run")
+        task.actions.clear()
+    }
 }

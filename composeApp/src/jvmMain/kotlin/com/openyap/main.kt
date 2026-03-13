@@ -10,8 +10,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.painter.BitmapPainter
-import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Tray
@@ -19,7 +17,6 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberTrayState
 import androidx.compose.ui.window.rememberWindowState
-import com.openyap.model.RecordingState
 import com.openyap.platform.AudioFeedbackService
 import com.openyap.platform.AudioRecorder
 import com.openyap.platform.ComposeOverlayController
@@ -58,9 +55,9 @@ import com.openyap.viewmodel.SettingsViewModel
 import com.openyap.viewmodel.StatsViewModel
 import com.openyap.viewmodel.UserProfileViewModel
 import kotlinx.coroutines.launch
-import java.awt.Color
-import java.awt.RenderingHints
-import java.awt.image.BufferedImage
+import openyap.composeapp.generated.resources.Res
+import openyap.composeapp.generated.resources.ic_app_logo
+import org.jetbrains.compose.resources.painterResource
 
 fun main() {
     System.setProperty("sun.awt.noerasebackground", "true")
@@ -212,15 +209,12 @@ fun main() {
         }
 
         val recordingState by recordingViewModel.state.collectAsState()
-
-        val trayIcon = remember(recordingState.recordingState) {
-            BitmapPainter(createTrayIcon(recordingState.recordingState).toComposeImageBitmap())
-        }
+        val appIcon = painterResource(Res.drawable.ic_app_logo)
 
         Tray(
             state = trayState,
             tooltip = "OpenYap",
-            icon = trayIcon,
+            icon = appIcon,
             menu = {
                 Item("Show", onClick = { isVisible = true })
                 Item("Quit", onClick = {
@@ -254,6 +248,7 @@ fun main() {
                 onCloseRequest = { isVisible = false },
                 title = "OpenYap",
                 state = windowState,
+                icon = appIcon,
             ) {
                 val isDark = isSystemInDarkTheme()
                 DisposableEffect(isDark) {
@@ -367,18 +362,3 @@ private data class AudioPipelineConfig(
     val audioMimeType: String,
     val audioFileExtension: String,
 )
-
-private fun createTrayIcon(state: RecordingState): BufferedImage {
-    val size = 16
-    val image = BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB)
-    val g = image.createGraphics()
-    g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-    g.color = when (state) {
-        is RecordingState.Recording -> Color(0xE5, 0x39, 0x35)  // Red
-        is RecordingState.Processing -> Color(0xFF, 0xA7, 0x26) // Orange
-        else -> Color(0x15, 0x65, 0xC0)                         // Blue (idle/success/error)
-    }
-    g.fillOval(2, 2, size - 4, size - 4)
-    g.dispose()
-    return image
-}

@@ -1,18 +1,16 @@
 package com.openyap.ui.screen
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -29,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -49,20 +48,28 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.openyap.model.PermissionStatus
 import com.openyap.ui.theme.Spacing
@@ -78,15 +85,19 @@ fun OnboardingScreen(
     onEvent: (OnboardingEvent) -> Unit,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
+    val uriHandler = LocalUriHandler.current
 
     // Snackbar for model fetch errors
-    androidx.compose.runtime.LaunchedEffect(state.modelsFetchError) {
+    LaunchedEffect(state.modelsFetchError) {
         state.modelsFetchError?.let {
-            snackbarHostState.showSnackbar(
+            val result = snackbarHostState.showSnackbar(
                 message = it,
                 actionLabel = "Retry",
                 duration = SnackbarDuration.Long,
             )
+            if (result == SnackbarResult.ActionPerformed) {
+                onEvent(OnboardingEvent.RetryModelFetch)
+            }
         }
     }
 
@@ -193,7 +204,7 @@ fun OnboardingScreen(
                         }
 
                         // Vertical connector
-                        StepConnector()
+                        StepConnector(completed = step1State == StepState.COMPLETE)
 
                         // Step 2 — API Key
                         val step2State = when {
@@ -236,6 +247,30 @@ fun OnboardingScreen(
                                     ) {
                                         Text("Save API Key")
                                     }
+                                    val freeKeyUrl = "https://aistudio.google.com/app/apikey"
+                                    val freeKeyText = buildAnnotatedString {
+                                        pushStringAnnotation(tag = "URL", annotation = freeKeyUrl)
+                                        withStyle(
+                                            SpanStyle(
+                                                color = MaterialTheme.colorScheme.primary,
+                                                textDecoration = TextDecoration.Underline,
+                                            )
+                                        ) {
+                                            append("Get a free key")
+                                        }
+                                        pop()
+                                    }
+                                    ClickableText(
+                                        text = freeKeyText,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        onClick = { offset ->
+                                            val url = freeKeyText.getStringAnnotations("URL", offset, offset)
+                                                .firstOrNull()?.item
+                                            if (url != null) {
+                                                uriHandler.openUri(url)
+                                            }
+                                        },
+                                    )
                                     if (state.apiKey.isNotBlank()) {
                                         Text(
                                             text = "Saved locally for model requests.",
@@ -256,7 +291,7 @@ fun OnboardingScreen(
                         }
 
                         // Vertical connector
-                        StepConnector()
+                        StepConnector(completed = step2State == StepState.COMPLETE)
 
                         // Step 3 — Model selection
                         val step3State = when {
@@ -319,7 +354,9 @@ fun OnboardingScreen(
 
                         Button(
                             onClick = { onEvent(OnboardingEvent.CompleteOnboarding) },
-                            enabled = state.micPermission == PermissionStatus.GRANTED && state.apiKey.isNotBlank(),
+                            enabled = state.micPermission == PermissionStatus.GRANTED &&
+                                    state.apiKey.isNotBlank() &&
+                                    state.selectedModel.isNotBlank(),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text("Enter OpenYap")
@@ -332,13 +369,15 @@ fun OnboardingScreen(
 }
 
 @Composable
-private fun StepConnector() {
+private fun StepConnector(completed: Boolean) {
     Box(
         modifier = Modifier
             .padding(start = 17.dp) // Align with center of step circle (34dp / 2)
             .width(1.dp)
             .height(Spacing.xxl)
-            .background(MaterialTheme.colorScheme.outlineVariant),
+            .background(
+                if (completed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+            ),
     )
 }
 
@@ -397,7 +436,28 @@ private fun StepSection(
     stepState: StepState,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    ElevatedCard {
+    val pulseEnabled = stepState == StepState.ACTIVE
+    var shouldPulse by remember(stepState) { mutableStateOf(stepState == StepState.ACTIVE) }
+
+    LaunchedEffect(stepState) {
+        if (stepState == StepState.ACTIVE) {
+            shouldPulse = true
+            kotlinx.coroutines.delay(3000)
+            shouldPulse = false
+        } else {
+            shouldPulse = false
+        }
+    }
+
+    val pulseScale by animateFloatAsState(
+        targetValue = if (pulseEnabled && shouldPulse) 1.08f else 1f,
+        animationSpec = tween(700),
+        label = "stepScale$stepNumber",
+    )
+
+    ElevatedCard(
+        modifier = Modifier.alpha(if (stepState == StepState.LOCKED) 0.5f else 1f)
+    ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(Spacing.lg),
             verticalArrangement = Arrangement.spacedBy(Spacing.md),
@@ -426,14 +486,6 @@ private fun StepSection(
                     }
 
                     StepState.ACTIVE -> {
-                        val infiniteTransition =
-                            rememberInfiniteTransition(label = "stepPulse$stepNumber")
-                        val pulseScale by infiniteTransition.animateFloat(
-                            initialValue = 1f,
-                            targetValue = 1.08f,
-                            animationSpec = infiniteRepeatable(tween(1000), RepeatMode.Reverse),
-                            label = "stepScale$stepNumber",
-                        )
                         Surface(
                             modifier = Modifier.size(34.dp).scale(pulseScale),
                             shape = CircleShape,
@@ -456,10 +508,11 @@ private fun StepSection(
                             color = MaterialTheme.colorScheme.outlineVariant,
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    stepNumber.toString(),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.labelLarge,
+                                Icon(
+                                    Icons.Default.Lock,
+                                    contentDescription = "Locked",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }

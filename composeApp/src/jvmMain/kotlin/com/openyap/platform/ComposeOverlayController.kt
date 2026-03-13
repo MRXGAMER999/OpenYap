@@ -42,7 +42,12 @@ class ComposeOverlayController : OverlayController, Closeable {
     }
 
     override fun updateState(state: OverlayState) {
-        _uiState.update { it.copy(state = state) }
+        _uiState.update {
+            it.copy(
+                state = state,
+                visible = state != OverlayState.ERROR || it.visible,
+            )
+        }
     }
 
     override fun updateLevel(level: Float) {

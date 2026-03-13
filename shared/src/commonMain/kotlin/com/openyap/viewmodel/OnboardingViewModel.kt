@@ -20,7 +20,7 @@ data class OnboardingUiState(
     val isComplete: Boolean = false,
     val currentStep: Int = 0,
     val availableModels: List<ModelInfo> = emptyList(),
-    val selectedModel: String = "gemini-3.1-flash-lite-preview",
+    val selectedModel: String = "",
     val isLoadingModels: Boolean = false,
     val modelsFetchError: String? = null,
 )
@@ -30,6 +30,7 @@ sealed interface OnboardingEvent {
     data object OpenMicSettings : OnboardingEvent
     data class SaveApiKey(val key: String) : OnboardingEvent
     data class SelectModel(val modelId: String) : OnboardingEvent
+    data object RetryModelFetch : OnboardingEvent
     data object CompleteOnboarding : OnboardingEvent
 }
 
@@ -71,6 +72,7 @@ class OnboardingViewModel(
             is OnboardingEvent.OpenMicSettings -> permissionManager.openMicrophoneSettings()
             is OnboardingEvent.SaveApiKey -> saveApiKey(event.key)
             is OnboardingEvent.SelectModel -> selectModel(event.modelId)
+            is OnboardingEvent.RetryModelFetch -> retryModelFetch()
             is OnboardingEvent.CompleteOnboarding -> completeOnboarding()
         }
     }
@@ -101,6 +103,12 @@ class OnboardingViewModel(
             settingsRepository.saveSettings(settings.copy(geminiModel = modelId))
             _state.update { it.copy(selectedModel = modelId) }
         }
+    }
+
+    private fun retryModelFetch() {
+        val apiKey = _state.value.apiKey
+        if (apiKey.isBlank()) return
+        viewModelScope.launch { fetchModels(apiKey) }
     }
 
     private suspend fun fetchModels(apiKey: String) {
