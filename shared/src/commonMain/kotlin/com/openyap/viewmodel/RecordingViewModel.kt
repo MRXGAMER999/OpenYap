@@ -8,6 +8,7 @@ import com.openyap.model.PermissionStatus
 import com.openyap.model.RecordingEntry
 import com.openyap.model.RecordingState
 import com.openyap.platform.AudioRecorder
+import com.openyap.platform.AudioRecorderDiagnostics
 import com.openyap.platform.ForegroundAppDetector
 import com.openyap.platform.HotkeyManager
 import com.openyap.platform.OverlayController
@@ -90,6 +91,8 @@ class RecordingViewModel(
     private val dictionaryEngine: DictionaryEngine,
     private val overlayController: OverlayController,
     private val audioFeedbackPlayer: AudioFeedbackPlayer = NoOpAudioFeedbackPlayer(),
+    private val audioMimeType: String,
+    audioFileExtension: String,
     private val tempDirProvider: () -> String,
     private val fileReader: (String) -> ByteArray,
     private val fileDeleter: (String) -> Unit,
@@ -97,6 +100,12 @@ class RecordingViewModel(
 
     companion object {
         private const val MIN_DURATION_SECONDS = 0.5
+    }
+
+    private val audioFileExtension = if (audioFileExtension.startsWith(".")) {
+        audioFileExtension
+    } else {
+        ".${audioFileExtension}"
     }
 
     private val _state = MutableStateFlow(RecordingUiState())
@@ -205,11 +214,26 @@ class RecordingViewModel(
         }
 
         val timestamp = Clock.System.now().toEpochMilliseconds()
-        val path = "${tempDirProvider()}/openyap_$timestamp.wav"
+        val path = "${tempDirProvider()}/openyap_$timestamp$audioFileExtension"
         currentRecordingPath = path
         recordingStartedAt = TimeSource.Monotonic.markNow()
 
-        audioRecorder.startRecording(path)
+        try {
+            audioRecorder.startRecording(path)
+        } catch (e: Exception) {
+            currentRecordingPath = null
+            recordingStartedAt = null
+            _state.update {
+                it.copy(
+                    recordingState = RecordingState.Error(e.message ?: "Failed to start recording"),
+                    error = e.message,
+                )
+            }
+            if (settings.audioFeedbackEnabled) {
+                audioFeedbackPlayer.playError()
+            }
+            return
+        }
 
         _state.update {
             it.copy(
@@ -253,7 +277,7 @@ class RecordingViewModel(
         recordingStartedAt = null
 
         if (elapsedSeconds < MIN_DURATION_SECONDS) {
-            audioRecorder.stopRecording()
+            runCatching { audioRecorder.stopRecording() }
 
             val settings = settingsRepository.loadSettings()
             if (settings.audioFeedbackEnabled) {
@@ -278,13 +302,33 @@ class RecordingViewModel(
         }
 
         val duration = elapsedSeconds.roundToInt().coerceAtLeast(1)
-        val path = audioRecorder.stopRecording()
+        val path = try {
+            audioRecorder.stopRecording()
+        } catch (e: Exception) {
+            currentRecordingPath?.let { deleteFile(it) }
+            currentRecordingPath = null
+            currentProcessingPath = null
+            overlayController.dismiss()
+            _state.update {
+                it.copy(
+                    recordingState = RecordingState.Error(e.message ?: "Recording failed"),
+                    error = e.message,
+                )
+            }
+            if (settings.audioFeedbackEnabled) {
+                audioFeedbackPlayer.playError()
+            }
+            _effects.emit(RecordingEffect.ShowError(e.message ?: "Recording failed"))
+            return
+        }
         currentRecordingPath = null
         currentProcessingPath = path
         val generation = ++processingGeneration
+        val recorderWarning = (audioRecorder as? AudioRecorderDiagnostics)?.consumeWarning()
 
         _state.update { it.copy(recordingState = RecordingState.Processing) }
         overlayController.updateState(OverlayState.PROCESSING)
+        recorderWarning?.let(overlayController::flashMessage)
 
         viewModelScope.launch {
             try {
@@ -303,6 +347,7 @@ class RecordingViewModel(
 
                 val response = geminiClient.processAudio(
                     audioBytes = audioBytes,
+                    mimeType = audioMimeType,
                     systemPrompt = systemPrompt,
                     apiKey = apiKey,
                     model = settings.geminiModel,
@@ -314,7 +359,11 @@ class RecordingViewModel(
                 }
 
                 val profile = userProfileRepository.loadProfile()
-                val dictEntries = dictionaryRepository.loadEntries()
+                val dictEntries = if (settings.dictionaryEnabled) {
+                    dictionaryRepository.loadEntries()
+                } else {
+                    emptyList()
+                }
                 val expandedResponse = PhraseExpansionEngine.expandText(
                     text = response,
                     profile = profile,
@@ -358,9 +407,11 @@ class RecordingViewModel(
 
                 overlayController.updateState(OverlayState.SUCCESS)
 
-                try {
-                    dictionaryEngine.ingestObservedText(expandedResponse)
-                } catch (_: Exception) {
+                if (settings.dictionaryEnabled) {
+                    try {
+                        dictionaryEngine.ingestObservedText(expandedResponse)
+                    } catch (_: Exception) {
+                    }
                 }
 
                 currentProcessingPath = null
@@ -399,7 +450,7 @@ class RecordingViewModel(
                 durationJob?.cancel()
                 durationJob = null
                 recordingStartedAt = null
-                audioRecorder.stopRecording()
+                runCatching { audioRecorder.stopRecording() }
                 currentRecordingPath?.let { deleteFile(it) }
                 currentRecordingPath = null
                 overlayController.dismiss()

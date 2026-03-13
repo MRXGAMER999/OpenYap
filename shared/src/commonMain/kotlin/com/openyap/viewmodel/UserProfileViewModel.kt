@@ -34,9 +34,13 @@ class UserProfileViewModel(
     val state: StateFlow<UserProfileUiState> = _state.asStateFlow()
 
     init {
+        refresh()
+    }
+
+    fun refresh() {
         viewModelScope.launch {
             val profile = userProfileRepository.loadProfile()
-            _state.update { it.copy(profile = profile) }
+            _state.update { it.copy(profile = profile, isSaving = false, saveMessage = null) }
         }
     }
 

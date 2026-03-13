@@ -21,10 +21,14 @@ import androidx.compose.ui.window.rememberTrayState
 import androidx.compose.ui.window.rememberWindowState
 import com.openyap.model.RecordingState
 import com.openyap.platform.AudioFeedbackService
+import com.openyap.platform.AudioRecorder
 import com.openyap.platform.ComposeOverlayController
 import com.openyap.platform.ComposeOverlayWindow
 import com.openyap.platform.HttpClientFactory
 import com.openyap.platform.JvmAudioRecorder
+import com.openyap.platform.JvmAppDataResetter
+import com.openyap.platform.NativeAudioBridge
+import com.openyap.platform.NativeAudioRecorder
 import com.openyap.platform.PlatformInit
 import com.openyap.platform.WindowsCredentialStorage
 import com.openyap.platform.WindowsForegroundAppDetector
@@ -68,7 +72,25 @@ fun main() {
         val dictionaryRepo = remember { JvmDictionaryRepository(PlatformInit.dataDir) }
         val userProfileRepo = remember { JvmUserProfileRepository(PlatformInit.dataDir) }
         val hotkeyManager = remember { WindowsHotkeyManager() }
-        val audioRecorder = remember { JvmAudioRecorder() }
+        val audioPipeline = remember {
+            val nativeAudio = NativeAudioBridge.instance
+            if (nativeAudio != null) {
+                System.err.println("Native audio pipeline available")
+                AudioPipelineConfig(
+                    audioRecorder = NativeAudioRecorder(nativeAudio),
+                    audioMimeType = "audio/aac",
+                    audioFileExtension = ".aac",
+                )
+            } else {
+                System.err.println("Native audio pipeline unavailable, using fallback")
+                AudioPipelineConfig(
+                    audioRecorder = JvmAudioRecorder(),
+                    audioMimeType = "audio/wav",
+                    audioFileExtension = ".wav",
+                )
+            }
+        }
+        val audioRecorder = audioPipeline.audioRecorder
         val pasteAutomation = remember { WindowsPasteAutomation() }
         val foregroundDetector = remember { WindowsForegroundAppDetector() }
         val permissionManager = remember { WindowsPermissionManager() }
@@ -77,6 +99,13 @@ fun main() {
         val hotkeyFormatter = remember { WindowsHotkeyDisplayFormatter() }
         val overlayController = remember { ComposeOverlayController() }
         val audioFeedbackService = remember { AudioFeedbackService() }
+        val appDataResetter = remember {
+            JvmAppDataResetter(
+                secureStorage = secureStorage,
+                dataDir = PlatformInit.dataDir,
+                tempDir = PlatformInit.tempDir,
+            )
+        }
 
         val audioFeedbackPlayer = remember {
             object : AudioFeedbackPlayer {
@@ -102,6 +131,8 @@ fun main() {
                 dictionaryEngine = dictionaryEngine,
                 overlayController = overlayController,
                 audioFeedbackPlayer = audioFeedbackPlayer,
+                audioMimeType = audioPipeline.audioMimeType,
+                audioFileExtension = audioPipeline.audioFileExtension,
                 tempDirProvider = { PlatformInit.tempDir.toString() },
                 fileReader = { path -> java.io.File(path).readBytes() },
                 fileDeleter = { path -> java.io.File(path).delete() },
@@ -112,7 +143,8 @@ fun main() {
                 settingsRepo,
                 geminiClient,
                 hotkeyManager,
-                hotkeyFormatter
+                hotkeyFormatter,
+                resetAppDataAction = { appDataResetter.reset() },
             )
         }
         val historyViewModel = remember { HistoryViewModel(historyRepo) }
@@ -160,6 +192,12 @@ fun main() {
         val windowState = rememberWindowState(size = DpSize(1100.dp, 800.dp))
         val backStack = remember { mutableStateListOf<Route>(Route.Home) }
 
+        DisposableEffect(audioRecorder) {
+            onDispose {
+                runCatching { (audioRecorder as? java.io.Closeable)?.close() }
+            }
+        }
+
         val recordingState by recordingViewModel.state.collectAsState()
 
         val trayIcon = remember(recordingState.recordingState) {
@@ -173,6 +211,7 @@ fun main() {
             menu = {
                 Item("Show", onClick = { isVisible = true })
                 Item("Quit", onClick = {
+                    runCatching { (audioRecorder as? java.io.Closeable)?.close() }
                     overlayController.close()
                     audioFeedbackService.close()
                     hotkeyManager.close()
@@ -263,6 +302,18 @@ fun main() {
                             if (event is SettingsEvent.SaveApiKey) {
                                 recordingViewModel.onEvent(RecordingEvent.RefreshState)
                             }
+                            if (event is SettingsEvent.ResetAppData) {
+                                recordingViewModel.onEvent(RecordingEvent.RefreshState)
+                                historyViewModel.refresh()
+                                onboardingViewModel.refresh()
+                                dictionaryViewModel.refresh()
+                                userProfileViewModel.refresh()
+                                statsViewModel.refresh()
+                                appTones = emptyMap()
+                                appPrompts = emptyMap()
+                                backStack.clear()
+                                backStack += Route.Home
+                            }
                         },
                         onHistoryEvent = historyViewModel::onEvent,
                         onOnboardingEvent = { event ->
@@ -297,6 +348,12 @@ fun main() {
         }
     }
 }
+
+private data class AudioPipelineConfig(
+    val audioRecorder: AudioRecorder,
+    val audioMimeType: String,
+    val audioFileExtension: String,
+)
 
 private fun createTrayIcon(state: RecordingState): BufferedImage {
     val size = 16

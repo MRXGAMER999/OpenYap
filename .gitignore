@@ -10,6 +10,14 @@ local.properties
 captures
 .externalNativeBuild
 .cxx
+native/build/
+out/
+*.class
+*.jar
+*.log
+.env*
+Thumbs.db
+.vscode/
 *.xcodeproj/*
 !*.xcodeproj/project.pbxproj
 !*.xcodeproj/xcshareddata/
@@ -18,5 +26,4 @@ captures
 **/xcshareddata/WorkspaceSettings.xcsettings
 node_modules/
 .opencode
-.specify
 .cursor

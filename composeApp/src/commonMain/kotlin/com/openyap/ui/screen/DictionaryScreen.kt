@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Book
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
@@ -38,6 +39,7 @@ import com.openyap.viewmodel.DictionaryUiState
 @Composable
 fun DictionaryScreen(
     state: DictionaryUiState,
+    isDictionaryEnabled: Boolean,
     onEvent: (DictionaryEvent) -> Unit,
 ) {
     var newOriginal by remember { mutableStateOf("") }
@@ -61,6 +63,17 @@ fun DictionaryScreen(
                 label = { Text("${state.entries.count { it.isEnabled }} active phrases") })
         }
 
+        if (!isDictionaryEnabled) {
+            Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
+                Text(
+                    "Dictionary is disabled in Settings. Re-enable it there to apply replacements and continue learning phrases.",
+                    modifier = Modifier.fillMaxWidth().padding(Spacing.md),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+        }
+
         // Input row — stays as ElevatedCard (primary action area)
         ElevatedCard {
             Row(
@@ -73,6 +86,7 @@ fun DictionaryScreen(
                     onValueChange = { newOriginal = it },
                     label = { Text("Original phrase") },
                     modifier = Modifier.weight(1f),
+                    enabled = isDictionaryEnabled,
                     singleLine = true,
                 )
                 OutlinedTextField(
@@ -80,6 +94,7 @@ fun DictionaryScreen(
                     onValueChange = { newReplacement = it },
                     label = { Text("Replacement") },
                     modifier = Modifier.weight(1f),
+                    enabled = isDictionaryEnabled,
                     singleLine = true,
                 )
                 FilledTonalButton(
@@ -88,7 +103,7 @@ fun DictionaryScreen(
                         newOriginal = ""
                         newReplacement = ""
                     },
-                    enabled = newOriginal.isNotBlank() && newReplacement.isNotBlank(),
+                    enabled = isDictionaryEnabled && newOriginal.isNotBlank() && newReplacement.isNotBlank(),
                 ) {
                     Text("Add")
                 }
@@ -130,9 +145,13 @@ fun DictionaryScreen(
                             }
                             Switch(
                                 checked = entry.isEnabled,
+                                enabled = isDictionaryEnabled,
                                 onCheckedChange = { onEvent(DictionaryEvent.ToggleEntry(entry.id)) },
                             )
-                            TextButton(onClick = { onEvent(DictionaryEvent.RemoveEntry(entry.id)) }) {
+                            TextButton(
+                                enabled = isDictionaryEnabled,
+                                onClick = { onEvent(DictionaryEvent.RemoveEntry(entry.id)) },
+                            ) {
                                 Text("Remove")
                             }
                         }

@@ -20,6 +20,8 @@ class GeminiClient(private val client: HttpClient) {
         private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
         private val DEFAULT_MODELS = listOf(
+            GeminiModelInfo("gemini-3.1-flash-lite-preview", "Gemini 3.1 Flash Lite Preview"),
+            GeminiModelInfo("gemini-3.1-flash-preview", "Gemini 3.1 Flash Preview"),
             GeminiModelInfo("gemini-2.0-flash", "Gemini 2.0 Flash"),
             GeminiModelInfo("gemini-2.0-flash-lite", "Gemini 2.0 Flash Lite"),
             GeminiModelInfo("gemini-1.5-flash", "Gemini 1.5 Flash"),
@@ -63,6 +65,7 @@ class GeminiClient(private val client: HttpClient) {
     @OptIn(ExperimentalEncodingApi::class)
     suspend fun processAudio(
         audioBytes: ByteArray,
+        mimeType: String,
         systemPrompt: String,
         apiKey: String,
         model: String,
@@ -75,10 +78,11 @@ class GeminiClient(private val client: HttpClient) {
                     parts = listOf(
                         GeminiPart(
                             inlineData = InlineData(
-                                mimeType = "audio/wav",
+                                mimeType = mimeType,
                                 data = base64Audio,
                             )
                         ),
+                        GeminiPart(text = "Transcribe this audio."),
                     )
                 )
             ),
@@ -88,7 +92,8 @@ class GeminiClient(private val client: HttpClient) {
                 )
             ),
             generationConfig = GenerationConfig(
-                temperature = 0.7f,
+                temperature = 0f,
+                responseMimeType = "text/plain",
             ),
         )
 
@@ -148,6 +153,7 @@ data class InlineData(
 @Serializable
 data class GenerationConfig(
     val temperature: Float? = null,
+    @SerialName("response_mime_type") val responseMimeType: String? = null,
 )
 
 @Serializable

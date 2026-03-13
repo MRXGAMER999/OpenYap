@@ -57,13 +57,17 @@ class ComposeOverlayController : OverlayController, Closeable {
         _uiState.update { OverlayUiState() }
     }
 
-    override fun flashProcessing() {
+    override fun flashMessage(message: String) {
         lastFlashJob?.cancel()
-        _uiState.update { it.copy(flashMessage = "Still processing…") }
+        _uiState.update { it.copy(flashMessage = message) }
         lastFlashJob = scope.launch {
             delay(1500)
             _uiState.update { it.copy(flashMessage = null) }
         }
+    }
+
+    override fun flashProcessing() {
+        flashMessage("Still processing...")
     }
 
     override fun close() {

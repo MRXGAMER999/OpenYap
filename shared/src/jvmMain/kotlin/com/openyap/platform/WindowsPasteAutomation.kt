@@ -31,7 +31,7 @@ class WindowsPasteAutomation : PasteAutomation {
 
             clipboard.setContents(StringSelection(text), null)
 
-            delay(150)
+            delay(50)
 
             sendCtrlV()
 

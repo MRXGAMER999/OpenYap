@@ -8,5 +8,6 @@ interface OverlayController {
     fun updateLevel(level: Float)
     fun updateDuration(seconds: Int)
     fun dismiss()
+    fun flashMessage(message: String)
     fun flashProcessing()
 }

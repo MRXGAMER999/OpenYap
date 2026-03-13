@@ -2,6 +2,7 @@ package com.openyap.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.openyap.model.AppSettings
 import com.openyap.model.HotkeyBinding
 import com.openyap.platform.HotkeyDisplayFormatter
 import com.openyap.platform.HotkeyManager
@@ -16,12 +17,14 @@ import kotlinx.coroutines.launch
 
 data class SettingsUiState(
     val apiKey: String = "",
-    val geminiModel: String = "gemini-2.0-flash",
+    val geminiModel: String = "gemini-3.1-flash-lite-preview",
     val genZEnabled: Boolean = false,
-    val phraseExpansionEnabled: Boolean = true,
+    val phraseExpansionEnabled: Boolean = false,
+    val dictionaryEnabled: Boolean = true,
     val audioFeedbackEnabled: Boolean = true,
     val startMinimized: Boolean = false,
     val isSaving: Boolean = false,
+    val isResettingData: Boolean = false,
     val saveMessage: String? = null,
     val availableModels: List<GeminiModelInfo> = emptyList(),
     val isLoadingModels: Boolean = false,
@@ -37,8 +40,10 @@ sealed interface SettingsEvent {
     data class SelectModel(val modelId: String) : SettingsEvent
     data class ToggleGenZ(val enabled: Boolean) : SettingsEvent
     data class TogglePhraseExpansion(val enabled: Boolean) : SettingsEvent
+    data class ToggleDictionary(val enabled: Boolean) : SettingsEvent
     data class ToggleAudioFeedback(val enabled: Boolean) : SettingsEvent
     data class ToggleStartMinimized(val enabled: Boolean) : SettingsEvent
+    data object ResetAppData : SettingsEvent
     data object RefreshModels : SettingsEvent
     data object CaptureHotkey : SettingsEvent
     data object ClearHotkeyMessage : SettingsEvent
@@ -50,6 +55,7 @@ class SettingsViewModel(
     private val geminiClient: GeminiClient,
     private val hotkeyManager: HotkeyManager,
     private val hotkeyDisplayFormatter: HotkeyDisplayFormatter,
+    private val resetAppDataAction: suspend () -> Unit = {},
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SettingsUiState())
@@ -76,6 +82,7 @@ class SettingsViewModel(
                     geminiModel = settings.geminiModel,
                     genZEnabled = settings.genZEnabled,
                     phraseExpansionEnabled = settings.phraseExpansionEnabled,
+                    dictionaryEnabled = settings.dictionaryEnabled,
                     audioFeedbackEnabled = settings.audioFeedbackEnabled,
                     startMinimized = settings.startMinimized,
                     hotkeyLabel = formatHotkey(settings.hotkeyConfig.startHotkey),
@@ -92,8 +99,10 @@ class SettingsViewModel(
             is SettingsEvent.SelectModel -> selectModel(event.modelId)
             is SettingsEvent.ToggleGenZ -> toggleGenZ(event.enabled)
             is SettingsEvent.TogglePhraseExpansion -> togglePhraseExpansion(event.enabled)
+            is SettingsEvent.ToggleDictionary -> toggleDictionary(event.enabled)
             is SettingsEvent.ToggleAudioFeedback -> toggleAudioFeedback(event.enabled)
             is SettingsEvent.ToggleStartMinimized -> toggleStartMinimized(event.enabled)
+            is SettingsEvent.ResetAppData -> resetAppData()
             is SettingsEvent.RefreshModels -> refreshModels()
             is SettingsEvent.CaptureHotkey -> captureHotkey()
             is SettingsEvent.ClearHotkeyMessage -> _state.update { it.copy(hotkeyError = null) }
@@ -221,11 +230,54 @@ class SettingsViewModel(
         }
     }
 
+    private fun toggleDictionary(enabled: Boolean) {
+        viewModelScope.launch {
+            val settings = settingsRepository.loadSettings()
+            settingsRepository.saveSettings(settings.copy(dictionaryEnabled = enabled))
+            _state.update { it.copy(dictionaryEnabled = enabled) }
+        }
+    }
+
     private fun toggleStartMinimized(enabled: Boolean) {
         viewModelScope.launch {
             val settings = settingsRepository.loadSettings()
             settingsRepository.saveSettings(settings.copy(startMinimized = enabled))
             _state.update { it.copy(startMinimized = enabled) }
+        }
+    }
+
+    private fun resetAppData() {
+        viewModelScope.launch {
+            val defaults = AppSettings()
+            _state.update { it.copy(isResettingData = true, saveMessage = null) }
+            try {
+                resetAppDataAction.invoke()
+                hotkeyManager.setConfig(defaults.hotkeyConfig)
+                _state.update {
+                    it.copy(
+                        apiKey = "",
+                        geminiModel = defaults.geminiModel,
+                        genZEnabled = defaults.genZEnabled,
+                        phraseExpansionEnabled = defaults.phraseExpansionEnabled,
+                        dictionaryEnabled = defaults.dictionaryEnabled,
+                        audioFeedbackEnabled = defaults.audioFeedbackEnabled,
+                        startMinimized = defaults.startMinimized,
+                        availableModels = emptyList(),
+                        isLoadingModels = false,
+                        modelsFetchError = null,
+                        hotkeyLabel = formatHotkey(defaults.hotkeyConfig.startHotkey),
+                        isResettingData = false,
+                        saveMessage = "App data reset. Restart OpenYap if old data is still visible.",
+                    )
+                }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        isResettingData = false,
+                        saveMessage = e.message ?: "Failed to reset app data",
+                    )
+                }
+            }
         }
     }
 

@@ -1,0 +1,38 @@
+name: Build Native DLL
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "native/**"
+      - ".github/workflows/build-dll.yml"
+  pull_request:
+    paths:
+      - "native/**"
+      - ".github/workflows/build-dll.yml"
+
+jobs:
+  build-dll:
+    runs-on: windows-2022
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure CMake
+        run: cmake -S native -B native/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build native DLL
+        run: cmake --build native/build
+
+      - name: Upload DLL artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openyap_native-windows-x64
+          path: native/build/openyap_native.dll
+          if-no-files-found: error

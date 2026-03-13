@@ -11,5 +11,6 @@ class NoOpOverlayController : OverlayController {
     override fun updateLevel(level: Float) {}
     override fun updateDuration(seconds: Int) {}
     override fun dismiss() {}
+    override fun flashMessage(message: String) {}
     override fun flashProcessing() {}
 }

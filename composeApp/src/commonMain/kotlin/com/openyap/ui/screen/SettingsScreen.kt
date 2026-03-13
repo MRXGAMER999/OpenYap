@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -26,6 +27,7 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
@@ -62,6 +64,7 @@ fun SettingsScreen(
 ) {
     var apiKeyInput by remember(state.apiKey) { mutableStateOf(state.apiKey) }
     var showKey by remember { mutableStateOf(false) }
+    var showResetDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Snackbar for hotkey errors
@@ -245,6 +248,18 @@ fun SettingsScreen(
             }
             TooltipBox(
                 positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+                tooltip = { PlainTooltip { Text("Turn dictionary replacements and auto-learning on or off without deleting saved entries") } },
+                state = rememberTooltipState(),
+            ) {
+                FeatureToggleRow(
+                    label = "Dictionary",
+                    description = "Use saved dictionary phrases and learn repeated replacements from your transcripts.",
+                    checked = state.dictionaryEnabled,
+                    onCheckedChange = { onEvent(SettingsEvent.ToggleDictionary(it)) },
+                )
+            }
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
                 tooltip = { PlainTooltip { Text("Example: \"Please review the report\" → \"pls check the report rq 💀\"") } },
                 state = rememberTooltipState(),
             ) {
@@ -276,6 +291,21 @@ fun SettingsScreen(
                 onCheckedChange = { onEvent(SettingsEvent.ToggleStartMinimized(it)) },
             )
 
+            HorizontalDivider()
+
+            Text("Troubleshooting", style = MaterialTheme.typography.headlineSmall)
+            Text(
+                "Reset local settings, saved prompts, history, dictionary entries, profile data, and the stored API key.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedButton(
+                onClick = { showResetDialog = true },
+                enabled = !state.isResettingData,
+            ) {
+                Text(if (state.isResettingData) "Resetting..." else "Reset app data")
+            }
+
             Text(
                 text = "OpenYap v${state.appVersion.ifBlank { "1.0.0" }}",
                 style = MaterialTheme.typography.labelMedium,
@@ -283,6 +313,31 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(Spacing.md))
         }
+    }
+
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text("Reset app data?") },
+            text = {
+                Text(
+                    "This deletes local settings, saved prompts, history, dictionary entries, profile info, and the stored API key."
+                )
+            },
+            confirmButton = {
+                FilledTonalButton(onClick = {
+                    showResetDialog = false
+                    onEvent(SettingsEvent.ResetAppData)
+                }) {
+                    Text("Reset")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
 

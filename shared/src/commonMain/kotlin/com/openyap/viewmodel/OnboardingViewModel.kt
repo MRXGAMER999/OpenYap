@@ -16,10 +16,11 @@ import kotlinx.coroutines.launch
 data class OnboardingUiState(
     val micPermission: PermissionStatus = PermissionStatus.UNKNOWN,
     val apiKey: String = "",
+    val isLoaded: Boolean = false,
     val isComplete: Boolean = false,
     val currentStep: Int = 0,
     val availableModels: List<GeminiModelInfo> = emptyList(),
-    val selectedModel: String = "gemini-2.0-flash",
+    val selectedModel: String = "gemini-3.1-flash-lite-preview",
     val isLoadingModels: Boolean = false,
     val modelsFetchError: String? = null,
 )
@@ -42,6 +43,10 @@ class OnboardingViewModel(
     val state: StateFlow<OnboardingUiState> = _state.asStateFlow()
 
     init {
+        refresh()
+    }
+
+    fun refresh() {
         viewModelScope.launch {
             val micPerm = permissionManager.checkMicrophonePermission()
             val apiKey = settingsRepository.loadApiKey() ?: ""
@@ -50,6 +55,7 @@ class OnboardingViewModel(
                 it.copy(
                     micPermission = micPerm,
                     apiKey = apiKey,
+                    isLoaded = true,
                     isComplete = settings.onboardingCompleted,
                     currentStep = computeStep(micPerm, apiKey),
                     selectedModel = settings.geminiModel,

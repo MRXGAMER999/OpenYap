@@ -35,12 +35,14 @@ class DictionaryViewModel(
         loadEntries()
     }
 
+    fun refresh() = loadEntries()
+
     fun onEvent(event: DictionaryEvent) {
         when (event) {
             is DictionaryEvent.AddEntry -> addEntry(event.original, event.replacement)
             is DictionaryEvent.RemoveEntry -> removeEntry(event.id)
             is DictionaryEvent.ToggleEntry -> toggleEntry(event.id)
-            is DictionaryEvent.Refresh -> loadEntries()
+            is DictionaryEvent.Refresh -> refresh()
         }
     }
 

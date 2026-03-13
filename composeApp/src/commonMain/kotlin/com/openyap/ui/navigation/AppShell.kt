@@ -118,6 +118,10 @@ fun AppShell(
     onStatsRefresh: () -> Unit,
     onCopyToClipboard: (String) -> Unit,
 ) {
+    if (!onboardingState.isLoaded) {
+        return
+    }
+
     if (!onboardingState.isComplete) {
         OnboardingScreen(state = onboardingState, onEvent = onOnboardingEvent)
         return
@@ -233,7 +237,11 @@ fun AppShell(
                                 HistoryScreen(historyState, onHistoryEvent, onCopyToClipboard)
                             }
                             entry<Route.Dictionary> {
-                                DictionaryScreen(dictionaryState, onDictionaryEvent)
+                                DictionaryScreen(
+                                    state = dictionaryState,
+                                    isDictionaryEnabled = settingsState.dictionaryEnabled,
+                                    onEvent = onDictionaryEvent,
+                                )
                             }
                             entry<Route.UserInfo> {
                                 UserInfoScreen(userProfileState, onUserProfileEvent)
