@@ -73,7 +73,6 @@ class GeminiClient(private val client: HttpClient) {
             contents = listOf(
                 GeminiContent(
                     parts = listOf(
-                        GeminiPart(text = systemPrompt),
                         GeminiPart(
                             inlineData = InlineData(
                                 mimeType = "audio/wav",
@@ -81,6 +80,11 @@ class GeminiClient(private val client: HttpClient) {
                             )
                         ),
                     )
+                )
+            ),
+            systemInstruction = GeminiContent(
+                parts = listOf(
+                    GeminiPart(text = systemPrompt),
                 )
             ),
             generationConfig = GenerationConfig(
@@ -120,6 +124,7 @@ class GeminiException(message: String) : Exception(message)
 @Serializable
 data class GeminiRequest(
     val contents: List<GeminiContent>,
+    @SerialName("system_instruction") val systemInstruction: GeminiContent? = null,
     val generationConfig: GenerationConfig? = null,
 )
 
