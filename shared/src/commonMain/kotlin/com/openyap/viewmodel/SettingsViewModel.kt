@@ -9,6 +9,8 @@ import com.openyap.model.TranscriptionProvider
 import com.openyap.platform.AudioRecorder
 import com.openyap.platform.HotkeyDisplayFormatter
 import com.openyap.platform.HotkeyManager
+import com.openyap.platform.NoOpStartupManager
+import com.openyap.platform.StartupManager
 import com.openyap.repository.SettingsRepository
 import com.openyap.service.GeminiClient
 import com.openyap.service.GroqWhisperClient
@@ -30,6 +32,8 @@ data class SettingsUiState(
     val dictionaryEnabled: Boolean = true,
     val audioFeedbackEnabled: Boolean = true,
     val startMinimized: Boolean = false,
+    val launchOnStartup: Boolean = false,
+    val startupSupported: Boolean = false,
     val isSaving: Boolean = false,
     val isResettingData: Boolean = false,
     val saveMessage: String? = null,
@@ -61,6 +65,7 @@ sealed interface SettingsEvent {
     data class ToggleDictionary(val enabled: Boolean) : SettingsEvent
     data class ToggleAudioFeedback(val enabled: Boolean) : SettingsEvent
     data class ToggleStartMinimized(val enabled: Boolean) : SettingsEvent
+    data class ToggleLaunchOnStartup(val enabled: Boolean) : SettingsEvent
     data object ResetAppData : SettingsEvent
     data object RefreshModels : SettingsEvent
     data class SelectAudioDevice(val deviceId: String?) : SettingsEvent
@@ -77,6 +82,7 @@ class SettingsViewModel(
     private val hotkeyManager: HotkeyManager,
     private val hotkeyDisplayFormatter: HotkeyDisplayFormatter,
     private val audioRecorder: AudioRecorder,
+    private val startupManager: StartupManager = NoOpStartupManager(),
     private val resetAppDataAction: suspend () -> Unit = {},
 ) : ViewModel() {
 
@@ -88,6 +94,8 @@ class SettingsViewModel(
             val apiKey = settingsRepository.loadApiKey() ?: ""
             val groqApiKey = settingsRepository.loadGroqApiKey() ?: ""
             val settings = settingsRepository.loadSettings()
+            val launchOnStartup = runCatching { startupManager.isEnabled() }
+                .getOrDefault(settings.launchOnStartup)
             // Read version from manifest/resources
             val version = runCatching {
                 SettingsViewModel::class.java.getResourceAsStream("/version.properties")
@@ -111,6 +119,8 @@ class SettingsViewModel(
                     dictionaryEnabled = settings.dictionaryEnabled,
                     audioFeedbackEnabled = settings.audioFeedbackEnabled,
                     startMinimized = settings.startMinimized,
+                    launchOnStartup = launchOnStartup,
+                    startupSupported = startupManager.isSupported,
                     hotkeyLabel = formatHotkey(settings.hotkeyConfig.startHotkey),
                     appVersion = version,
                     selectedAudioDeviceId = settings.audioDeviceId,
@@ -133,6 +143,7 @@ class SettingsViewModel(
             is SettingsEvent.ToggleDictionary -> toggleDictionary(event.enabled)
             is SettingsEvent.ToggleAudioFeedback -> toggleAudioFeedback(event.enabled)
             is SettingsEvent.ToggleStartMinimized -> toggleStartMinimized(event.enabled)
+            is SettingsEvent.ToggleLaunchOnStartup -> toggleLaunchOnStartup(event.enabled)
             is SettingsEvent.ResetAppData -> resetAppData()
             is SettingsEvent.RefreshModels -> refreshModels()
             is SettingsEvent.CaptureHotkey -> captureHotkey()
@@ -306,12 +317,45 @@ class SettingsViewModel(
         }
     }
 
+    private fun toggleLaunchOnStartup(enabled: Boolean) {
+        viewModelScope.launch {
+            if (!startupManager.isSupported) {
+                _state.update { it.copy(saveMessage = "Launch on startup is only available in the installed desktop app.") }
+                return@launch
+            }
+
+            try {
+                startupManager.setEnabled(enabled)
+                val settings = settingsRepository.loadSettings()
+                settingsRepository.saveSettings(settings.copy(launchOnStartup = enabled))
+                _state.update {
+                    it.copy(
+                        launchOnStartup = enabled,
+                        saveMessage = if (enabled) {
+                            "OpenYap will launch when Windows starts"
+                        } else {
+                            "Launch on startup disabled"
+                        },
+                    )
+                }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        launchOnStartup = !enabled,
+                        saveMessage = e.message ?: "Failed to update startup setting",
+                    )
+                }
+            }
+        }
+    }
+
     private fun resetAppData() {
         viewModelScope.launch {
             val defaults = AppSettings()
             _state.update { it.copy(isResettingData = true, saveMessage = null) }
             try {
                 resetAppDataAction.invoke()
+                runCatching { startupManager.setEnabled(false) }
                 hotkeyManager.setConfig(defaults.hotkeyConfig)
                 _state.update {
                     it.copy(
@@ -325,6 +369,7 @@ class SettingsViewModel(
                         dictionaryEnabled = defaults.dictionaryEnabled,
                         audioFeedbackEnabled = defaults.audioFeedbackEnabled,
                         startMinimized = defaults.startMinimized,
+                        launchOnStartup = defaults.launchOnStartup,
                         availableModels = emptyList(),
                         isLoadingModels = false,
                         modelsFetchError = null,

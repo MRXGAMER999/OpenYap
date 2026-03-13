@@ -523,6 +523,17 @@ fun SettingsScreen(
                     checked = state.startMinimized,
                     onCheckedChange = { onEvent(SettingsEvent.ToggleStartMinimized(it)) },
                 )
+                FeatureToggleRow(
+                    label = "Launch on Windows startup",
+                    description = if (state.startupSupported) {
+                        "Start OpenYap automatically when you sign in to Windows. Pair this with Start minimized to tray for a quiet launch."
+                    } else {
+                        "Available in the installed desktop app. OpenYap needs its packaged launcher before it can register startup."
+                    },
+                    checked = state.launchOnStartup,
+                    enabled = state.startupSupported,
+                    onCheckedChange = { onEvent(SettingsEvent.ToggleLaunchOnStartup(it)) },
+                )
             }
 
             SettingsSectionCard(
@@ -633,6 +644,7 @@ private fun FeatureToggleRow(
     label: String,
     description: String,
     checked: Boolean,
+    enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
@@ -651,7 +663,11 @@ private fun FeatureToggleRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(
+            checked = checked,
+            enabled = enabled,
+            onCheckedChange = onCheckedChange,
+        )
     }
 }
 

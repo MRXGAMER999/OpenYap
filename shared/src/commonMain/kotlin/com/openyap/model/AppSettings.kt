@@ -22,5 +22,6 @@ data class AppSettings(
     val onboardingCompleted: Boolean = false,
     val audioFeedbackEnabled: Boolean = true,
     val startMinimized: Boolean = false,
+    val launchOnStartup: Boolean = false,
     val audioDeviceId: String? = null,
 )

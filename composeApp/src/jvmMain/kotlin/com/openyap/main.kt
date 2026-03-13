@@ -33,6 +33,7 @@ import com.openyap.platform.WindowsHotkeyDisplayFormatter
 import com.openyap.platform.WindowsHotkeyManager
 import com.openyap.platform.WindowsPasteAutomation
 import com.openyap.platform.WindowsPermissionManager
+import com.openyap.platform.WindowsStartupManager
 import com.openyap.platform.WindowsThemeHelper
 import com.openyap.repository.JvmDictionaryRepository
 import com.openyap.repository.JvmHistoryRepository
@@ -91,6 +92,7 @@ fun main() {
         val pasteAutomation = remember { WindowsPasteAutomation() }
         val foregroundDetector = remember { WindowsForegroundAppDetector() }
         val permissionManager = remember { WindowsPermissionManager() }
+        val startupManager = remember { WindowsStartupManager() }
         val geminiClient = remember { HttpClientFactory.createGeminiClient() }
         val groqWhisperClient = remember { HttpClientFactory.createGroqWhisperClient() }
         val dictionaryEngine = remember { DictionaryEngine(dictionaryRepo) }
@@ -150,6 +152,7 @@ fun main() {
                 hotkeyManager,
                 hotkeyFormatter,
                 audioRecorder,
+                startupManager,
                 resetAppDataAction = { appDataResetter.reset() },
             )
         }
