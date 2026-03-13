@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -22,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.openyap.ui.theme.Spacing
 import com.openyap.viewmodel.UserProfileEvent
 import com.openyap.viewmodel.UserProfileUiState
 
@@ -31,11 +31,15 @@ fun UserInfoScreen(
     onEvent: (UserProfileEvent) -> Unit,
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(28.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                 Text("User profile", style = MaterialTheme.typography.headlineLarge)
                 Text(
                     "These details power phrase expansion so OpenYap can turn shortcuts into polished personal answers.",
@@ -54,26 +58,28 @@ fun UserInfoScreen(
             color = MaterialTheme.colorScheme.primary,
         )
 
-        ElevatedCard {
-            Column(modifier = Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                val profile = state.profile
-                ProfileField("Name", profile.name) { onEvent(UserProfileEvent.UpdateName(it)) }
-                ProfileField("Email", profile.email) { onEvent(UserProfileEvent.UpdateEmail(it)) }
-                ProfileField("Phone", profile.phone) { onEvent(UserProfileEvent.UpdatePhone(it)) }
-                ProfileField("Job title", profile.jobTitle) { onEvent(UserProfileEvent.UpdateJobTitle(it)) }
-                ProfileField("Company", profile.company) { onEvent(UserProfileEvent.UpdateCompany(it)) }
+        // Flat section — no card wrapper (it's the only content, wrapping is redundant)
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(vertical = Spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md),
+        ) {
+            val profile = state.profile
+            ProfileField("Name", profile.name) { onEvent(UserProfileEvent.UpdateName(it)) }
+            ProfileField("Email", profile.email) { onEvent(UserProfileEvent.UpdateEmail(it)) }
+            ProfileField("Phone", profile.phone) { onEvent(UserProfileEvent.UpdatePhone(it)) }
+            ProfileField("Job title", profile.jobTitle) { onEvent(UserProfileEvent.UpdateJobTitle(it)) }
+            ProfileField("Company", profile.company) { onEvent(UserProfileEvent.UpdateCompany(it)) }
 
-                Spacer(Modifier.height(4.dp))
-                FilledTonalButton(onClick = { onEvent(UserProfileEvent.Save) }, enabled = !state.isSaving) {
-                    Text(if (state.isSaving) "Saving..." else "Save profile")
+            Spacer(Modifier.height(Spacing.xs))
+            FilledTonalButton(onClick = { onEvent(UserProfileEvent.Save) }, enabled = !state.isSaving) {
+                Text(if (state.isSaving) "Saving..." else "Save profile")
+            }
+            state.saveMessage?.let { message ->
+                LaunchedEffect(message) {
+                    kotlinx.coroutines.delay(2000)
+                    onEvent(UserProfileEvent.DismissSaveMessage)
                 }
-                state.saveMessage?.let { message ->
-                    LaunchedEffect(message) {
-                        kotlinx.coroutines.delay(2000)
-                        onEvent(UserProfileEvent.DismissSaveMessage)
-                    }
-                    Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                }
+                Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
         }
     }

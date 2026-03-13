@@ -28,10 +28,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.openyap.ui.theme.Spacing
 import com.openyap.viewmodel.SettingsEvent
 import com.openyap.viewmodel.SettingsUiState
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SettingsScreen(
     state: SettingsUiState,
@@ -39,127 +40,145 @@ fun SettingsScreen(
 ) {
     var apiKeyInput by remember(state.apiKey) { mutableStateOf(state.apiKey) }
     var showKey by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(28.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-        Text("Settings", style = MaterialTheme.typography.headlineLarge)
-        Text(
-            "Tune the voice pipeline, choose the Gemini model, and control how OpenYap rewrites what you say.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.widthIn(max = 620.dp),
-        )
-        AssistChip(onClick = {}, enabled = false, label = { Text("System configuration") })
+    // Snackbar for hotkey errors
+    LaunchedEffect(state.hotkeyError) {
+        state.hotkeyError?.let {
+            snackbarHostState.showSnackbar(
+                message = it,
+                actionLabel = "Dismiss",
+                duration = SnackbarDuration.Short,
+            )
+            onEvent(SettingsEvent.ClearHotkeyMessage)
+        }
+    }
 
-        ElevatedCard {
-            Column(modifier = Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Recording hotkey", style = MaterialTheme.typography.headlineSmall)
-                Text(
-                    text = "Current shortcut: ${state.hotkeyLabel}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(innerPadding)
+                .padding(Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.lg),
+        ) {
+            Text("Settings", style = MaterialTheme.typography.headlineLarge)
+            Text(
+                "Tune the voice pipeline, choose the Gemini model, and control how OpenYap rewrites what you say.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.widthIn(max = 620.dp),
+            )
+
+            // ── Recording hotkey ─────────────────────────────────
+            Text("Recording hotkey", style = MaterialTheme.typography.headlineSmall)
+            Text(
+                text = "Current shortcut: ${state.hotkeyLabel}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TooltipBox(
+                    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+                    tooltip = { PlainTooltip { Text("Press new key combination to reassign the global recording hotkey") } },
+                    state = rememberTooltipState(),
+                ) {
                     FilledTonalButton(
                         onClick = { onEvent(SettingsEvent.CaptureHotkey) },
                         enabled = !state.isCapturingHotkey,
                     ) {
                         Text(if (state.isCapturingHotkey) "Press keys..." else "Change hotkey")
                     }
-                    if (state.isCapturingHotkey) {
-                        Text(
-                            text = "Press the new shortcut now.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
                 }
-                state.hotkeyError?.let { message ->
-                    Surface(color = MaterialTheme.colorScheme.errorContainer) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = message,
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                            )
-                            TextButton(onClick = { onEvent(SettingsEvent.ClearHotkeyMessage) }) {
-                                Text("Dismiss")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        ElevatedCard {
-            Column(modifier = Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Gemini API key", style = MaterialTheme.typography.headlineSmall)
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = apiKeyInput,
-                        onValueChange = { apiKeyInput = it },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        placeholder = { Text("Enter your Gemini API key") },
-                        visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                if (state.isCapturingHotkey) {
+                    Text(
+                        text = "Press the new shortcut now.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
                     )
-                    TextButton(onClick = { showKey = !showKey }) { Text(if (showKey) "Hide" else "Show") }
-                    FilledTonalButton(
-                        onClick = { onEvent(SettingsEvent.SaveApiKey(apiKeyInput)) },
-                        enabled = apiKeyInput.isNotBlank(),
-                        ) {
-                            Text("Save")
-                        }
-                    }
-                Text(
-                    "The key is stored locally and used only for Gemini requests.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                SaveMessage(state.saveMessage) { onEvent(SettingsEvent.DismissSaveMessage) }
+                }
             }
-        }
 
-        ElevatedCard {
-            Column(modifier = Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Model", style = MaterialTheme.typography.headlineSmall)
+            HorizontalDivider()
 
-                AnimatedVisibility(visible = state.isLoadingModels, enter = fadeIn(), exit = fadeOut()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Text("Loading available models...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // ── Gemini API key ───────────────────────────────────
+            Text("Gemini API key", style = MaterialTheme.typography.headlineSmall)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    value = apiKeyInput,
+                    onValueChange = { apiKeyInput = it },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    placeholder = { Text("Enter your Gemini API key") },
+                    visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                )
+                TextButton(onClick = { showKey = !showKey }) { Text(if (showKey) "Hide" else "Show") }
+                FilledTonalButton(
+                    onClick = { onEvent(SettingsEvent.SaveApiKey(apiKeyInput)) },
+                    enabled = apiKeyInput.isNotBlank(),
+                ) {
+                    Text("Save")
+                }
+            }
+            Text(
+                "The key is stored locally and used only for Gemini requests.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SaveMessage(state.saveMessage) { onEvent(SettingsEvent.DismissSaveMessage) }
+
+            HorizontalDivider()
+
+            // ── Model ────────────────────────────────────────────
+            Text("Model", style = MaterialTheme.typography.headlineSmall)
+
+            AnimatedVisibility(visible = state.isLoadingModels, enter = fadeIn(), exit = fadeOut()) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Text("Loading available models...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            state.modelsFetchError?.let { error ->
+                Surface(color = MaterialTheme.colorScheme.errorContainer) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(Spacing.md),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = error,
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        TextButton(onClick = { onEvent(SettingsEvent.RefreshModels) }) { Text("Retry") }
                     }
                 }
+            }
 
-                state.modelsFetchError?.let { error ->
-                    Surface(color = MaterialTheme.colorScheme.errorContainer) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = error,
-                                modifier = Modifier.weight(1f),
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                            TextButton(onClick = { onEvent(SettingsEvent.RefreshModels) }) { Text("Retry") }
-                        }
-                    }
-                }
-
-                AnimatedVisibility(
-                    visible = !state.isLoadingModels && state.availableModels.isNotEmpty(),
-                    enter = fadeIn(),
-                    exit = fadeOut(),
+            AnimatedVisibility(
+                visible = !state.isLoadingModels && state.availableModels.isNotEmpty(),
+                enter = fadeIn(),
+                exit = fadeOut(),
+            ) {
+                TooltipBox(
+                    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+                    tooltip = { PlainTooltip { Text("Select which Gemini model powers transcription and rewriting") } },
+                    state = rememberTooltipState(),
                 ) {
                     ModelDropdown(
                         models = state.availableModels.map { it.id to it.displayName },
@@ -167,26 +186,37 @@ fun SettingsScreen(
                         onModelSelected = { onEvent(SettingsEvent.SelectModel(it)) },
                     )
                 }
-
-                if (!state.isLoadingModels && state.availableModels.isEmpty() && state.modelsFetchError == null && state.apiKey.isBlank()) {
-                    Text(
-                        "Save your API key to load available models.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
-        }
 
-        ElevatedCard {
-            Column(modifier = Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text("Features", style = MaterialTheme.typography.headlineSmall)
+            if (!state.isLoadingModels && state.availableModels.isEmpty() && state.modelsFetchError == null && state.apiKey.isBlank()) {
+                Text(
+                    "Save your API key to load available models.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            HorizontalDivider()
+
+            // ── Features ─────────────────────────────────────────
+            Text("Features", style = MaterialTheme.typography.headlineSmall)
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+                tooltip = { PlainTooltip { Text("Automatically replace shortcuts like your name, company, and dictionary phrases in transcribed text") } },
+                state = rememberTooltipState(),
+            ) {
                 FeatureToggleRow(
                     label = "Phrase Expansion",
                     description = "Expand shortcuts like your name, company, and custom dictionary phrases.",
                     checked = state.phraseExpansionEnabled,
                     onCheckedChange = { onEvent(SettingsEvent.TogglePhraseExpansion(it)) },
                 )
+            }
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+                tooltip = { PlainTooltip { Text("Example: \"Please review the report\" → \"pls check the report rq 💀\"") } },
+                state = rememberTooltipState(),
+            ) {
                 FeatureToggleRow(
                     label = "Gen Z Mode",
                     description = "Use a more playful tone when prompts allow it.",
@@ -194,14 +224,14 @@ fun SettingsScreen(
                     onCheckedChange = { onEvent(SettingsEvent.ToggleGenZ(it)) },
                 )
             }
-        }
 
-        Text(
-            text = "OpenYap v${state.appVersion.ifBlank { "1.0.0" }}",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(12.dp))
+            Text(
+                text = "OpenYap v${state.appVersion.ifBlank { "1.0.0" }}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(Spacing.md))
+        }
     }
 }
 
@@ -223,8 +253,12 @@ private fun FeatureToggleRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
             Text(label, style = MaterialTheme.typography.titleMedium)
             Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -265,7 +299,7 @@ private fun ModelDropdown(
                         onModelSelected(id)
                         expanded = false
                     },
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm),
                 )
             }
         }

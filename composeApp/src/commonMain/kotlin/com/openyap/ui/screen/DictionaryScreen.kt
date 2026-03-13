@@ -12,10 +12,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Book
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -28,6 +31,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.openyap.ui.component.EmptyState
+import com.openyap.ui.theme.Spacing
 import com.openyap.viewmodel.DictionaryEvent
 import com.openyap.viewmodel.DictionaryUiState
 
@@ -39,7 +44,10 @@ fun DictionaryScreen(
     var newOriginal by remember { mutableStateOf("") }
     var newReplacement by remember { mutableStateOf("") }
 
-    Column(modifier = Modifier.fillMaxSize().padding(28.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md),
+    ) {
         Text("Dictionary", style = MaterialTheme.typography.headlineLarge)
         Text(
             "Teach OpenYap your preferred replacements, shortcuts, and repeated phrases so every paste sounds like you.",
@@ -51,10 +59,11 @@ fun DictionaryScreen(
             AssistChip(onClick = {}, enabled = false, label = { Text("${state.entries.count { it.isEnabled }} active phrases") })
         }
 
+        // Input row — stays as ElevatedCard (primary action area)
         ElevatedCard {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(20.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth().padding(Spacing.md),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                 verticalAlignment = Alignment.Bottom,
             ) {
                 OutlinedTextField(
@@ -85,29 +94,24 @@ fun DictionaryScreen(
         }
 
         if (state.isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                androidx.compose.material3.CircularProgressIndicator()
-            }
+            com.openyap.ui.component.SkeletonList(count = 3)
         } else if (state.entries.isEmpty()) {
-            ElevatedCard {
-                Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                    Text(
-                        "No dictionary entries yet. Add your first phrase above.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            EmptyState(
+                icon = Icons.Default.Book,
+                title = "No dictionary entries",
+                subtitle = "Add your first phrase above.",
+                actionLabel = "Learn more",
+            )
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                 items(state.entries, key = { it.id }) { entry ->
-                    ElevatedCard {
+                    OutlinedCard {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.fillMaxWidth().padding(Spacing.md),
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                                 Text(entry.original, style = MaterialTheme.typography.titleMedium)
                                 Text(
                                     text = "-> ${entry.replacement}",
@@ -128,6 +132,6 @@ fun DictionaryScreen(
                 }
             }
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Spacing.md))
     }
 }

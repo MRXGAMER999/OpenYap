@@ -81,7 +81,7 @@ fun main() {
 
     var isVisible by remember { mutableStateOf(true) }
     val trayState = rememberTrayState()
-    val windowState = rememberWindowState(size = DpSize(900.dp, 700.dp))
+    val windowState = rememberWindowState(size = DpSize(1100.dp, 800.dp))
     val backStack = remember { mutableStateListOf<Route>(Route.Home) }
 
     val trayIcon = remember {
@@ -129,9 +129,9 @@ fun main() {
             val isDark = isSystemInDarkTheme()
             DisposableEffect(isDark) {
                 val bgColor = if (isDark) {
-                    java.awt.Color(0x1D, 0x18, 0x1A) // matches DarkColorScheme.surface
+                    java.awt.Color(0x1F, 0x29, 0x37) // matches DarkColorScheme.surface
                 } else {
-                    java.awt.Color(0xFF, 0xF8, 0xF6) // matches LightColorScheme.surface
+                    java.awt.Color(0xFB, 0xFC, 0xFF) // matches LightColorScheme.surface
                 }
                 // Set background on every AWT layer to eliminate any white surface
                 window.background = bgColor

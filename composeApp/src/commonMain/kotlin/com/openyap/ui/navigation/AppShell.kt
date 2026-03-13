@@ -1,8 +1,13 @@
 package com.openyap.ui.navigation
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -11,6 +16,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,36 +36,36 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.KeyboardCommandKey
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.SettingsVoice
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
@@ -72,6 +78,7 @@ import com.openyap.ui.screen.OnboardingScreen
 import com.openyap.ui.screen.SettingsScreen
 import com.openyap.ui.screen.StatsScreen
 import com.openyap.ui.screen.UserInfoScreen
+import com.openyap.ui.theme.Spacing
 import com.openyap.viewmodel.DictionaryEvent
 import com.openyap.viewmodel.DictionaryUiState
 import com.openyap.viewmodel.HistoryEvent
@@ -130,27 +137,29 @@ fun AppShell(
                     )
                 )
             )
-            .padding(start = 18.dp, end = 18.dp, bottom = 18.dp, top = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(18.dp),
+            .padding(start = Spacing.md, end = Spacing.md, bottom = Spacing.md, top = Spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
+        // Slimmed-down navigation rail (92dp instead of 132dp)
         Surface(
-            modifier = Modifier.fillMaxHeight().width(132.dp),
+            modifier = Modifier.fillMaxHeight().width(92.dp),
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
             NavigationRail(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 14.dp),
+                modifier = Modifier.fillMaxSize().padding(horizontal = Spacing.sm, vertical = Spacing.md),
                 containerColor = Color.Transparent,
             ) {
                 Column(
                     modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm),
                 ) {
+                    // App icon — smaller 40dp circle
                     Box(
                         modifier = Modifier
-                            .size(52.dp)
+                            .size(40.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primaryContainer),
                         contentAlignment = Alignment.Center,
@@ -158,22 +167,14 @@ fun AppShell(
                         Icon(
                             imageVector = Icons.Default.GraphicEq,
                             contentDescription = null,
+                            modifier = Modifier.size(20.dp),
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         )
                     }
-                    Text("OpenYap", style = MaterialTheme.typography.titleLargeEmphasized)
-                    Text(
-                        text = "Expressive voice flow",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = "Capture, rewrite, paste",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    Spacer(Modifier.height(12.dp))
+                    Text("OpenYap", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(Spacing.sm))
 
+                    // Navigation items with selected/unselected icons
                     railRoutes.forEach { dest ->
                         NavigationRailItem(
                             selected = currentRoute == dest.route,
@@ -183,63 +184,69 @@ fun AppShell(
                                     backStack.add(dest.route)
                                 }
                             },
-                            icon = { Icon(dest.icon, contentDescription = dest.label) },
+                            icon = {
+                                Icon(
+                                    if (currentRoute == dest.route) dest.selectedIcon else dest.unselectedIcon,
+                                    contentDescription = dest.label,
+                                )
+                            },
                             label = { Text(dest.label, style = MaterialTheme.typography.labelSmall) },
                         )
                     }
                     Spacer(Modifier.weight(1f))
-                    Surface(
-                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f),
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 12.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Icon(Icons.Default.KeyboardCommandKey, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
-                            Text(settingsState.hotkeyLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                        }
-                    }
                 }
             }
         }
 
+        // Content area with Snackbar support
+        val snackbarHostState = remember { SnackbarHostState() }
+
         Box(modifier = Modifier.fillMaxSize()) {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
-                tonalElevation = 2.dp,
-            ) {
-                NavDisplay(
-                    backStack = backStack,
-                    onBack = { backStack.removeLastOrNull() },
-                    entryProvider = entryProvider {
-                        entry<Route.Home> {
-                            HomeContent(recordingState, settingsState, onRecordingEvent)
-                        }
-                        entry<Route.History> {
-                            HistoryScreen(historyState, onHistoryEvent, onCopyToClipboard)
-                        }
-                        entry<Route.Dictionary> {
-                            DictionaryScreen(dictionaryState, onDictionaryEvent)
-                        }
-                        entry<Route.UserInfo> {
-                            UserInfoScreen(userProfileState, onUserProfileEvent)
-                        }
-                        entry<Route.Stats> {
-                            StatsScreen(statsState, onRefresh = onStatsRefresh)
-                        }
-                        entry<Route.Customization> {
-                            CustomizationScreen(appTones, appPrompts, onSaveTone, onSavePrompt, onRemoveApp)
-                        }
-                        entry<Route.Settings> {
-                            SettingsScreen(settingsState, onSettingsEvent)
-                        }
-                        entry<Route.Onboarding> {
-                            OnboardingScreen(state = onboardingState, onEvent = onOnboardingEvent)
-                        }
-                    },
-                )
+            Scaffold(
+                snackbarHost = { SnackbarHost(snackbarHostState) },
+                containerColor = Color.Transparent,
+            ) { innerPadding ->
+                Surface(
+                    modifier = Modifier.fillMaxSize().padding(innerPadding),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+                    tonalElevation = 2.dp,
+                ) {
+                    NavDisplay(
+                        backStack = backStack,
+                        onBack = { backStack.removeLastOrNull() },
+                        entryProvider = entryProvider {
+                            entry<Route.Home> {
+                                HomeContent(
+                                    recordingState,
+                                    settingsState,
+                                    onRecordingEvent,
+                                    snackbarHostState,
+                                )
+                            }
+                            entry<Route.History> {
+                                HistoryScreen(historyState, onHistoryEvent, onCopyToClipboard)
+                            }
+                            entry<Route.Dictionary> {
+                                DictionaryScreen(dictionaryState, onDictionaryEvent)
+                            }
+                            entry<Route.UserInfo> {
+                                UserInfoScreen(userProfileState, onUserProfileEvent)
+                            }
+                            entry<Route.Stats> {
+                                StatsScreen(statsState, onRefresh = onStatsRefresh)
+                            }
+                            entry<Route.Customization> {
+                                CustomizationScreen(appTones, appPrompts, onSaveTone, onSavePrompt, onRemoveApp)
+                            }
+                            entry<Route.Settings> {
+                                SettingsScreen(settingsState, onSettingsEvent)
+                            }
+                            entry<Route.Onboarding> {
+                                OnboardingScreen(state = onboardingState, onEvent = onOnboardingEvent)
+                            }
+                        },
+                    )
+                }
             }
 
             RecordingIndicator(
@@ -247,7 +254,7 @@ fun AppShell(
                 amplitude = recordingState.amplitude,
                 onCancel = { onRecordingEvent(RecordingEvent.CancelRecording) },
                 onErrorDismissed = { onRecordingEvent(RecordingEvent.DismissError) },
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp),
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = Spacing.md),
             )
         }
     }
@@ -259,6 +266,7 @@ private fun HomeContent(
     state: RecordingUiState,
     settingsState: SettingsUiState,
     onEvent: (RecordingEvent) -> Unit,
+    snackbarHostState: SnackbarHostState,
 ) {
     val lastResultText = state.lastResultText
     val errorMessage = state.error
@@ -281,8 +289,20 @@ private fun HomeContent(
         state.recordingState is RecordingState.Success ||
         state.recordingState is RecordingState.Error
 
+    // Snackbar for errors instead of inline error banner
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let {
+            snackbarHostState.showSnackbar(
+                message = it,
+                actionLabel = "Dismiss",
+                duration = SnackbarDuration.Short,
+            )
+            onEvent(RecordingEvent.DismissError)
+        }
+    }
+
     Column(
-        modifier = Modifier.fillMaxSize().padding(32.dp),
+        modifier = Modifier.fillMaxSize().padding(Spacing.xl),
         verticalArrangement = Arrangement.Center,
     ) {
         ElevatedCard(
@@ -300,48 +320,59 @@ private fun HomeContent(
                             )
                         )
                     )
-                    .padding(32.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
+                    .padding(Spacing.xl),
+                verticalArrangement = Arrangement.spacedBy(Spacing.lg),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.weight(1f)) {
-                        AssistChip(
-                            onClick = {},
-                            enabled = false,
-                            label = { Text("Voice capture") },
-                            leadingIcon = {
-                                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
-                            },
-                            colors = AssistChipDefaults.assistChipColors(
-                                disabledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.76f),
-                                disabledLabelColor = MaterialTheme.colorScheme.onSurface,
-                                disabledLeadingIconContentColor = MaterialTheme.colorScheme.primary,
-                            ),
-                        )
-                        AnimatedContent(
-                            targetState = statusTitle,
-                            transitionSpec = {
-                                (slideInVertically { it / 4 } + fadeIn()) togetherWith
-                                    (slideOutVertically { -it / 4 } + fadeOut())
-                            },
-                            label = "homeStatusTitle",
-                        ) { title ->
-                            Text(title, style = MaterialTheme.typography.displaySmallEmphasized)
-                        }
-                        Text(
-                            text = statusBody,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.widthIn(max = 620.dp),
-                        )
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm), modifier = Modifier.fillMaxWidth()) {
+                    AssistChip(
+                        onClick = {},
+                        enabled = false,
+                        label = { Text("Voice capture") },
+                        leadingIcon = {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                        },
+                        colors = AssistChipDefaults.assistChipColors(
+                            disabledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.76f),
+                            disabledLabelColor = MaterialTheme.colorScheme.onSurface,
+                            disabledLeadingIconContentColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    )
+                    AnimatedContent(
+                        targetState = statusTitle,
+                        transitionSpec = {
+                            (slideInVertically { it / 4 } + fadeIn()) togetherWith
+                                (slideOutVertically { -it / 4 } + fadeOut())
+                        },
+                        label = "homeStatusTitle",
+                    ) { title ->
+                        Text(title, style = MaterialTheme.typography.displaySmallEmphasized)
+                    }
+                    Text(
+                        text = statusBody,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.widthIn(max = 620.dp),
+                    )
+
+                    // Interactive status chips
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    ) {
+                        if (state.hasMicPermission && state.hasApiKey) {
+                            // All systems go
+                            AssistChip(
+                                onClick = {},
+                                enabled = false,
+                                leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                label = { Text("✓ All systems go") },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    disabledContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                    disabledLabelColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    disabledLeadingIconContentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                ),
+                            )
+                        } else {
                             AssistChip(
                                 onClick = {},
                                 enabled = false,
@@ -354,67 +385,86 @@ private fun HomeContent(
                                 leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp)) },
                                 label = { Text(if (state.hasApiKey) "Gemini linked" else "API key needed") },
                             )
-                            if (lastResultText != null) {
-                                AssistChip(
-                                    onClick = {},
-                                    enabled = false,
-                                    leadingIcon = { Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                                    label = { Text("Latest result ready") },
+                        }
+                        // Hotkey chip (relocated from nav rail)
+                        AssistChip(
+                            onClick = {},
+                            enabled = false,
+                            leadingIcon = { Icon(Icons.Default.KeyboardCommandKey, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                            label = { Text(settingsState.hotkeyLabel) },
+                        )
+                    }
+                }
+
+                // Prominent FAB-style record button with pulse animation
+                val infiniteTransition = rememberInfiniteTransition(label = "recordPulse")
+                val pulseScale by infiniteTransition.animateFloat(
+                    initialValue = 1f,
+                    targetValue = if (isRecording) 1.15f else 1f,
+                    animationSpec = infiniteRepeatable(tween(800), RepeatMode.Reverse),
+                    label = "pulseScale",
+                )
+
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        // Outer pulse ring (visible only during recording)
+                        if (isRecording) {
+                            Box(
+                                modifier = Modifier
+                                    .size(88.dp)
+                                    .scale(pulseScale)
+                                    .clip(CircleShape)
+                                    .border(
+                                        width = 3.dp,
+                                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.4f),
+                                        shape = CircleShape,
+                                    ),
+                            )
+                        }
+                        // Main record button
+                        Surface(
+                            onClick = { onEvent(RecordingEvent.ToggleRecording) },
+                            enabled = isRecording || canStart,
+                            modifier = Modifier.size(72.dp),
+                            shape = CircleShape,
+                            color = if (isRecording) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
+                            contentColor = if (isRecording) {
+                                MaterialTheme.colorScheme.onError
+                            } else {
+                                MaterialTheme.colorScheme.onPrimary
+                            },
+                            tonalElevation = 8.dp,
+                            shadowElevation = 8.dp,
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.Mic,
+                                    contentDescription = if (isRecording) "Stop Recording" else "Start Recording",
+                                    modifier = Modifier.size(32.dp),
                                 )
                             }
                         }
                     }
-
-                    Surface(
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
-                        tonalElevation = 2.dp,
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            MetaPill("Hotkey", settingsState.hotkeyLabel)
-                            MetaPill("API key", if (state.hasApiKey) "Ready" else "Missing")
-                            MetaPill("Microphone", if (state.hasMicPermission) "Granted" else "Required")
-                        }
-                    }
                 }
 
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Button(
-                        onClick = { onEvent(RecordingEvent.ToggleRecording) },
-                        enabled = isRecording || canStart,
-                        colors = if (isRecording) {
-                            ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                        } else {
-                            ButtonDefaults.buttonColors()
-                        },
-                        contentPadding = ButtonDefaults.ContentPadding,
-                    ) {
-                        Icon(
-                            imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.Mic,
-                            contentDescription = null,
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Text(if (isRecording) "Stop Recording" else "Start Recording")
-                    }
-                    FilledTonalButton(onClick = {}, enabled = false) {
-                        Icon(Icons.Default.KeyboardCommandKey, contentDescription = null)
-                        Spacer(Modifier.width(10.dp))
-                        Text("Hotkey: ${settingsState.hotkeyLabel}")
-                    }
-                }
-
+                // Latest result
                 AnimatedVisibility(
                     visible = lastResultText != null && state.recordingState is RecordingState.Success,
                     enter = fadeIn() + scaleIn(),
                     exit = fadeOut() + scaleOut(),
                 ) {
                     ElevatedCard {
-                        Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(
+                            modifier = Modifier.padding(Spacing.lg),
+                            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        ) {
                             Text(
                                 text = "Latest result",
                                 style = MaterialTheme.typography.titleMedium,
@@ -427,36 +477,7 @@ private fun HomeContent(
                         }
                     }
                 }
-
-                AnimatedVisibility(visible = errorMessage != null, enter = fadeIn(), exit = fadeOut()) {
-                    Surface(color = MaterialTheme.colorScheme.errorContainer) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(18.dp),
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(Icons.Default.RadioButtonChecked, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
-                            Text(
-                                text = errorMessage.orEmpty(),
-                                modifier = Modifier.weight(1f),
-                                color = MaterialTheme.colorScheme.onErrorContainer,
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            TextButton(onClick = { onEvent(RecordingEvent.DismissError) }) {
-                                Text("Dismiss")
-                            }
-                        }
-                    }
-                }
             }
         }
-    }
-}
-
-@Composable
-private fun MetaPill(label: String, value: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
     }
 }

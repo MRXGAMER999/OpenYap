@@ -2,42 +2,50 @@
 
 package com.openyap.ui.screen
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.openyap.ui.component.EmptyState
+import com.openyap.ui.theme.Spacing
 import com.openyap.viewmodel.StatsUiState
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun StatsScreen(state: StatsUiState, onRefresh: () -> Unit) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(28.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
+        modifier = Modifier.fillMaxSize().padding(Spacing.lg),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                 Text("Stats", style = MaterialTheme.typography.headlineLarge)
                 Text(
                     "A snapshot of how often OpenYap is capturing and refining your voice.",
@@ -53,35 +61,31 @@ fun StatsScreen(state: StatsUiState, onRefresh: () -> Unit) {
         }
 
         if (state.isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
+            com.openyap.ui.component.SkeletonList(count = 4)
         } else if (state.totalRecordings == 0) {
-            ElevatedCard {
-                Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                    Text(
-                        "No recordings yet. Stats appear after your first captured thought.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            EmptyState(
+                icon = Icons.Default.BarChart,
+                title = "No stats yet",
+                subtitle = "Stats appear after your first captured thought.",
+            )
         } else {
+            // Hero stat cards — keep ElevatedCard for prominence
             FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+                verticalArrangement = Arrangement.spacedBy(Spacing.md),
             ) {
-                StatCard("Recordings", state.totalRecordings.toString())
+                StatCard("Recordings", state.totalRecordings)
                 StatCard("Total Duration", formatDuration(state.totalDurationSeconds))
-                StatCard("Characters", state.totalCharacters.toString())
+                StatCard("Characters", state.totalCharacters)
                 StatCard("Avg Duration", "${state.averageDurationSeconds}s")
             }
 
+            // Top apps — secondary info, use OutlinedCard
             if (state.topApps.isNotEmpty()) {
-                ElevatedCard {
+                OutlinedCard {
                     Column(
-                        modifier = Modifier.fillMaxWidth().padding(22.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                        modifier = Modifier.fillMaxWidth().padding(Spacing.lg),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.md),
                     ) {
                         Text("Top apps", style = MaterialTheme.typography.headlineSmall)
                         state.topApps.forEach { (app, count) ->
@@ -101,13 +105,33 @@ fun StatsScreen(state: StatsUiState, onRefresh: () -> Unit) {
     }
 }
 
+// Animated stat card for integer values
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun StatCard(label: String, targetValue: Int) {
+    val animatedValue = remember { Animatable(0f) }
+    LaunchedEffect(targetValue) {
+        animatedValue.animateTo(targetValue.toFloat(), tween(800))
+    }
+    ElevatedCard(modifier = Modifier.widthIn(min = 180.dp)) {
+        Column(
+            modifier = Modifier.padding(Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+        ) {
+            Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Text(animatedValue.value.toInt().toString(), style = MaterialTheme.typography.displaySmallEmphasized)
+        }
+    }
+}
+
+// Stat card for string values (no animation)
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun StatCard(label: String, value: String) {
     ElevatedCard(modifier = Modifier.widthIn(min = 180.dp)) {
         Column(
-            modifier = Modifier.padding(22.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
         ) {
             Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             Text(value, style = MaterialTheme.typography.displaySmallEmphasized)

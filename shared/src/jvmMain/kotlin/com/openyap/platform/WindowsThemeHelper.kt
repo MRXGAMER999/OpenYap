@@ -75,11 +75,11 @@ object WindowsThemeHelper {
             // ── 2. Set caption and border color (Win11 22000+) ─────
             // COLORREF format: 0x00BBGGRR
             val colorRef = if (dark) {
-                // surface = Color(0xFF1D181A) → R=0x1D, G=0x18, B=0x1A
-                0x001A181D
+                // surface = Color(0xFF1F2937) → R=0x1F, G=0x29, B=0x37
+                0x0037291F
             } else {
-                // surface = Color(0xFFFFF8F6) → R=0xFF, G=0xF8, B=0xF6
-                0x00F6F8FF
+                // surface = Color(0xFFFBFCFF) → R=0xFB, G=0xFC, B=0xFF
+                0x00FFFCFB
             }
             val colorPtr = intPointer(colorRef)
 
