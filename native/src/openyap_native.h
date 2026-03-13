@@ -64,4 +64,17 @@ OPENYAP_API float OPENYAP_CALL openyap_amplitude(
         int sample_count
 );
 
+#ifdef _WIN32
+/// Pastes `text` into the active window by writing it to the clipboard and
+/// simulating Ctrl+V.  If `restore_clipboard` is non-zero the previous
+/// clipboard text is saved and restored after a brief delay.
+///
+/// Windows-only: uses wchar_t because the underlying Win32 clipboard and
+/// SendInput APIs operate on wide strings.  Not available on other platforms.
+OPENYAP_API int OPENYAP_CALL openyap_paste_text(
+        const wchar_t *text,
+        int restore_clipboard
+);
+#endif
+
 OPENYAP_API const char *OPENYAP_CALL openyap_last_error(void);

@@ -1,5 +1,6 @@
 package com.openyap.platform
 
+import com.sun.jna.WString
 import com.sun.jna.platform.win32.User32
 import com.sun.jna.platform.win32.WinDef.DWORD
 import com.sun.jna.platform.win32.WinDef.WORD
@@ -22,27 +23,84 @@ class WindowsPasteAutomation : PasteAutomation {
 
     override suspend fun pasteText(text: String, restoreClipboard: Boolean) {
         withContext(Dispatchers.IO) {
-            val clipboard = Toolkit.getDefaultToolkit().systemClipboard
-            var originalContent: Transferable? = null
-
-            if (restoreClipboard) {
-                originalContent = clipboard.getContents(null)
+            val native = NativeAudioBridge.instance
+            if (native != null) {
+                pasteNative(native, text, restoreClipboard)
+            } else {
+                pasteJna(text, restoreClipboard)
             }
+        }
+    }
 
-            clipboard.setContents(StringSelection(text), null)
+    // ── Native path: clipboard write + SendInput in a single native call ──
 
-            delay(50)
+    private fun pasteNative(
+        native: NativeAudioBridge.OpenYapNative,
+        text: String,
+        restoreClipboard: Boolean,
+    ) {
+        val result = native.openyap_paste_text(
+            WString(text),
+            if (restoreClipboard) 1 else 0,
+        )
+        if (result != 0) {
+            val reason = native.openyap_last_error() ?: "unknown error (code $result)"
+            System.err.println("Native paste failed: $reason — falling back to JNA path")
+            pasteJnaBlocking(text, restoreClipboard)
+        }
+    }
 
-            sendCtrlV()
+    // ── JNA fallback: the original implementation for when the DLL isn't loaded ──
 
-            if (restoreClipboard && originalContent != null) {
-                // Wait for the target app to consume the paste before restoring
-                delay(700)
-                try {
-                    clipboard.setContents(originalContent, null)
-                } catch (_: Exception) {
-                    // Ignore — previous clipboard owner may have gone away
-                }
+    private suspend fun pasteJna(text: String, restoreClipboard: Boolean) {
+        val clipboard = Toolkit.getDefaultToolkit().systemClipboard
+        var originalContent: Transferable? = null
+
+        if (restoreClipboard) {
+            originalContent = clipboard.getContents(null)
+        }
+
+        clipboard.setContents(StringSelection(text), null)
+
+        delay(50)
+
+        sendCtrlV()
+
+        if (restoreClipboard && originalContent != null) {
+            delay(700)
+            try {
+                clipboard.setContents(originalContent, null)
+            } catch (_: Exception) {
+                // Ignore — previous clipboard owner may have gone away
+            }
+        }
+    }
+
+    /**
+     * Blocking variant of the JNA fallback used when the native call fails
+     * and we're already on [Dispatchers.IO]. Uses [Thread.sleep] instead of
+     * coroutine [delay] because this is called from a non-suspend context.
+     */
+    private fun pasteJnaBlocking(text: String, restoreClipboard: Boolean) {
+        val clipboard = Toolkit.getDefaultToolkit().systemClipboard
+        var originalContent: Transferable? = null
+
+        if (restoreClipboard) {
+            originalContent = clipboard.getContents(null)
+        }
+
+        clipboard.setContents(StringSelection(text), null)
+
+        Thread.sleep(50)
+
+        sendCtrlV()
+
+        if (restoreClipboard && originalContent != null) {
+            Thread.sleep(700)
+            try {
+                clipboard.setContents(originalContent, null)
+            } catch (_: Exception) {
+                // Ignore — previous clipboard owner may have gone away
             }
         }
     }

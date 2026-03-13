@@ -67,6 +67,7 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
     private val _hotkeyEvents = MutableSharedFlow<HotkeyEvent>(extraBufferCapacity = 16)
     override val hotkeyEvents: SharedFlow<HotkeyEvent> = _hotkeyEvents.asSharedFlow()
 
+    @Volatile
     private var config: HotkeyConfig = HotkeyConfig()
     private var listenerJob: Job? = null
     private val formatter = WindowsHotkeyDisplayFormatter()

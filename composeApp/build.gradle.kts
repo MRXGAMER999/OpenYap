@@ -84,6 +84,10 @@ compose.desktop {
         mainClass = "com.openyap.MainKt"
         javaHome = resolvePackagingJavaHome()
 
+        buildTypes.release.proguard {
+            isEnabled.set(false)
+        }
+
         nativeDistributions {
             targetFormats(TargetFormat.Msi)
             packageName = "OpenYap"

@@ -6,6 +6,7 @@ add_library(openyap_native SHARED
     src/openyap_native.cpp
     src/audio_capture.cpp
     src/audio_encoder.cpp
+    src/paste_automation.cpp
     src/vad.cpp
     src/noise_suppressor.cpp
 )
@@ -33,6 +34,7 @@ target_link_libraries(openyap_native PRIVATE
     ole32
     propsys
     mmdevapi
+    user32
 )
 
 install(TARGETS openyap_native

@@ -2,6 +2,7 @@
 
 #include "audio_capture.h"
 #include "audio_encoder.h"
+#include "paste_automation.h"
 #include "vad.h"
 
 #include <mfapi.h>
@@ -281,6 +282,20 @@ openyap_amplitude(const short *pcm_data, int sample_count) {
     }
 
     return static_cast<float>(peak) / 32768.0f;
+}
+
+int OPENYAP_CALL
+
+openyap_paste_text(const wchar_t *text, int restore_clipboard) {
+    clear_last_error();
+
+    std::string error;
+    const int result = openyap::paste::paste_text(text, restore_clipboard != 0, &error);
+    if (result != 0) {
+        set_last_error(error);
+        log_message(error.c_str());
+    }
+    return result;
 }
 
 const char *OPENYAP_CALL

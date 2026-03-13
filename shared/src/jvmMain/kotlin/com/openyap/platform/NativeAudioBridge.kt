@@ -2,6 +2,7 @@ package com.openyap.platform
 
 import com.sun.jna.Native
 import com.sun.jna.Pointer
+import com.sun.jna.WString
 import com.sun.jna.win32.StdCallLibrary
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -161,6 +162,11 @@ object NativeAudioBridge {
             pcmData: ShortArray,
             sampleCount: Int,
         ): Float
+
+        fun openyap_paste_text(
+            text: WString,
+            restoreClipboard: Int,
+        ): Int
 
         fun openyap_last_error(): String?
 
