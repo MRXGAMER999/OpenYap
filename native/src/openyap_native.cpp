@@ -21,12 +21,12 @@ namespace {
     bool g_media_foundation_started = false;
 
     void clear_last_error() {
-        std::lock_guard <std::mutex> lock(g_error_mutex);
+        std::lock_guard<std::mutex> lock(g_error_mutex);
         g_last_error.clear();
     }
 
     void set_last_error(std::string message) {
-        std::lock_guard <std::mutex> lock(g_error_mutex);
+        std::lock_guard<std::mutex> lock(g_error_mutex);
         g_last_error = std::move(message);
     }
 
@@ -35,6 +35,33 @@ namespace {
             return;
         }
         std::fprintf(stderr, "%s\n", message);
+    }
+
+    // Simple JSON escaping for device strings
+    std::string json_escape(const std::string &input) {
+        std::string result;
+        result.reserve(input.size() + 8);
+        for (char ch : input) {
+            switch (ch) {
+                case '"':  result += "\\\""; break;
+                case '\\': result += "\\\\"; break;
+                case '\b': result += "\\b";  break;
+                case '\f': result += "\\f";  break;
+                case '\n': result += "\\n";  break;
+                case '\r': result += "\\r";  break;
+                case '\t': result += "\\t";  break;
+                default:
+                    if (static_cast<unsigned char>(ch) < 0x20) {
+                        char buf[8];
+                        std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned>(ch));
+                        result += buf;
+                    } else {
+                        result += ch;
+                    }
+                    break;
+            }
+        }
+        return result;
     }
 
 }  // namespace
@@ -98,7 +125,27 @@ openyap_capture_start(
     clear_last_error();
 
     std::string error;
-    const int result = openyap::capture::start(sample_rate, channels, callback, user_data, &error);
+    const int result = openyap::capture::start(sample_rate, channels, callback, user_data, nullptr, &error);
+    if (result != 0) {
+        set_last_error(error);
+        log_message(error.c_str());
+    }
+    return result;
+}
+
+int OPENYAP_CALL
+
+openyap_capture_start_device(
+        int sample_rate,
+        int channels,
+        audio_callback_t callback,
+        void *user_data,
+        const char *device_id
+) {
+    clear_last_error();
+
+    std::string error;
+    const int result = openyap::capture::start(sample_rate, channels, callback, user_data, device_id, &error);
     if (result != 0) {
         set_last_error(error);
         log_message(error.c_str());
@@ -119,6 +166,50 @@ openyap_capture_stop(void) {
         log_message(error.c_str());
     }
     return result;
+}
+
+const char *OPENYAP_CALL
+
+openyap_list_devices(void) {
+    clear_last_error();
+
+    std::vector<openyap::capture::DeviceInfo> devices;
+    std::string error;
+    const int result = openyap::capture::list_devices(&devices, &error);
+    if (result != 0) {
+        set_last_error(error);
+        log_message(error.c_str());
+        return nullptr;
+    }
+
+    // Build JSON array
+    std::string json = "[";
+    for (size_t i = 0; i < devices.size(); ++i) {
+        if (i > 0) json += ",";
+        json += "{\"id\":\"";
+        json += json_escape(devices[i].id);
+        json += "\",\"name\":\"";
+        json += json_escape(devices[i].name);
+        json += "\",\"is_default\":";
+        json += devices[i].is_default ? "true" : "false";
+        json += "}";
+    }
+    json += "]";
+
+    // Allocate a copy the caller must free with openyap_free_string
+    char *copy = static_cast<char *>(std::malloc(json.size() + 1));
+    if (copy == nullptr) {
+        set_last_error("Failed to allocate memory for device list.");
+        return nullptr;
+    }
+    std::memcpy(copy, json.c_str(), json.size() + 1);
+    return copy;
+}
+
+void OPENYAP_CALL
+
+openyap_free_string(const char *str) {
+    std::free(const_cast<char *>(str));
 }
 
 int OPENYAP_CALL
@@ -167,6 +258,12 @@ openyap_vad_is_speech(
     return result;
 }
 
+void OPENYAP_CALL
+
+openyap_vad_reset(void) {
+    openyap::vad::reset();
+}
+
 float OPENYAP_CALL
 
 openyap_amplitude(const short *pcm_data, int sample_count) {
@@ -189,6 +286,6 @@ openyap_amplitude(const short *pcm_data, int sample_count) {
 const char *OPENYAP_CALL
 
 openyap_last_error(void) {
-    std::lock_guard <std::mutex> lock(g_error_mutex);
+    std::lock_guard<std::mutex> lock(g_error_mutex);
     return g_last_error.empty() ? nullptr : g_last_error.c_str();
 }

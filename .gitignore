@@ -18,6 +18,7 @@ out/
 .env*
 Thumbs.db
 .vscode/
+native/.vs/
 *.xcodeproj/*
 !*.xcodeproj/project.pbxproj
 !*.xcodeproj/xcshareddata/

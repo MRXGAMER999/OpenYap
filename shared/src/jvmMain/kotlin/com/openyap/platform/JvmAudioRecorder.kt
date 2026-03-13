@@ -1,5 +1,6 @@
 package com.openyap.platform
 
+import com.openyap.model.AudioDevice
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -41,7 +42,7 @@ class JvmAudioRecorder : AudioRecorder {
     @Volatile
     private var currentOutputPath: String? = null
 
-    override suspend fun startRecording(outputPath: String) = withContext(Dispatchers.IO) {
+    override suspend fun startRecording(outputPath: String, deviceId: String?) = withContext(Dispatchers.IO) {
         stopRecordingInternal()
 
         currentOutputPath = outputPath
@@ -97,6 +98,8 @@ class JvmAudioRecorder : AudioRecorder {
             false
         }
     }
+
+    override suspend fun listDevices(): List<AudioDevice> = emptyList()
 
     private fun stopRecordingInternal() {
         recordingJob?.cancel()

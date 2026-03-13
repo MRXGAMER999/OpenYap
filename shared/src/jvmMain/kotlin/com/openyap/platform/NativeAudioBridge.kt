@@ -127,7 +127,18 @@ object NativeAudioBridge {
             userData: Pointer?,
         ): Int
 
+        fun openyap_capture_start_device(
+            sampleRate: Int,
+            channels: Int,
+            callback: AudioCallback,
+            userData: Pointer?,
+            deviceId: String?,
+        ): Int
+
         fun openyap_capture_stop(): Int
+
+        fun openyap_list_devices(): Pointer?
+        fun openyap_free_string(str: Pointer?)
 
         fun openyap_encode_aac(
             pcmData: ShortArray,
@@ -143,6 +154,8 @@ object NativeAudioBridge {
             sampleCount: Int,
             sampleRate: Int,
         ): Int
+
+        fun openyap_vad_reset()
 
         fun openyap_amplitude(
             pcmData: ShortArray,

@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class AppSettings(
-    val geminiModel: String = "gemini-3.1-flash-lite-preview",
+    val geminiModel: String = "gemini-2.0-flash",
     val hotkeyConfig: HotkeyConfig = HotkeyConfig(),
     val genZEnabled: Boolean = false,
     val phraseExpansionEnabled: Boolean = false,
@@ -13,4 +13,5 @@ data class AppSettings(
     val onboardingCompleted: Boolean = false,
     val audioFeedbackEnabled: Boolean = true,
     val startMinimized: Boolean = false,
+    val audioDeviceId: String? = null,
 )

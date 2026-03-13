@@ -14,8 +14,8 @@ target_compile_features(openyap_native PRIVATE cxx_std_17)
 
 target_compile_definitions(openyap_native PRIVATE
     OPENYAP_EXPORTS
-    WINVER=0x0602
-    _WIN32_WINNT=0x0602
+    WINVER=0x0A00
+    _WIN32_WINNT=0x0A00
     WIN32_LEAN_AND_MEAN
     NOMINMAX
     UNICODE

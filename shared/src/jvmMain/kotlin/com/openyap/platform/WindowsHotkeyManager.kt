@@ -129,6 +129,19 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
             return true
         }
 
+        // While held, releasing ANY constituent key (the primary key or a modifier)
+        // should stop recording. Without this, releasing modifiers before the main key
+        // (e.g. letting go of Ctrl before R) would leave isHoldDown stuck as true.
+        if (isHoldDown && (msgType == WM_KEYUP || msgType == WM_SYSKEYUP)) {
+            val isMainKey = vkCode == binding.platformKeyCode
+            val isRequiredModifier = isModifierForBinding(vkCode, binding.modifiers)
+            if (isMainKey || isRequiredModifier) {
+                isHoldDown = false
+                _hotkeyEvents.tryEmit(HotkeyEvent.HoldUp)
+                return true
+            }
+        }
+
         // Escape key cancellation while recording
         if (vkCode == VK_ESCAPE && isHoldDown && (msgType == WM_KEYDOWN || msgType == WM_SYSKEYDOWN)) {
             isHoldDown = false
@@ -137,6 +150,20 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
         }
 
         return false
+    }
+
+    /**
+     * Returns true if [vkCode] is a virtual-key code that corresponds to one
+     * of the [requiredModifiers] in the hotkey binding.
+     */
+    private fun isModifierForBinding(vkCode: Int, requiredModifiers: Set<HotkeyModifier>): Boolean {
+        return when (vkCode) {
+            0x10, 0xA0, 0xA1 -> HotkeyModifier.SHIFT in requiredModifiers  // VK_SHIFT, VK_LSHIFT, VK_RSHIFT
+            0x11, 0xA2, 0xA3 -> HotkeyModifier.CTRL in requiredModifiers   // VK_CONTROL, VK_LCONTROL, VK_RCONTROL
+            0x12, 0xA4, 0xA5 -> HotkeyModifier.ALT in requiredModifiers    // VK_MENU, VK_LMENU, VK_RMENU
+            0x5B, 0x5C -> HotkeyModifier.META in requiredModifiers          // VK_LWIN, VK_RWIN
+            else -> false
+        }
     }
 
     private fun handleCaptureKeyEvent(

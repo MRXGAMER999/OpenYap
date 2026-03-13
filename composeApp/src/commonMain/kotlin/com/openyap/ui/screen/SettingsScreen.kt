@@ -53,6 +53,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.openyap.ui.theme.Spacing
+import com.openyap.model.AudioDevice
 import com.openyap.viewmodel.SettingsEvent
 import com.openyap.viewmodel.SettingsUiState
 
@@ -281,6 +282,61 @@ fun SettingsScreen(
                 onCheckedChange = { onEvent(SettingsEvent.ToggleAudioFeedback(it)) },
             )
 
+            // ── Microphone device picker ─────────────────────────
+            Text("Microphone", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Choose which microphone to use for recording. \"System Default\" follows your Windows default device.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            if (state.isLoadingDevices) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Text(
+                        "Loading audio devices...",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            state.devicesFetchError?.let { error ->
+                Surface(color = MaterialTheme.colorScheme.errorContainer) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(Spacing.md),
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = error,
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        TextButton(onClick = { onEvent(SettingsEvent.RefreshDevices) }) { Text("Retry") }
+                    }
+                }
+            }
+
+            if (!state.isLoadingDevices && state.audioDevices.isNotEmpty()) {
+                MicrophoneDropdown(
+                    devices = state.audioDevices,
+                    selectedDeviceId = state.selectedAudioDeviceId,
+                    onDeviceSelected = { onEvent(SettingsEvent.SelectAudioDevice(it)) },
+                )
+            }
+
+            if (!state.isLoadingDevices && state.audioDevices.isEmpty() && state.devicesFetchError == null) {
+                Text(
+                    "No audio devices found. Native audio pipeline may be unavailable.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             HorizontalDivider()
 
             Text("Startup", style = MaterialTheme.typography.headlineSmall)
@@ -420,6 +476,69 @@ private fun ModelDropdown(
                     },
                     onClick = {
                         onModelSelected(id)
+                        expanded = false
+                    },
+                    contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm),
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MicrophoneDropdown(
+    devices: List<AudioDevice>,
+    selectedDeviceId: String?,
+    onDeviceSelected: (String?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedDevice = devices.firstOrNull { it.id == selectedDeviceId }
+    val selectedLabel = when {
+        selectedDeviceId == null -> "System Default"
+        selectedDevice != null -> selectedDevice.name
+        else -> "System Default"
+    }
+
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = selectedLabel,
+            onValueChange = {},
+            readOnly = true,
+            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth(),
+            singleLine = true,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            // "System Default" option at the top
+            DropdownMenuItem(
+                text = {
+                    Text("System Default", style = MaterialTheme.typography.bodyMedium)
+                },
+                onClick = {
+                    onDeviceSelected(null)
+                    expanded = false
+                },
+                contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm),
+            )
+            // Individual devices
+            devices.forEach { device ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(
+                                buildString {
+                                    append(device.name)
+                                    if (device.isDefault) append(" (Default)")
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    },
+                    onClick = {
+                        onDeviceSelected(device.id)
                         expanded = false
                     },
                     contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm),

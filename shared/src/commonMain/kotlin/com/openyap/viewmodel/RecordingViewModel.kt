@@ -219,7 +219,7 @@ class RecordingViewModel(
         recordingStartedAt = TimeSource.Monotonic.markNow()
 
         try {
-            audioRecorder.startRecording(path)
+            audioRecorder.startRecording(path, settings.audioDeviceId)
         } catch (e: Exception) {
             currentRecordingPath = null
             recordingStartedAt = null
@@ -344,6 +344,10 @@ class RecordingViewModel(
                 )
                 val apiKey = settingsRepository.loadApiKey()!!
                 val audioBytes = readFileBytes(path)
+
+                if (audioBytes.size < 100) {
+                    throw IllegalStateException("Recording appears to be empty or corrupted. Please try again.")
+                }
 
                 val response = geminiClient.processAudio(
                     audioBytes = audioBytes,

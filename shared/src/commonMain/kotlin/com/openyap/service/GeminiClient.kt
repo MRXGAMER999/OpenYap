@@ -9,6 +9,7 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlin.io.encoding.Base64
@@ -18,6 +19,8 @@ class GeminiClient(private val client: HttpClient) {
 
     companion object {
         private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+        private const val MAX_RETRIES = 2
+        private val RETRY_DELAYS_MS = longArrayOf(500, 1500)
 
         private val DEFAULT_MODELS = listOf(
             GeminiModelInfo("gemini-3.1-flash-lite-preview", "Gemini 3.1 Flash Lite Preview"),
@@ -97,10 +100,12 @@ class GeminiClient(private val client: HttpClient) {
             ),
         )
 
-        val response = client.post("$BASE_URL/models/$model:generateContent") {
-            parameter("key", apiKey)
-            contentType(ContentType.Application.Json)
-            setBody(requestBody)
+        val response = executeWithRetry {
+            client.post("$BASE_URL/models/$model:generateContent") {
+                parameter("key", apiKey)
+                contentType(ContentType.Application.Json)
+                setBody(requestBody)
+            }
         }
 
         if (response.status != HttpStatusCode.OK) {
@@ -121,6 +126,22 @@ class GeminiClient(private val client: HttpClient) {
             throw GeminiException("Gemini returned an empty response.")
         }
         return text
+    }
+
+    private suspend fun <T> executeWithRetry(block: suspend () -> T): T {
+        var lastException: Exception? = null
+        for (attempt in 0..MAX_RETRIES) {
+            try {
+                return block()
+            } catch (e: Exception) {
+                lastException = e
+                // Don't retry on the last attempt
+                if (attempt < MAX_RETRIES) {
+                    delay(RETRY_DELAYS_MS[attempt])
+                }
+            }
+        }
+        throw lastException ?: GeminiException("Request failed after retries.")
     }
 }
 

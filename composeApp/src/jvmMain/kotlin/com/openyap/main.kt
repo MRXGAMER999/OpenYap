@@ -149,6 +149,7 @@ fun main() {
                 geminiClient,
                 hotkeyManager,
                 hotkeyFormatter,
+                audioRecorder,
                 resetAppDataAction = { appDataResetter.reset() },
             )
         }

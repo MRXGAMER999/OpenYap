@@ -24,7 +24,23 @@ OPENYAP_API int OPENYAP_CALL openyap_capture_start(
         void *user_data
 );
 
+OPENYAP_API int OPENYAP_CALL openyap_capture_start_device(
+        int sample_rate,
+        int channels,
+        audio_callback_t callback,
+        void *user_data,
+        const char *device_id
+);
+
 OPENYAP_API int OPENYAP_CALL openyap_capture_stop(void);
+
+/// Returns a JSON array of devices: [{"id":"...","name":"...","is_default":true}, ...]
+/// The caller must free the returned string with openyap_free_string().
+/// Returns nullptr on failure (check openyap_last_error()).
+OPENYAP_API const char *OPENYAP_CALL openyap_list_devices(void);
+
+/// Frees a string previously returned by openyap_list_devices().
+OPENYAP_API void OPENYAP_CALL openyap_free_string(const char *str);
 
 OPENYAP_API int OPENYAP_CALL openyap_encode_aac(
         const short *pcm_data,
@@ -40,6 +56,8 @@ OPENYAP_API int OPENYAP_CALL openyap_vad_is_speech(
         int sample_count,
         int sample_rate
 );
+
+OPENYAP_API void OPENYAP_CALL openyap_vad_reset(void);
 
 OPENYAP_API float OPENYAP_CALL openyap_amplitude(
         const short *pcm_data,

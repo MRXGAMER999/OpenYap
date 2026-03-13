@@ -3,7 +3,9 @@ package com.openyap.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.openyap.model.AppSettings
+import com.openyap.model.AudioDevice
 import com.openyap.model.HotkeyBinding
+import com.openyap.platform.AudioRecorder
 import com.openyap.platform.HotkeyDisplayFormatter
 import com.openyap.platform.HotkeyManager
 import com.openyap.repository.SettingsRepository
@@ -17,7 +19,7 @@ import kotlinx.coroutines.launch
 
 data class SettingsUiState(
     val apiKey: String = "",
-    val geminiModel: String = "gemini-3.1-flash-lite-preview",
+    val geminiModel: String = "gemini-2.0-flash",
     val genZEnabled: Boolean = false,
     val phraseExpansionEnabled: Boolean = false,
     val dictionaryEnabled: Boolean = true,
@@ -33,6 +35,10 @@ data class SettingsUiState(
     val isCapturingHotkey: Boolean = false,
     val hotkeyError: String? = null,
     val appVersion: String = "",
+    val audioDevices: List<AudioDevice> = emptyList(),
+    val selectedAudioDeviceId: String? = null,
+    val isLoadingDevices: Boolean = false,
+    val devicesFetchError: String? = null,
 )
 
 sealed interface SettingsEvent {
@@ -45,6 +51,8 @@ sealed interface SettingsEvent {
     data class ToggleStartMinimized(val enabled: Boolean) : SettingsEvent
     data object ResetAppData : SettingsEvent
     data object RefreshModels : SettingsEvent
+    data class SelectAudioDevice(val deviceId: String?) : SettingsEvent
+    data object RefreshDevices : SettingsEvent
     data object CaptureHotkey : SettingsEvent
     data object ClearHotkeyMessage : SettingsEvent
     data object DismissSaveMessage : SettingsEvent
@@ -55,6 +63,7 @@ class SettingsViewModel(
     private val geminiClient: GeminiClient,
     private val hotkeyManager: HotkeyManager,
     private val hotkeyDisplayFormatter: HotkeyDisplayFormatter,
+    private val audioRecorder: AudioRecorder,
     private val resetAppDataAction: suspend () -> Unit = {},
 ) : ViewModel() {
 
@@ -87,9 +96,11 @@ class SettingsViewModel(
                     startMinimized = settings.startMinimized,
                     hotkeyLabel = formatHotkey(settings.hotkeyConfig.startHotkey),
                     appVersion = version,
+                    selectedAudioDeviceId = settings.audioDeviceId,
                 )
             }
             if (apiKey.isNotBlank()) fetchModels(apiKey)
+            fetchDevices()
         }
     }
 
@@ -107,6 +118,8 @@ class SettingsViewModel(
             is SettingsEvent.CaptureHotkey -> captureHotkey()
             is SettingsEvent.ClearHotkeyMessage -> _state.update { it.copy(hotkeyError = null) }
             is SettingsEvent.DismissSaveMessage -> _state.update { it.copy(saveMessage = null) }
+            is SettingsEvent.SelectAudioDevice -> selectAudioDevice(event.deviceId)
+            is SettingsEvent.RefreshDevices -> refreshDevices()
         }
     }
 
@@ -268,6 +281,7 @@ class SettingsViewModel(
                         hotkeyLabel = formatHotkey(defaults.hotkeyConfig.startHotkey),
                         isResettingData = false,
                         saveMessage = "App data reset. Restart OpenYap if old data is still visible.",
+                        selectedAudioDeviceId = null,
                     )
                 }
             } catch (e: Exception) {
@@ -278,6 +292,33 @@ class SettingsViewModel(
                     )
                 }
             }
+        }
+    }
+
+    private fun refreshDevices() {
+        viewModelScope.launch { fetchDevices() }
+    }
+
+    private suspend fun fetchDevices() {
+        _state.update { it.copy(isLoadingDevices = true, devicesFetchError = null) }
+        try {
+            val devices = audioRecorder.listDevices()
+            _state.update { it.copy(audioDevices = devices, isLoadingDevices = false) }
+        } catch (e: Exception) {
+            _state.update {
+                it.copy(
+                    isLoadingDevices = false,
+                    devicesFetchError = e.message ?: "Failed to enumerate audio devices",
+                )
+            }
+        }
+    }
+
+    private fun selectAudioDevice(deviceId: String?) {
+        viewModelScope.launch {
+            val settings = settingsRepository.loadSettings()
+            settingsRepository.saveSettings(settings.copy(audioDeviceId = deviceId))
+            _state.update { it.copy(selectedAudioDeviceId = deviceId) }
         }
     }
 

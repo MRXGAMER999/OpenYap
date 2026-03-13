@@ -1,10 +1,16 @@
 package com.openyap.platform
 
+import com.openyap.model.AudioDevice
 import com.sun.jna.CallbackThreadInitializer
 import com.sun.jna.Native
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.Closeable
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
@@ -50,7 +56,7 @@ class NativeAudioRecorder(
         )
     }
 
-    override suspend fun startRecording(outputPath: String) {
+    override suspend fun startRecording(outputPath: String, deviceId: String?) {
         check(isRecording.compareAndSet(false, true)) { "Recording already in progress." }
 
         try {
@@ -59,13 +65,14 @@ class NativeAudioRecorder(
             pcmBuffer.clear()
             _amplitudeFlow.value = 0f
 
-            val result = native.openyap_capture_start(SampleRate, Channels, captureCallback, null)
+            val result = if (deviceId != null) {
+                native.openyap_capture_start_device(SampleRate, Channels, captureCallback, null, deviceId)
+            } else {
+                native.openyap_capture_start(SampleRate, Channels, captureCallback, null)
+            }
             if (result != 0) {
                 throw IllegalStateException(
-                    nativeError(
-                        "Failed to start native audio capture",
-                        result
-                    )
+                    nativeError("Failed to start native audio capture", result),
                 )
             }
         } catch (error: Throwable) {
@@ -87,10 +94,7 @@ class NativeAudioRecorder(
         if (stopResult != 0 && stopResult != -2) {
             resetState()
             throw IllegalStateException(
-                nativeError(
-                    "Failed to stop native audio capture",
-                    stopResult
-                )
+                nativeError("Failed to stop native audio capture", stopResult),
             )
         }
 
@@ -121,6 +125,16 @@ class NativeAudioRecorder(
 
     override suspend fun hasPermission(): Boolean = true
 
+    override suspend fun listDevices(): List<AudioDevice> {
+        val ptr = native.openyap_list_devices() ?: return emptyList()
+        return try {
+            val jsonString = ptr.getString(0, "UTF-8")
+            parseDeviceJson(jsonString)
+        } finally {
+            native.openyap_free_string(ptr)
+        }
+    }
+
     override fun consumeWarning(): String? = pendingWarning.getAndSet(null)
 
     override fun close() {
@@ -129,6 +143,21 @@ class NativeAudioRecorder(
         }
         pendingWarning.set(null)
         resetState()
+    }
+
+    private fun parseDeviceJson(jsonString: String): List<AudioDevice> {
+        return try {
+            val array = Json.parseToJsonElement(jsonString) as? JsonArray ?: return emptyList()
+            array.mapNotNull { element ->
+                val obj = element.jsonObject
+                val id = obj["id"]?.jsonPrimitive?.content ?: return@mapNotNull null
+                val name = obj["name"]?.jsonPrimitive?.content ?: return@mapNotNull null
+                val isDefault = obj["is_default"]?.jsonPrimitive?.boolean ?: false
+                AudioDevice(id = id, name = name, isDefault = isDefault)
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     private fun drainSamples(): ShortArray {
@@ -158,6 +187,9 @@ class NativeAudioRecorder(
         if (samples.isEmpty()) {
             return samples
         }
+
+        // Reset VAD noise floor so each recording gets a fresh baseline
+        native.openyap_vad_reset()
 
         val totalFrames = (samples.size + VadFrameSamples - 1) / VadFrameSamples
         var firstSpeechFrame = -1
