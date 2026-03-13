@@ -1,7 +1,6 @@
 package com.openyap.ui.screen
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -56,7 +55,10 @@ fun DictionaryScreen(
             modifier = Modifier.widthIn(max = 620.dp),
         )
         if (state.entries.isNotEmpty()) {
-            AssistChip(onClick = {}, enabled = false, label = { Text("${state.entries.count { it.isEnabled }} active phrases") })
+            AssistChip(
+                onClick = {},
+                enabled = false,
+                label = { Text("${state.entries.count { it.isEnabled }} active phrases") })
         }
 
         // Input row — stays as ElevatedCard (primary action area)
@@ -111,14 +113,20 @@ fun DictionaryScreen(
                             horizontalArrangement = Arrangement.spacedBy(Spacing.md),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                            ) {
                                 Text(entry.original, style = MaterialTheme.typography.titleMedium)
                                 Text(
                                     text = "-> ${entry.replacement}",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.primary,
                                 )
-                                AssistChip(onClick = {}, enabled = false, label = { Text(entry.source.name.lowercase()) })
+                                AssistChip(
+                                    onClick = {},
+                                    enabled = false,
+                                    label = { Text(entry.source.name.lowercase()) })
                             }
                             Switch(
                                 checked = entry.isEnabled,

@@ -8,10 +8,10 @@ object PromptBuilder {
     private const val DEFAULT_TONE = "normal"
 
     private val toneInstructions = mapOf(
-        "casual"   to "Use a relaxed, conversational tone — natural, loose, and friendly.",
+        "casual" to "Use a relaxed, conversational tone — natural, loose, and friendly.",
         "informal" to "Use an approachable, slightly relaxed tone — professional but warm.",
-        "normal"   to "Use a balanced, neutral tone — clear, readable, and professional.",
-        "formal"   to "Use a formal, polished tone — precise, structured, and proper.",
+        "normal" to "Use a balanced, neutral tone — clear, readable, and professional.",
+        "formal" to "Use a formal, polished tone — precise, structured, and proper.",
     )
 
     fun build(

@@ -16,7 +16,29 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -122,7 +144,9 @@ fun SettingsScreen(
                     placeholder = { Text("Enter your Gemini API key") },
                     visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
                 )
-                TextButton(onClick = { showKey = !showKey }) { Text(if (showKey) "Hide" else "Show") }
+                TextButton(onClick = {
+                    showKey = !showKey
+                }) { Text(if (showKey) "Hide" else "Show") }
                 FilledTonalButton(
                     onClick = { onEvent(SettingsEvent.SaveApiKey(apiKeyInput)) },
                     enabled = apiKeyInput.isNotBlank(),
@@ -142,13 +166,20 @@ fun SettingsScreen(
             // ── Model ────────────────────────────────────────────
             Text("Model", style = MaterialTheme.typography.headlineSmall)
 
-            AnimatedVisibility(visible = state.isLoadingModels, enter = fadeIn(), exit = fadeOut()) {
+            AnimatedVisibility(
+                visible = state.isLoadingModels,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(Spacing.md),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Text("Loading available models...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "Loading available models...",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
@@ -242,7 +273,11 @@ private fun SaveMessage(message: String?, onDismiss: () -> Unit) {
             kotlinx.coroutines.delay(2000)
             onDismiss()
         }
-        Text(message, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+        Text(
+            message,
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.bodySmall
+        )
     }
 }
 
@@ -258,9 +293,16 @@ private fun FeatureToggleRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+        ) {
             Text(label, style = MaterialTheme.typography.titleMedium)
-            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
@@ -274,14 +316,16 @@ private fun ModelDropdown(
     onModelSelected: (String) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val selectedLabel = models.firstOrNull { it.first == selectedModelId }?.second ?: selectedModelId
+    val selectedLabel =
+        models.firstOrNull { it.first == selectedModelId }?.second ?: selectedModelId
 
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
         OutlinedTextField(
             value = selectedLabel,
             onValueChange = {},
             readOnly = true,
-            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth(),
             singleLine = true,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
@@ -292,7 +336,11 @@ private fun ModelDropdown(
                     text = {
                         Column {
                             Text(displayName, style = MaterialTheme.typography.bodyMedium)
-                            Text(id, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                id,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     },
                     onClick = {

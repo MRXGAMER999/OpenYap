@@ -2,15 +2,34 @@ package com.openyap.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.openyap.model.*
-import com.openyap.platform.*
-import com.openyap.repository.*
+import com.openyap.model.HotkeyEvent
+import com.openyap.model.PermissionStatus
+import com.openyap.model.RecordingEntry
+import com.openyap.model.RecordingState
+import com.openyap.platform.AudioRecorder
+import com.openyap.platform.ForegroundAppDetector
+import com.openyap.platform.HotkeyManager
+import com.openyap.platform.PasteAutomation
+import com.openyap.platform.PermissionManager
+import com.openyap.repository.DictionaryRepository
+import com.openyap.repository.HistoryRepository
+import com.openyap.repository.SettingsRepository
+import com.openyap.repository.UserProfileRepository
 import com.openyap.service.DictionaryEngine
 import com.openyap.service.GeminiClient
 import com.openyap.service.PhraseExpansionEngine
 import com.openyap.service.PromptBuilder
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import kotlin.time.Clock
 import kotlin.time.TimeMark
@@ -68,6 +87,7 @@ class RecordingViewModel(
     private var processingGeneration = 0
     private var durationJob: Job? = null
     private var currentRecordingPath: String? = null
+
     // Holds the path of the audio file currently being processed so cancel can clean it up
     @Volatile
     private var currentProcessingPath: String? = null
@@ -274,13 +294,19 @@ class RecordingViewModel(
 
                 _state.update {
                     it.copy(
-                        recordingState = RecordingState.Success(expandedResponse, expandedResponse.length),
+                        recordingState = RecordingState.Success(
+                            expandedResponse,
+                            expandedResponse.length
+                        ),
                         lastResultText = expandedResponse,
                     )
                 }
                 _effects.emit(RecordingEffect.PasteSuccess)
 
-                try { dictionaryEngine.ingestObservedText(expandedResponse) } catch (_: Exception) {}
+                try {
+                    dictionaryEngine.ingestObservedText(expandedResponse)
+                } catch (_: Exception) {
+                }
 
                 currentProcessingPath = null
                 delay(3000)
@@ -319,6 +345,7 @@ class RecordingViewModel(
                 currentRecordingPath = null
                 _state.update { it.copy(recordingState = RecordingState.Idle) }
             }
+
             is RecordingState.Processing -> {
                 processingGeneration++
                 // Clean up the audio file that was being processed
@@ -326,6 +353,7 @@ class RecordingViewModel(
                 currentProcessingPath = null
                 _state.update { it.copy(recordingState = RecordingState.Idle) }
             }
+
             else -> {}
         }
     }
@@ -346,6 +374,9 @@ class RecordingViewModel(
     private fun readFileBytes(path: String): ByteArray = fileReader(path)
 
     private fun deleteFile(path: String) {
-        try { fileDeleter(path) } catch (_: Exception) {}
+        try {
+            fileDeleter(path)
+        } catch (_: Exception) {
+        }
     }
 }

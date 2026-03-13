@@ -3,11 +3,11 @@ package com.openyap.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.openyap.model.HotkeyBinding
+import com.openyap.platform.HotkeyDisplayFormatter
+import com.openyap.platform.HotkeyManager
 import com.openyap.repository.SettingsRepository
 import com.openyap.service.GeminiClient
 import com.openyap.service.GeminiModelInfo
-import com.openyap.platform.HotkeyDisplayFormatter
-import com.openyap.platform.HotkeyManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -95,7 +95,13 @@ class SettingsViewModel(
 
     private fun captureHotkey() {
         viewModelScope.launch {
-            _state.update { it.copy(isCapturingHotkey = true, hotkeyError = null, saveMessage = null) }
+            _state.update {
+                it.copy(
+                    isCapturingHotkey = true,
+                    hotkeyError = null,
+                    saveMessage = null
+                )
+            }
             try {
                 val capture = hotkeyManager.captureNextHotkey()
                 val binding = HotkeyBinding(

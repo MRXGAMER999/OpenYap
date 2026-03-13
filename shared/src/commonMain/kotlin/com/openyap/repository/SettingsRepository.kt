@@ -1,7 +1,6 @@
 package com.openyap.repository
 
 import com.openyap.model.AppSettings
-import com.openyap.model.HotkeyConfig
 
 interface SettingsRepository {
     suspend fun loadSettings(): AppSettings

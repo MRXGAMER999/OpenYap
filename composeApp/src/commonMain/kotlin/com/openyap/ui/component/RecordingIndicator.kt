@@ -2,13 +2,13 @@ package com.openyap.ui.component
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -99,11 +99,13 @@ fun RecordingIndicator(
                         amplitude = amplitude,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                     )
+
                     is RecordingState.Processing -> CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
                         strokeWidth = 2.dp,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
+
                     else -> Unit
                 }
 
@@ -161,7 +163,10 @@ private fun AmplitudeBar(amplitude: Float, color: Color) {
         animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec<Float>(),
         label = "amplitude",
     )
-    Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         repeat(7) { index ->
             val threshold = index.toFloat() / 7f
             val barHeight = if (animatedAmplitude > threshold) {

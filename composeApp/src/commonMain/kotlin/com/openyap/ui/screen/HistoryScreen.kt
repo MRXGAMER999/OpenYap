@@ -1,14 +1,12 @@
 package com.openyap.ui.screen
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -18,7 +16,6 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
@@ -31,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.openyap.model.RecordingEntry
 import com.openyap.ui.component.EmptyState
 import com.openyap.ui.theme.Spacing
@@ -57,7 +55,11 @@ fun HistoryScreen(
                     showClearConfirm = false
                 }) { Text("Clear all") }
             },
-            dismissButton = { TextButton(onClick = { showClearConfirm = false }) { Text("Cancel") } },
+            dismissButton = {
+                TextButton(onClick = {
+                    showClearConfirm = false
+                }) { Text("Cancel") }
+            },
         )
     }
 
@@ -87,7 +89,10 @@ fun HistoryScreen(
             }
         }
         if (state.entries.isNotEmpty()) {
-            AssistChip(onClick = {}, enabled = false, label = { Text("${state.entries.size} saved captures") })
+            AssistChip(
+                onClick = {},
+                enabled = false,
+                label = { Text("${state.entries.size} saved captures") })
         }
 
         if (state.isLoading) {
@@ -130,13 +135,26 @@ private fun HistoryEntryCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                ) {
                     if (entry.targetApp.isNotBlank()) {
-                        Text(entry.targetApp, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            entry.targetApp,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                        AssistChip(onClick = {}, enabled = false, label = { Text(entry.recordedAt.toRelativeString()) })
-                        AssistChip(onClick = {}, enabled = false, label = { Text("${entry.durationSeconds}s") })
+                        AssistChip(
+                            onClick = {},
+                            enabled = false,
+                            label = { Text(entry.recordedAt.toRelativeString()) })
+                        AssistChip(
+                            onClick = {},
+                            enabled = false,
+                            label = { Text("${entry.durationSeconds}s") })
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {

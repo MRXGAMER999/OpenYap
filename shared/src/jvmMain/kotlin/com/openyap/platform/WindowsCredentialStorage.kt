@@ -6,8 +6,8 @@ import com.sun.jna.platform.win32.Crypt32
 import com.sun.jna.platform.win32.WinCrypt.DATA_BLOB
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.util.prefs.Preferences
 import java.util.Base64
+import java.util.prefs.Preferences
 
 /**
  * Stores secrets using Windows DPAPI (CryptProtectData / CryptUnprotectData).
@@ -71,7 +71,8 @@ class WindowsCredentialStorage : SecureStorage {
     private fun dpApiDecrypt(encrypted: ByteArray): String {
         val input = DATA_BLOB().apply {
             cbData = encrypted.size
-            pbData = Memory(encrypted.size.toLong()).also { it.write(0, encrypted, 0, encrypted.size) }
+            pbData =
+                Memory(encrypted.size.toLong()).also { it.write(0, encrypted, 0, encrypted.size) }
         }
         val output = DATA_BLOB()
         if (!Crypt32.INSTANCE.CryptUnprotectData(input, null, null, null, null, 0, output)) {

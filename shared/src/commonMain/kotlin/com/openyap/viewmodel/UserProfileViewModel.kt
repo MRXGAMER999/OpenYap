@@ -43,10 +43,38 @@ class UserProfileViewModel(
     fun onEvent(event: UserProfileEvent) {
         when (event) {
             is UserProfileEvent.UpdateName -> _state.update { it.copy(profile = it.profile.copy(name = event.name)) }
-            is UserProfileEvent.UpdateEmail -> _state.update { it.copy(profile = it.profile.copy(email = event.email)) }
-            is UserProfileEvent.UpdatePhone -> _state.update { it.copy(profile = it.profile.copy(phone = event.phone)) }
-            is UserProfileEvent.UpdateJobTitle -> _state.update { it.copy(profile = it.profile.copy(jobTitle = event.jobTitle)) }
-            is UserProfileEvent.UpdateCompany -> _state.update { it.copy(profile = it.profile.copy(company = event.company)) }
+            is UserProfileEvent.UpdateEmail -> _state.update {
+                it.copy(
+                    profile = it.profile.copy(
+                        email = event.email
+                    )
+                )
+            }
+
+            is UserProfileEvent.UpdatePhone -> _state.update {
+                it.copy(
+                    profile = it.profile.copy(
+                        phone = event.phone
+                    )
+                )
+            }
+
+            is UserProfileEvent.UpdateJobTitle -> _state.update {
+                it.copy(
+                    profile = it.profile.copy(
+                        jobTitle = event.jobTitle
+                    )
+                )
+            }
+
+            is UserProfileEvent.UpdateCompany -> _state.update {
+                it.copy(
+                    profile = it.profile.copy(
+                        company = event.company
+                    )
+                )
+            }
+
             is UserProfileEvent.Save -> saveProfile()
             is UserProfileEvent.DismissSaveMessage -> _state.update { it.copy(saveMessage = null) }
         }

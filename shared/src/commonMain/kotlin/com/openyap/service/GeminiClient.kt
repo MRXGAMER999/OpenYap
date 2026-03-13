@@ -1,13 +1,18 @@
 package com.openyap.service
 
-import io.ktor.client.*
-import io.ktor.client.call.*
-import io.ktor.client.request.*
-import io.ktor.http.*
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.request.get
+import io.ktor.client.request.parameter
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
 class GeminiClient(private val client: HttpClient) {
 
@@ -40,7 +45,11 @@ class GeminiClient(private val client: HttpClient) {
                 }
                 .filterNot { it.id.endsWith("-latest") || "latest" in it.id }
                 .distinctBy { it.id }
-                .sortedWith(compareByDescending<GeminiModelInfo> { it.id.contains("2.0") || it.id.contains("2.5") }
+                .sortedWith(compareByDescending<GeminiModelInfo> {
+                    it.id.contains("2.0") || it.id.contains(
+                        "2.5"
+                    )
+                }
                     .thenByDescending { it.id.contains("flash") }
                     .thenBy { it.id })
                 .toList()

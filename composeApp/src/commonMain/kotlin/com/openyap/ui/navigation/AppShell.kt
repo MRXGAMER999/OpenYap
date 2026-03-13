@@ -1,8 +1,8 @@
 package com.openyap.ui.navigation
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -148,7 +148,8 @@ fun AppShell(
             shadowElevation = 6.dp,
         ) {
             NavigationRail(
-                modifier = Modifier.fillMaxSize().padding(horizontal = Spacing.sm, vertical = Spacing.md),
+                modifier = Modifier.fillMaxSize()
+                    .padding(horizontal = Spacing.sm, vertical = Spacing.md),
                 containerColor = Color.Transparent,
             ) {
                 Column(
@@ -190,7 +191,12 @@ fun AppShell(
                                     contentDescription = dest.label,
                                 )
                             },
-                            label = { Text(dest.label, style = MaterialTheme.typography.labelSmall) },
+                            label = {
+                                Text(
+                                    dest.label,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            },
                         )
                     }
                     Spacer(Modifier.weight(1f))
@@ -236,13 +242,22 @@ fun AppShell(
                                 StatsScreen(statsState, onRefresh = onStatsRefresh)
                             }
                             entry<Route.Customization> {
-                                CustomizationScreen(appTones, appPrompts, onSaveTone, onSavePrompt, onRemoveApp)
+                                CustomizationScreen(
+                                    appTones,
+                                    appPrompts,
+                                    onSaveTone,
+                                    onSavePrompt,
+                                    onRemoveApp
+                                )
                             }
                             entry<Route.Settings> {
                                 SettingsScreen(settingsState, onSettingsEvent)
                             }
                             entry<Route.Onboarding> {
-                                OnboardingScreen(state = onboardingState, onEvent = onOnboardingEvent)
+                                OnboardingScreen(
+                                    state = onboardingState,
+                                    onEvent = onOnboardingEvent
+                                )
                             }
                         },
                     )
@@ -286,8 +301,8 @@ private fun HomeContent(
     }
     val isRecording = state.recordingState is RecordingState.Recording
     val canStart = state.recordingState is RecordingState.Idle ||
-        state.recordingState is RecordingState.Success ||
-        state.recordingState is RecordingState.Error
+            state.recordingState is RecordingState.Success ||
+            state.recordingState is RecordingState.Error
 
     // Snackbar for errors instead of inline error banner
     LaunchedEffect(errorMessage) {
@@ -323,13 +338,20 @@ private fun HomeContent(
                     .padding(Spacing.xl),
                 verticalArrangement = Arrangement.spacedBy(Spacing.lg),
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm), modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     AssistChip(
                         onClick = {},
                         enabled = false,
                         label = { Text("Voice capture") },
                         leadingIcon = {
-                            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
                         },
                         colors = AssistChipDefaults.assistChipColors(
                             disabledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.76f),
@@ -341,7 +363,7 @@ private fun HomeContent(
                         targetState = statusTitle,
                         transitionSpec = {
                             (slideInVertically { it / 4 } + fadeIn()) togetherWith
-                                (slideOutVertically { -it / 4 } + fadeOut())
+                                    (slideOutVertically { -it / 4 } + fadeOut())
                         },
                         label = "homeStatusTitle",
                     ) { title ->
@@ -364,7 +386,13 @@ private fun HomeContent(
                             AssistChip(
                                 onClick = {},
                                 enabled = false,
-                                leadingIcon = { Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
                                 label = { Text("✓ All systems go") },
                                 colors = AssistChipDefaults.assistChipColors(
                                     disabledContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
@@ -376,13 +404,25 @@ private fun HomeContent(
                             AssistChip(
                                 onClick = {},
                                 enabled = false,
-                                leadingIcon = { Icon(Icons.Default.SettingsVoice, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.SettingsVoice,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
                                 label = { Text(if (state.hasMicPermission) "Mic ready" else "Mic needed") },
                             )
                             AssistChip(
                                 onClick = {},
                                 enabled = false,
-                                leadingIcon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
                                 label = { Text(if (state.hasApiKey) "Gemini linked" else "API key needed") },
                             )
                         }
@@ -390,7 +430,13 @@ private fun HomeContent(
                         AssistChip(
                             onClick = {},
                             enabled = false,
-                            leadingIcon = { Icon(Icons.Default.KeyboardCommandKey, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Default.KeyboardCommandKey,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
                             label = { Text(settingsState.hotkeyLabel) },
                         )
                     }

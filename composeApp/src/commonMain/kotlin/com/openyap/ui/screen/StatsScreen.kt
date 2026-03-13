@@ -5,7 +5,6 @@ package com.openyap.ui.screen
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -16,7 +15,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
@@ -57,7 +55,10 @@ fun StatsScreen(state: StatsUiState, onRefresh: () -> Unit) {
             FilledTonalButton(onClick = onRefresh) { Text("Refresh") }
         }
         if (!state.isLoading && state.totalRecordings > 0) {
-            AssistChip(onClick = {}, enabled = false, label = { Text("${state.totalRecordings} recordings analyzed") })
+            AssistChip(
+                onClick = {},
+                enabled = false,
+                label = { Text("${state.totalRecordings} recordings analyzed") })
         }
 
         if (state.isLoading) {
@@ -95,7 +96,10 @@ fun StatsScreen(state: StatsUiState, onRefresh: () -> Unit) {
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(app, style = MaterialTheme.typography.titleMedium)
-                                AssistChip(onClick = {}, enabled = false, label = { Text("$count recordings") })
+                                AssistChip(
+                                    onClick = {},
+                                    enabled = false,
+                                    label = { Text("$count recordings") })
                             }
                         }
                     }
@@ -118,8 +122,15 @@ private fun StatCard(label: String, targetValue: Int) {
             modifier = Modifier.padding(Spacing.lg),
             verticalArrangement = Arrangement.spacedBy(Spacing.sm),
         ) {
-            Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            Text(animatedValue.value.toInt().toString(), style = MaterialTheme.typography.displaySmallEmphasized)
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                animatedValue.value.toInt().toString(),
+                style = MaterialTheme.typography.displaySmallEmphasized
+            )
         }
     }
 }
@@ -133,7 +144,11 @@ private fun StatCard(label: String, value: String) {
             modifier = Modifier.padding(Spacing.lg),
             verticalArrangement = Arrangement.spacedBy(Spacing.sm),
         ) {
-            Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
             Text(value, style = MaterialTheme.typography.displaySmallEmphasized)
         }
     }

@@ -49,7 +49,10 @@ fun UserInfoScreen(
                 )
             }
             if (state.saveMessage == null) {
-                AssistChip(onClick = {}, enabled = false, label = { Text("Phrase expansion profile") })
+                AssistChip(
+                    onClick = {},
+                    enabled = false,
+                    label = { Text("Phrase expansion profile") })
             }
         }
         Text(
@@ -67,11 +70,17 @@ fun UserInfoScreen(
             ProfileField("Name", profile.name) { onEvent(UserProfileEvent.UpdateName(it)) }
             ProfileField("Email", profile.email) { onEvent(UserProfileEvent.UpdateEmail(it)) }
             ProfileField("Phone", profile.phone) { onEvent(UserProfileEvent.UpdatePhone(it)) }
-            ProfileField("Job title", profile.jobTitle) { onEvent(UserProfileEvent.UpdateJobTitle(it)) }
+            ProfileField(
+                "Job title",
+                profile.jobTitle
+            ) { onEvent(UserProfileEvent.UpdateJobTitle(it)) }
             ProfileField("Company", profile.company) { onEvent(UserProfileEvent.UpdateCompany(it)) }
 
             Spacer(Modifier.height(Spacing.xs))
-            FilledTonalButton(onClick = { onEvent(UserProfileEvent.Save) }, enabled = !state.isSaving) {
+            FilledTonalButton(
+                onClick = { onEvent(UserProfileEvent.Save) },
+                enabled = !state.isSaving
+            ) {
                 Text(if (state.isSaving) "Saving..." else "Save profile")
             }
             state.saveMessage?.let { message ->
@@ -79,7 +88,11 @@ fun UserInfoScreen(
                     kotlinx.coroutines.delay(2000)
                     onEvent(UserProfileEvent.DismissSaveMessage)
                 }
-                Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
         }
     }

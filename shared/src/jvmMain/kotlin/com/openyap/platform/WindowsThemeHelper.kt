@@ -68,7 +68,11 @@ object WindowsThemeHelper {
                     hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_LEGACY, darkModePtr, 4,
                 )
                 if (hr != 0) {
-                    System.err.println("WindowsThemeHelper: dark-mode HRESULT=0x${hr.toUInt().toString(16)}")
+                    System.err.println(
+                        "WindowsThemeHelper: dark-mode HRESULT=0x${
+                            hr.toUInt().toString(16)
+                        }"
+                    )
                 }
             }
 
@@ -87,14 +91,22 @@ object WindowsThemeHelper {
                 hwnd, DWMWA_CAPTION_COLOR, colorPtr, 4,
             )
             if (captionHr != 0) {
-                System.err.println("WindowsThemeHelper: caption-color HRESULT=0x${captionHr.toUInt().toString(16)}")
+                System.err.println(
+                    "WindowsThemeHelper: caption-color HRESULT=0x${
+                        captionHr.toUInt().toString(16)
+                    }"
+                )
             }
 
             val borderHr = Dwmapi.INSTANCE.DwmSetWindowAttribute(
                 hwnd, DWMWA_BORDER_COLOR, colorPtr, 4,
             )
             if (borderHr != 0) {
-                System.err.println("WindowsThemeHelper: border-color HRESULT=0x${borderHr.toUInt().toString(16)}")
+                System.err.println(
+                    "WindowsThemeHelper: border-color HRESULT=0x${
+                        borderHr.toUInt().toString(16)
+                    }"
+                )
             }
 
         } catch (e: Exception) {

@@ -42,7 +42,8 @@ class DictionaryEngine(private val repository: DictionaryRepository) {
             } else {
                 val confidence = computeConfidence(normalized, 1)
                 val correction = buildAutoCorrection(normalized, confidence, entries)
-                val isAutoApplied = correction != null && correction.confidence >= AUTO_CORRECTION_APPLY_THRESHOLD
+                val isAutoApplied =
+                    correction != null && correction.confidence >= AUTO_CORRECTION_APPLY_THRESHOLD
 
                 entries.add(
                     DictionaryEntry(

@@ -1,12 +1,29 @@
 package com.openyap.platform
 
-import com.openyap.model.*
+import com.openyap.model.HotkeyBinding
+import com.openyap.model.HotkeyCapture
+import com.openyap.model.HotkeyConfig
+import com.openyap.model.HotkeyEvent
+import com.openyap.model.HotkeyModifier
+import com.openyap.platform.WindowsHotkeyManager.Companion.CAPTURE_TIMEOUT_MS
 import com.sun.jna.platform.win32.User32
 import com.sun.jna.platform.win32.WinUser.MSG
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.newSingleThreadContext
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.io.Closeable
 
 /**
@@ -192,19 +209,19 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
             // Check all virtual keys from 0x08 (Backspace) to 0xFE
             for (vkCode in 0x08..0xFE) {
                 if (vkCode in MODIFIER_VK_CODES) continue
-                
+
                 val state = User32.INSTANCE.GetAsyncKeyState(vkCode).toInt()
                 // If the most significant bit is set, the key is currently down
                 if ((state and 0x8000) != 0) {
                     val modifiers = detectCurrentModifiers()
                     val binding = HotkeyBinding(vkCode, modifiers)
-                    
+
                     // Wait until they release the key so we don't immediately trigger it
                     // if it happens to be the same as the new hotkey.
                     while ((User32.INSTANCE.GetAsyncKeyState(vkCode).toInt() and 0x8000) != 0) {
                         delay(10)
                     }
-                    
+
                     return HotkeyCapture(
                         platformKeyCode = vkCode,
                         modifiers = modifiers,

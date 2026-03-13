@@ -4,10 +4,12 @@ import com.openyap.model.AppSettings
 import com.openyap.platform.SecureStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.nio.file.Path
-import kotlin.io.path.*
+import kotlin.io.path.createDirectories
+import kotlin.io.path.exists
+import kotlin.io.path.readText
+import kotlin.io.path.writeText
 
 class JvmSettingsRepository(
     private val secureStorage: SecureStorage,
@@ -63,12 +65,13 @@ class JvmSettingsRepository(
         loadAllAppPrompts()[appName]
     }
 
-    override suspend fun saveAppPrompt(appName: String, prompt: String) = withContext(Dispatchers.IO) {
-        val prompts = loadAllAppPrompts().toMutableMap()
-        prompts[appName] = prompt
-        dataDir.createDirectories()
-        promptsFile.writeText(json.encodeToString(prompts))
-    }
+    override suspend fun saveAppPrompt(appName: String, prompt: String) =
+        withContext(Dispatchers.IO) {
+            val prompts = loadAllAppPrompts().toMutableMap()
+            prompts[appName] = prompt
+            dataDir.createDirectories()
+            promptsFile.writeText(json.encodeToString(prompts))
+        }
 
     override suspend fun loadAllAppPrompts(): Map<String, String> = withContext(Dispatchers.IO) {
         try {

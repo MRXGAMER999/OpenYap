@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -28,7 +27,29 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.*
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,7 +57,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -97,16 +117,29 @@ fun OnboardingScreen(
                         modifier = Modifier.fillMaxWidth().padding(Spacing.xl),
                         verticalArrangement = Arrangement.spacedBy(Spacing.lg),
                     ) {
-                        Text("OpenYap", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                        Text("Shape your voice workflow", style = MaterialTheme.typography.displaySmallEmphasized)
+                        Text(
+                            "OpenYap",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            "Shape your voice workflow",
+                            style = MaterialTheme.typography.displaySmallEmphasized
+                        )
                         Text(
                             text = "Give OpenYap microphone access, add your Gemini key, and pick a model. After that, every recording becomes a polished paste.",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                            AssistChip(onClick = {}, enabled = false, label = { Text("3-step setup") })
-                            AssistChip(onClick = {}, enabled = false, label = { Text("Desktop voice workflow") })
+                            AssistChip(
+                                onClick = {},
+                                enabled = false,
+                                label = { Text("3-step setup") })
+                            AssistChip(
+                                onClick = {},
+                                enabled = false,
+                                label = { Text("Desktop voice workflow") })
                         }
 
                         LinearProgressIndicator(
@@ -120,17 +153,26 @@ fun OnboardingScreen(
                             state.currentStep >= 0 -> StepState.ACTIVE
                             else -> StepState.LOCKED
                         }
-                        StepSection(stepNumber = 1, title = "Microphone Access", subtitle = "Enable live capture for hands-free input.", stepState = step1State) {
+                        StepSection(
+                            stepNumber = 1,
+                            title = "Microphone Access",
+                            subtitle = "Enable live capture for hands-free input.",
+                            stepState = step1State
+                        ) {
                             when (state.micPermission) {
                                 PermissionStatus.GRANTED -> {
                                     Surface(color = MaterialTheme.colorScheme.tertiaryContainer) {
                                         Text(
                                             text = "Microphone access granted.",
-                                            modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                                            modifier = Modifier.padding(
+                                                horizontal = Spacing.md,
+                                                vertical = Spacing.sm
+                                            ),
                                             color = MaterialTheme.colorScheme.onTertiaryContainer,
                                         )
                                     }
                                 }
+
                                 else -> {
                                     Text("OpenYap needs microphone permission before it can capture your voice.")
                                     Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
@@ -154,7 +196,12 @@ fun OnboardingScreen(
                             state.currentStep >= 1 -> StepState.ACTIVE
                             else -> StepState.LOCKED
                         }
-                        StepSection(stepNumber = 2, title = "Gemini API Key", subtitle = "Connect the voice pipeline to your model backend.", stepState = step2State) {
+                        StepSection(
+                            stepNumber = 2,
+                            title = "Gemini API Key",
+                            subtitle = "Connect the voice pipeline to your model backend.",
+                            stepState = step2State
+                        ) {
                             var apiKeyInput by remember(state.apiKey) { mutableStateOf(state.apiKey) }
                             var showKey by remember { mutableStateOf(false) }
 
@@ -212,7 +259,12 @@ fun OnboardingScreen(
                             state.currentStep >= 2 -> StepState.ACTIVE
                             else -> StepState.LOCKED
                         }
-                        StepSection(stepNumber = 3, title = "Choose Model", subtitle = "Pick the model that should power your writing flow.", stepState = step3State) {
+                        StepSection(
+                            stepNumber = 3,
+                            title = "Choose Model",
+                            subtitle = "Pick the model that should power your writing flow.",
+                            stepState = step3State
+                        ) {
                             AnimatedVisibility(
                                 visible = state.currentStep >= 2,
                                 enter = fadeIn() + expandVertically(),
@@ -224,8 +276,14 @@ fun OnboardingScreen(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(Spacing.md),
                                         ) {
-                                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                            Text("Loading available models...", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(18.dp),
+                                                strokeWidth = 2.dp
+                                            )
+                                            Text(
+                                                "Loading available models...",
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
                                         }
                                     }
 
@@ -233,7 +291,13 @@ fun OnboardingScreen(
                                         OnboardingModelDropdown(
                                             models = state.availableModels.map { it.id to it.displayName },
                                             selectedModelId = state.selectedModel,
-                                            onModelSelected = { onEvent(OnboardingEvent.SelectModel(it)) },
+                                            onModelSelected = {
+                                                onEvent(
+                                                    OnboardingEvent.SelectModel(
+                                                        it
+                                                    )
+                                                )
+                                            },
                                         )
                                     }
                                 }
@@ -281,7 +345,8 @@ private fun OnboardingModelDropdown(
     onModelSelected: (String) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val selectedLabel = models.firstOrNull { it.first == selectedModelId }?.second ?: selectedModelId
+    val selectedLabel =
+        models.firstOrNull { it.first == selectedModelId }?.second ?: selectedModelId
 
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
         OutlinedTextField(
@@ -301,7 +366,11 @@ private fun OnboardingModelDropdown(
                     text = {
                         Column {
                             Text(displayName, style = MaterialTheme.typography.bodyMedium)
-                            Text(id, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                id,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     },
                     onClick = {
@@ -350,8 +419,10 @@ private fun StepSection(
                             }
                         }
                     }
+
                     StepState.ACTIVE -> {
-                        val infiniteTransition = rememberInfiniteTransition(label = "stepPulse$stepNumber")
+                        val infiniteTransition =
+                            rememberInfiniteTransition(label = "stepPulse$stepNumber")
                         val pulseScale by infiniteTransition.animateFloat(
                             initialValue = 1f,
                             targetValue = 1.08f,
@@ -372,6 +443,7 @@ private fun StepSection(
                             }
                         }
                     }
+
                     StepState.LOCKED -> {
                         Surface(
                             modifier = Modifier.size(34.dp),
@@ -398,7 +470,11 @@ private fun StepSection(
                             MaterialTheme.colorScheme.onSurface
                         },
                     )
-                    Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
             content()
