@@ -11,11 +11,14 @@ import com.openyap.service.PhraseExpansionEngine
 import com.openyap.service.PromptBuilder
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlin.math.roundToInt
+import kotlin.time.Clock
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 data class RecordingUiState(
     val recordingState: RecordingState = RecordingState.Idle,
     val amplitude: Float = 0f,
-    val durationSeconds: Int = 0,
     val lastResultText: String? = null,
     val error: String? = null,
     val hasApiKey: Boolean = false,
@@ -65,6 +68,10 @@ class RecordingViewModel(
     private var processingGeneration = 0
     private var durationJob: Job? = null
     private var currentRecordingPath: String? = null
+    // Holds the path of the audio file currently being processed so cancel can clean it up
+    @Volatile
+    private var currentProcessingPath: String? = null
+    private var recordingStartedAt: TimeMark? = null
 
     init {
         viewModelScope.launch {
@@ -110,15 +117,20 @@ class RecordingViewModel(
         val current = _state.value.recordingState
         if (current is RecordingState.Recording) {
             stopRecording()
-        } else if (current is RecordingState.Idle || current is RecordingState.Error) {
+        } else if (
+            current is RecordingState.Idle ||
+            current is RecordingState.Error ||
+            current is RecordingState.Success
+        ) {
             startRecording()
         }
     }
 
     private suspend fun startRecording() {
-        if (_state.value.recordingState !is RecordingState.Idle &&
-            _state.value.recordingState !is RecordingState.Error &&
-            _state.value.recordingState !is RecordingState.Success
+        val currentState = _state.value.recordingState
+        if (currentState !is RecordingState.Idle &&
+            currentState !is RecordingState.Error &&
+            currentState !is RecordingState.Success
         ) return
 
         val apiKey = settingsRepository.loadApiKey()
@@ -132,9 +144,10 @@ class RecordingViewModel(
             return
         }
 
-        val timestamp = kotlin.time.Clock.System.now().toEpochMilliseconds()
+        val timestamp = Clock.System.now().toEpochMilliseconds()
         val path = "${tempDirProvider()}/openyap_$timestamp.wav"
         currentRecordingPath = path
+        recordingStartedAt = TimeSource.Monotonic.markNow()
 
         audioRecorder.startRecording(path)
 
@@ -142,7 +155,6 @@ class RecordingViewModel(
             it.copy(
                 recordingState = RecordingState.Recording(),
                 error = null,
-                durationSeconds = 0,
                 amplitude = 0f,
             )
         }
@@ -157,7 +169,6 @@ class RecordingViewModel(
                     if (rs is RecordingState.Recording) {
                         it.copy(
                             recordingState = rs.copy(durationSeconds = seconds),
-                            durationSeconds = seconds,
                         )
                     } else it
                 }
@@ -171,9 +182,16 @@ class RecordingViewModel(
         durationJob?.cancel()
         durationJob = null
 
-        val duration = _state.value.durationSeconds
+        val elapsedSeconds = recordingStartedAt
+            ?.elapsedNow()
+            ?.inWholeMilliseconds
+            ?.toDouble()
+            ?.div(1000)
+            ?: (_state.value.recordingState as? RecordingState.Recording)?.durationSeconds?.toDouble()
+            ?: 0.0
+        recordingStartedAt = null
 
-        if (duration < 1) {
+        if (elapsedSeconds < MIN_DURATION_SECONDS) {
             audioRecorder.stopRecording()
             _state.update {
                 it.copy(
@@ -186,7 +204,10 @@ class RecordingViewModel(
             return
         }
 
+        val duration = elapsedSeconds.roundToInt().coerceAtLeast(1)
         val path = audioRecorder.stopRecording()
+        currentRecordingPath = null
+        currentProcessingPath = path
         val generation = ++processingGeneration
 
         _state.update { it.copy(recordingState = RecordingState.Processing) }
@@ -233,7 +254,7 @@ class RecordingViewModel(
                     return@launch
                 }
 
-                pasteAutomation.pasteText(expandedResponse, restoreClipboard = true)
+                pasteAutomation.pasteText(expandedResponse, restoreClipboard = false)
 
                 if (generation != processingGeneration) {
                     deleteFile(path)
@@ -242,8 +263,8 @@ class RecordingViewModel(
 
                 historyRepository.addEntry(
                     RecordingEntry(
-                        id = kotlin.time.Clock.System.now().toEpochMilliseconds().toString(),
-                        recordedAt = kotlin.time.Clock.System.now(),
+                        id = Clock.System.now().toEpochMilliseconds().toString(),
+                        recordedAt = Clock.System.now(),
                         durationSeconds = duration,
                         response = expandedResponse,
                         targetApp = targetApp ?: "",
@@ -261,6 +282,7 @@ class RecordingViewModel(
 
                 try { dictionaryEngine.ingestObservedText(expandedResponse) } catch (_: Exception) {}
 
+                currentProcessingPath = null
                 delay(3000)
                 _state.update {
                     if (it.recordingState is RecordingState.Success) {
@@ -270,6 +292,7 @@ class RecordingViewModel(
 
                 deleteFile(path)
             } catch (e: Exception) {
+                currentProcessingPath = null
                 if (generation == processingGeneration) {
                     _state.update {
                         it.copy(
@@ -290,6 +313,7 @@ class RecordingViewModel(
             is RecordingState.Recording -> {
                 durationJob?.cancel()
                 durationJob = null
+                recordingStartedAt = null
                 audioRecorder.stopRecording()
                 currentRecordingPath?.let { deleteFile(it) }
                 currentRecordingPath = null
@@ -297,6 +321,9 @@ class RecordingViewModel(
             }
             is RecordingState.Processing -> {
                 processingGeneration++
+                // Clean up the audio file that was being processed
+                currentProcessingPath?.let { deleteFile(it) }
+                currentProcessingPath = null
                 _state.update { it.copy(recordingState = RecordingState.Idle) }
             }
             else -> {}

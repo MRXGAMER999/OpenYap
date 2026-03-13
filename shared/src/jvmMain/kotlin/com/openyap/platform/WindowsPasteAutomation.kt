@@ -8,8 +8,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.awt.Toolkit
-import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.StringSelection
+import java.awt.datatransfer.Transferable
 
 class WindowsPasteAutomation : PasteAutomation {
 
@@ -23,14 +23,11 @@ class WindowsPasteAutomation : PasteAutomation {
     override suspend fun pasteText(text: String, restoreClipboard: Boolean) {
         withContext(Dispatchers.IO) {
             val clipboard = Toolkit.getDefaultToolkit().systemClipboard
+            var originalContent: Transferable? = null
 
-            val previousContent = if (restoreClipboard) {
-                try {
-                    clipboard.getData(DataFlavor.stringFlavor) as? String
-                } catch (_: Exception) {
-                    null
-                }
-            } else null
+            if (restoreClipboard) {
+                originalContent = clipboard.getContents(null)
+            }
 
             clipboard.setContents(StringSelection(text), null)
 
@@ -38,14 +35,19 @@ class WindowsPasteAutomation : PasteAutomation {
 
             sendCtrlV()
 
-            delay(700)
-
-            if (restoreClipboard && previousContent != null) {
-                clipboard.setContents(StringSelection(previousContent), null)
+            if (restoreClipboard && originalContent != null) {
+                // Wait for the target app to consume the paste before restoring
+                delay(700)
+                try {
+                    clipboard.setContents(originalContent, null)
+                } catch (_: Exception) {
+                    // Ignore — previous clipboard owner may have gone away
+                }
             }
         }
     }
 
+    @Suppress("UNCHECKED_CAST")
     private fun sendCtrlV() {
         val inputs = INPUT().toArray(4) as Array<INPUT>
 

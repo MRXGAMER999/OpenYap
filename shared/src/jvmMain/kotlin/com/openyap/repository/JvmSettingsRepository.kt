@@ -79,4 +79,19 @@ class JvmSettingsRepository(
             emptyMap()
         }
     }
+
+    override suspend fun removeAppCustomization(appName: String) = withContext(Dispatchers.IO) {
+        // Remove from tones
+        val tones = loadAllAppTones().toMutableMap()
+        if (tones.remove(appName) != null) {
+            dataDir.createDirectories()
+            tonesFile.writeText(json.encodeToString(tones))
+        }
+        // Remove from prompts
+        val prompts = loadAllAppPrompts().toMutableMap()
+        if (prompts.remove(appName) != null) {
+            dataDir.createDirectories()
+            promptsFile.writeText(json.encodeToString(prompts))
+        }
+    }
 }

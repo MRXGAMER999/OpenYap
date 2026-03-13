@@ -1,88 +1,116 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.openyap.ui.screen
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.openyap.viewmodel.StatsUiState
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun StatsScreen(state: StatsUiState, onRefresh: () -> Unit) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxSize().padding(28.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Stats", style = MaterialTheme.typography.headlineSmall)
-            TextButton(onClick = onRefresh) { Text("Refresh") }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Stats", style = MaterialTheme.typography.headlineLarge)
+                Text(
+                    "A snapshot of how often OpenYap is capturing and refining your voice.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.widthIn(max = 540.dp),
+                )
+            }
+            FilledTonalButton(onClick = onRefresh) { Text("Refresh") }
+        }
+        if (!state.isLoading && state.totalRecordings > 0) {
+            AssistChip(onClick = {}, enabled = false, label = { Text("${state.totalRecordings} recordings analyzed") })
         }
 
         if (state.isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                StatCard("Recordings", state.totalRecordings.toString(), Modifier.weight(1f))
-                StatCard("Total Duration", formatDuration(state.totalDurationSeconds), Modifier.weight(1f))
-                StatCard("Characters", state.totalCharacters.toString(), Modifier.weight(1f))
-                StatCard("Avg Duration", "${state.averageDurationSeconds}s", Modifier.weight(1f))
-            }
-
-            if (state.topApps.isNotEmpty()) {
-                HorizontalDivider()
-                Text("Top Apps", style = MaterialTheme.typography.titleSmall)
-
-                state.topApps.forEach { (app, count) ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(app, style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            "$count recordings",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-
-            if (state.totalRecordings == 0) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        } else if (state.totalRecordings == 0) {
+            ElevatedCard {
+                Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                     Text(
-                        "No recordings yet. Stats will appear after your first recording.",
+                        "No recordings yet. Stats appear after your first captured thought.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+            }
+        } else {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                StatCard("Recordings", state.totalRecordings.toString())
+                StatCard("Total Duration", formatDuration(state.totalDurationSeconds))
+                StatCard("Characters", state.totalCharacters.toString())
+                StatCard("Avg Duration", "${state.averageDurationSeconds}s")
+            }
+
+            if (state.topApps.isNotEmpty()) {
+                ElevatedCard {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(22.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        Text("Top apps", style = MaterialTheme.typography.headlineSmall)
+                        state.topApps.forEach { (app, count) ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(app, style = MaterialTheme.typography.titleMedium)
+                                AssistChip(onClick = {}, enabled = false, label = { Text("$count recordings") })
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-    ) {
+private fun StatCard(label: String, value: String) {
+    ElevatedCard(modifier = Modifier.widthIn(min = 180.dp)) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(22.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(value, style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.height(4.dp))
-            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Text(value, style = MaterialTheme.typography.displaySmallEmphasized)
         }
     }
 }

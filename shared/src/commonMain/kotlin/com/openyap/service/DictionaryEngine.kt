@@ -3,6 +3,7 @@ package com.openyap.service
 import com.openyap.model.DictionaryEntry
 import com.openyap.model.EntrySource
 import com.openyap.repository.DictionaryRepository
+import kotlin.time.Clock
 
 class DictionaryEngine(private val repository: DictionaryRepository) {
 
@@ -25,7 +26,7 @@ class DictionaryEngine(private val repository: DictionaryRepository) {
         if (candidates.isEmpty()) return
 
         val entries = repository.loadEntries().toMutableList()
-        val now = kotlin.time.Clock.System.now().toEpochMilliseconds().toString()
+        val now = Clock.System.now().toEpochMilliseconds().toString()
         val seenInThisSession = mutableSetOf<String>()
 
         for (candidate in candidates) {
@@ -63,7 +64,7 @@ class DictionaryEngine(private val repository: DictionaryRepository) {
         val cleaned = original.trim()
         if (cleaned.isEmpty()) return
 
-        val now = kotlin.time.Clock.System.now().toEpochMilliseconds().toString()
+        val now = Clock.System.now().toEpochMilliseconds().toString()
         repository.addOrUpdate(
             DictionaryEntry(
                 id = now,

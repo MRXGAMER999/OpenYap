@@ -17,4 +17,7 @@ interface SettingsRepository {
     suspend fun loadAppPrompt(appName: String): String?
     suspend fun saveAppPrompt(appName: String, prompt: String)
     suspend fun loadAllAppPrompts(): Map<String, String>
+
+    /** Removes all tone and prompt customizations for [appName]. */
+    suspend fun removeAppCustomization(appName: String)
 }

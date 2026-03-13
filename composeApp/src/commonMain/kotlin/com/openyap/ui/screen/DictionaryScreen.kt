@@ -1,10 +1,30 @@
 package com.openyap.ui.screen
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -19,88 +39,95 @@ fun DictionaryScreen(
     var newOriginal by remember { mutableStateOf("") }
     var newReplacement by remember { mutableStateOf("") }
 
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Text("Dictionary", style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(16.dp))
+    Column(modifier = Modifier.fillMaxSize().padding(28.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        Text("Dictionary", style = MaterialTheme.typography.headlineLarge)
+        Text(
+            "Teach OpenYap your preferred replacements, shortcuts, and repeated phrases so every paste sounds like you.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.widthIn(max = 620.dp),
+        )
+        if (state.entries.isNotEmpty()) {
+            AssistChip(onClick = {}, enabled = false, label = { Text("${state.entries.count { it.isEnabled }} active phrases") })
+        }
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            OutlinedTextField(
-                value = newOriginal,
-                onValueChange = { newOriginal = it },
-                label = { Text("Original phrase") },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-            )
-            OutlinedTextField(
-                value = newReplacement,
-                onValueChange = { newReplacement = it },
-                label = { Text("Replacement") },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-            )
-            Button(
-                onClick = {
-                    onEvent(DictionaryEvent.AddEntry(newOriginal, newReplacement))
-                    newOriginal = ""
-                    newReplacement = ""
-                },
-                enabled = newOriginal.isNotBlank() && newReplacement.isNotBlank(),
+        ElevatedCard {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.Bottom,
             ) {
-                Text("Add")
+                OutlinedTextField(
+                    value = newOriginal,
+                    onValueChange = { newOriginal = it },
+                    label = { Text("Original phrase") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = newReplacement,
+                    onValueChange = { newReplacement = it },
+                    label = { Text("Replacement") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                )
+                FilledTonalButton(
+                    onClick = {
+                        onEvent(DictionaryEvent.AddEntry(newOriginal, newReplacement))
+                        newOriginal = ""
+                        newReplacement = ""
+                    },
+                    enabled = newOriginal.isNotBlank() && newReplacement.isNotBlank(),
+                ) {
+                    Text("Add")
+                }
             }
         }
 
-        Spacer(Modifier.height(16.dp))
-        HorizontalDivider()
-        Spacer(Modifier.height(8.dp))
-
         if (state.isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+                androidx.compose.material3.CircularProgressIndicator()
             }
         } else if (state.entries.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    "No dictionary entries yet. Add custom replacements above.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            ElevatedCard {
+                Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        "No dictionary entries yet. Add your first phrase above.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(state.entries, key = { it.id }) { entry ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    ) {
+                    ElevatedCard {
                         Row(
-                            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(entry.original, style = MaterialTheme.typography.bodyMedium)
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(entry.original, style = MaterialTheme.typography.titleMedium)
                                 Text(
-                                    "→ ${entry.replacement}",
-                                    style = MaterialTheme.typography.bodySmall,
+                                    text = "-> ${entry.replacement}",
+                                    style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.primary,
                                 )
+                                AssistChip(onClick = {}, enabled = false, label = { Text(entry.source.name.lowercase()) })
                             }
-                            Text(
-                                entry.source.name.lowercase(),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            Switch(
+                                checked = entry.isEnabled,
+                                onCheckedChange = { onEvent(DictionaryEvent.ToggleEntry(entry.id)) },
                             )
-                            Spacer(Modifier.width(8.dp))
                             TextButton(onClick = { onEvent(DictionaryEvent.RemoveEntry(entry.id)) }) {
-                                Text("Remove", color = MaterialTheme.colorScheme.error)
+                                Text("Remove")
                             }
                         }
                     }
                 }
             }
         }
+        Spacer(Modifier.height(12.dp))
     }
 }

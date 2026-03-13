@@ -2,9 +2,12 @@ package com.openyap.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.openyap.model.HotkeyBinding
 import com.openyap.repository.SettingsRepository
 import com.openyap.service.GeminiClient
 import com.openyap.service.GeminiModelInfo
+import com.openyap.platform.HotkeyDisplayFormatter
+import com.openyap.platform.HotkeyManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +24,10 @@ data class SettingsUiState(
     val availableModels: List<GeminiModelInfo> = emptyList(),
     val isLoadingModels: Boolean = false,
     val modelsFetchError: String? = null,
+    val hotkeyLabel: String = "Ctrl+Shift+R",
+    val isCapturingHotkey: Boolean = false,
+    val hotkeyError: String? = null,
+    val appVersion: String = "",
 )
 
 sealed interface SettingsEvent {
@@ -29,12 +36,16 @@ sealed interface SettingsEvent {
     data class ToggleGenZ(val enabled: Boolean) : SettingsEvent
     data class TogglePhraseExpansion(val enabled: Boolean) : SettingsEvent
     data object RefreshModels : SettingsEvent
+    data object CaptureHotkey : SettingsEvent
+    data object ClearHotkeyMessage : SettingsEvent
     data object DismissSaveMessage : SettingsEvent
 }
 
 class SettingsViewModel(
     private val settingsRepository: SettingsRepository,
     private val geminiClient: GeminiClient,
+    private val hotkeyManager: HotkeyManager,
+    private val hotkeyDisplayFormatter: HotkeyDisplayFormatter,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SettingsUiState())
@@ -44,12 +55,25 @@ class SettingsViewModel(
         viewModelScope.launch {
             val apiKey = settingsRepository.loadApiKey() ?: ""
             val settings = settingsRepository.loadSettings()
+            // Read version from manifest/resources
+            val version = runCatching {
+                SettingsViewModel::class.java.getResourceAsStream("/version.properties")
+                    ?.bufferedReader()
+                    ?.readText()
+                    ?.lines()
+                    ?.firstOrNull { it.startsWith("version=") }
+                    ?.removePrefix("version=")
+                    ?.trim()
+                    ?: ""
+            }.getOrDefault("")
             _state.update {
                 it.copy(
                     apiKey = apiKey,
                     geminiModel = settings.geminiModel,
                     genZEnabled = settings.genZEnabled,
                     phraseExpansionEnabled = settings.phraseExpansionEnabled,
+                    hotkeyLabel = formatHotkey(settings.hotkeyConfig.startHotkey),
+                    appVersion = version,
                 )
             }
             if (apiKey.isNotBlank()) fetchModels(apiKey)
@@ -63,7 +87,49 @@ class SettingsViewModel(
             is SettingsEvent.ToggleGenZ -> toggleGenZ(event.enabled)
             is SettingsEvent.TogglePhraseExpansion -> togglePhraseExpansion(event.enabled)
             is SettingsEvent.RefreshModels -> refreshModels()
+            is SettingsEvent.CaptureHotkey -> captureHotkey()
+            is SettingsEvent.ClearHotkeyMessage -> _state.update { it.copy(hotkeyError = null) }
             is SettingsEvent.DismissSaveMessage -> _state.update { it.copy(saveMessage = null) }
+        }
+    }
+
+    private fun captureHotkey() {
+        viewModelScope.launch {
+            _state.update { it.copy(isCapturingHotkey = true, hotkeyError = null, saveMessage = null) }
+            try {
+                val capture = hotkeyManager.captureNextHotkey()
+                val binding = HotkeyBinding(
+                    platformKeyCode = capture.platformKeyCode,
+                    modifiers = capture.modifiers,
+                )
+                val settings = settingsRepository.loadSettings()
+                val updatedSettings = settings.copy(
+                    hotkeyConfig = settings.hotkeyConfig.copy(startHotkey = binding)
+                )
+                settingsRepository.saveSettings(updatedSettings)
+                hotkeyManager.setConfig(updatedSettings.hotkeyConfig)
+                _state.update {
+                    it.copy(
+                        hotkeyLabel = capture.displayLabel,
+                        isCapturingHotkey = false,
+                        saveMessage = "Hotkey updated to ${capture.displayLabel}",
+                    )
+                }
+            } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
+                _state.update {
+                    it.copy(
+                        isCapturingHotkey = false,
+                        hotkeyError = "Hotkey capture timed out. Please try again.",
+                    )
+                }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        isCapturingHotkey = false,
+                        hotkeyError = e.message ?: "Failed to capture hotkey",
+                    )
+                }
+            }
         }
     }
 
@@ -131,5 +197,9 @@ class SettingsViewModel(
             settingsRepository.saveSettings(settings.copy(phraseExpansionEnabled = enabled))
             _state.update { it.copy(phraseExpansionEnabled = enabled) }
         }
+    }
+
+    private fun formatHotkey(binding: HotkeyBinding?): String {
+        return binding?.let(hotkeyDisplayFormatter::format) ?: "Not set"
     }
 }

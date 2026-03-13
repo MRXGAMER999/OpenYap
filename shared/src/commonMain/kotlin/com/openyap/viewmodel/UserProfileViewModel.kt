@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 data class UserProfileUiState(
     val profile: UserProfile = UserProfile(),
     val isSaving: Boolean = false,
+    val saveMessage: String? = null,
 )
 
 sealed interface UserProfileEvent {
@@ -22,6 +23,7 @@ sealed interface UserProfileEvent {
     data class UpdateJobTitle(val jobTitle: String) : UserProfileEvent
     data class UpdateCompany(val company: String) : UserProfileEvent
     data object Save : UserProfileEvent
+    data object DismissSaveMessage : UserProfileEvent
 }
 
 class UserProfileViewModel(
@@ -46,6 +48,7 @@ class UserProfileViewModel(
             is UserProfileEvent.UpdateJobTitle -> _state.update { it.copy(profile = it.profile.copy(jobTitle = event.jobTitle)) }
             is UserProfileEvent.UpdateCompany -> _state.update { it.copy(profile = it.profile.copy(company = event.company)) }
             is UserProfileEvent.Save -> saveProfile()
+            is UserProfileEvent.DismissSaveMessage -> _state.update { it.copy(saveMessage = null) }
         }
     }
 
@@ -53,7 +56,7 @@ class UserProfileViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isSaving = true) }
             userProfileRepository.saveProfile(_state.value.profile)
-            _state.update { it.copy(isSaving = false) }
+            _state.update { it.copy(isSaving = false, saveMessage = "Profile saved") }
         }
     }
 }

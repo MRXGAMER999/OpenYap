@@ -21,6 +21,7 @@ data class OnboardingUiState(
     val availableModels: List<GeminiModelInfo> = emptyList(),
     val selectedModel: String = "gemini-2.0-flash",
     val isLoadingModels: Boolean = false,
+    val modelsFetchError: String? = null,
 )
 
 sealed interface OnboardingEvent {
@@ -97,15 +98,20 @@ class OnboardingViewModel(
     }
 
     private suspend fun fetchModels(apiKey: String) {
-        _state.update { it.copy(isLoadingModels = true) }
+        _state.update { it.copy(isLoadingModels = true, modelsFetchError = null) }
         try {
             val models = geminiClient.listModels(apiKey)
             _state.update { it.copy(availableModels = models, isLoadingModels = false) }
             if (models.isNotEmpty() && models.none { it.id == _state.value.selectedModel }) {
                 selectModel(models.first().id)
             }
-        } catch (_: Exception) {
-            _state.update { it.copy(isLoadingModels = false) }
+        } catch (e: Exception) {
+            _state.update {
+                it.copy(
+                    isLoadingModels = false,
+                    modelsFetchError = e.message ?: "Failed to fetch models",
+                )
+            }
         }
     }
 

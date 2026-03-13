@@ -33,12 +33,14 @@ class HistoryViewModel(
         loadEntries()
     }
 
+    fun refresh() = loadEntries()
+
     fun onEvent(event: HistoryEvent) {
         when (event) {
             is HistoryEvent.DeleteEntry -> deleteEntry(event.id)
             is HistoryEvent.CopyEntry -> { /* clipboard copy handled by UI */ }
             is HistoryEvent.ClearAll -> clearAll()
-            is HistoryEvent.Refresh -> loadEntries()
+            is HistoryEvent.Refresh -> refresh()
         }
     }
 

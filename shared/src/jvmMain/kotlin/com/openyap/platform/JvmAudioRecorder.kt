@@ -107,15 +107,19 @@ class JvmAudioRecorder : AudioRecorder {
     }
 
     private fun calculateRmsAmplitude(buffer: ByteArray, bytesRead: Int): Float {
-        var sum = 0.0
         val samples = bytesRead / 2
+        if (samples == 0) return 0f
+
+        var peak = 0f
+
         for (i in 0 until samples) {
             val low = buffer[i * 2].toInt() and 0xFF
-            val high = buffer[i * 2 + 1].toInt()
-            val sample = (high shl 8) or low
-            sum += sample.toDouble() * sample.toDouble()
+            val high = buffer[i * 2 + 1].toInt() and 0xFF
+            val combined = (high shl 8) or low
+            val sample = if (combined >= 0x8000) combined - 0x10000 else combined
+            val normalized = kotlin.math.abs(sample) / 32768f
+            if (normalized > peak) peak = normalized
         }
-        val rms = Math.sqrt(sum / samples)
-        return (rms / 32768.0).toFloat().coerceIn(0f, 1f)
+        return (peak * 4f).coerceIn(0f, 1f)
     }
 }

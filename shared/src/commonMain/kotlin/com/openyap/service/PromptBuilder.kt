@@ -2,15 +2,16 @@ package com.openyap.service
 
 object PromptBuilder {
 
-    val validTones = listOf("casual", "normal", "informal", "formal")
+    // Ordered from least to most formal for intuitive UI display
+    val validTones = listOf("casual", "informal", "normal", "formal")
 
     private const val DEFAULT_TONE = "normal"
 
     private val toneInstructions = mapOf(
-        "casual" to "Use a relaxed, conversational tone. Natural and friendly.",
-        "normal" to "Use a balanced, neutral tone. Clear and readable.",
-        "informal" to "Use a slightly relaxed tone. Professional but approachable.",
-        "formal" to "Use a formal, professional tone. Polished and proper.",
+        "casual"   to "Use a relaxed, conversational tone — natural, loose, and friendly.",
+        "informal" to "Use an approachable, slightly relaxed tone — professional but warm.",
+        "normal"   to "Use a balanced, neutral tone — clear, readable, and professional.",
+        "formal"   to "Use a formal, polished tone — precise, structured, and proper.",
     )
 
     fun build(

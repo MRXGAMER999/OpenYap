@@ -19,6 +19,7 @@ data class DictionaryUiState(
 sealed interface DictionaryEvent {
     data class AddEntry(val original: String, val replacement: String) : DictionaryEvent
     data class RemoveEntry(val id: String) : DictionaryEvent
+    data class ToggleEntry(val id: String) : DictionaryEvent
     data object Refresh : DictionaryEvent
 }
 
@@ -38,6 +39,7 @@ class DictionaryViewModel(
         when (event) {
             is DictionaryEvent.AddEntry -> addEntry(event.original, event.replacement)
             is DictionaryEvent.RemoveEntry -> removeEntry(event.id)
+            is DictionaryEvent.ToggleEntry -> toggleEntry(event.id)
             is DictionaryEvent.Refresh -> loadEntries()
         }
     }
@@ -61,6 +63,17 @@ class DictionaryViewModel(
         viewModelScope.launch {
             dictionaryRepository.remove(id)
             _state.update { it.copy(entries = it.entries.filter { e -> e.id != id }) }
+        }
+    }
+
+    private fun toggleEntry(id: String) {
+        viewModelScope.launch {
+            val updated = _state.value.entries.map { e ->
+                if (e.id == id) e.copy(isEnabled = !e.isEnabled) else e
+            }
+            _state.update { it.copy(entries = updated) }
+            // Persist the toggled entry
+            updated.firstOrNull { it.id == id }?.let { dictionaryRepository.addOrUpdate(it) }
         }
     }
 }
