@@ -25,8 +25,8 @@ import com.openyap.platform.AudioRecorder
 import com.openyap.platform.ComposeOverlayController
 import com.openyap.platform.ComposeOverlayWindow
 import com.openyap.platform.HttpClientFactory
-import com.openyap.platform.JvmAudioRecorder
 import com.openyap.platform.JvmAppDataResetter
+import com.openyap.platform.JvmAudioRecorder
 import com.openyap.platform.NativeAudioBridge
 import com.openyap.platform.NativeAudioRecorder
 import com.openyap.platform.PlatformInit
@@ -109,10 +109,15 @@ fun main() {
 
         val audioFeedbackPlayer = remember {
             object : AudioFeedbackPlayer {
-                override fun playStart() = audioFeedbackService.play(AudioFeedbackService.Tone.START)
+                override fun playStart() =
+                    audioFeedbackService.play(AudioFeedbackService.Tone.START)
+
                 override fun playStop() = audioFeedbackService.play(AudioFeedbackService.Tone.STOP)
-                override fun playTooShort() = audioFeedbackService.play(AudioFeedbackService.Tone.TOO_SHORT)
-                override fun playError() = audioFeedbackService.play(AudioFeedbackService.Tone.ERROR)
+                override fun playTooShort() =
+                    audioFeedbackService.play(AudioFeedbackService.Tone.TOO_SHORT)
+
+                override fun playError() =
+                    audioFeedbackService.play(AudioFeedbackService.Tone.ERROR)
             }
         }
 
@@ -172,8 +177,12 @@ fun main() {
 
             // Preload audio tones using resource files from composeResources
             try {
-                val startToneBytes = javaClass.getResourceAsStream("/composeResources/openyap.composeapp.generated.resources/files/start_tone.wav")?.use { it.readBytes() }
-                val stopToneBytes = javaClass.getResourceAsStream("/composeResources/openyap.composeapp.generated.resources/files/stop_tone.wav")?.use { it.readBytes() }
+                val startToneBytes =
+                    javaClass.getResourceAsStream("/composeResources/openyap.composeapp.generated.resources/files/start_tone.wav")
+                        ?.use { it.readBytes() }
+                val stopToneBytes =
+                    javaClass.getResourceAsStream("/composeResources/openyap.composeapp.generated.resources/files/stop_tone.wav")
+                        ?.use { it.readBytes() }
 
                 val toneMap = buildMap {
                     startToneBytes?.let { put(AudioFeedbackService.Tone.START, it) }

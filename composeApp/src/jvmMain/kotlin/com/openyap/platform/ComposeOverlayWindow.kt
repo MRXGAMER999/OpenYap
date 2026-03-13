@@ -1,12 +1,10 @@
 package com.openyap.platform
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.DialogWindow
-import androidx.compose.ui.window.rememberDialogState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.window.DialogWindow
+import androidx.compose.ui.window.rememberDialogState
 import com.openyap.ui.component.RecordingOverlay
 import java.awt.GraphicsEnvironment
 import java.awt.MouseInfo
@@ -32,7 +30,7 @@ fun ComposeOverlayWindow(uiState: OverlayUiState) {
         focusable = false,
     ) {
         val window = this.window
-        
+
         // This effect runs whenever the layout size inside changes.
         // We capture the global composition size to recenter the window natively
         androidx.compose.foundation.layout.Box(
@@ -52,10 +50,10 @@ fun ComposeOverlayWindow(uiState: OverlayUiState) {
                     window.pack()
                     val w = window.width.coerceAtLeast(100)
                     val h = window.height.coerceAtLeast(32)
-                    
+
                     window.setLocation(
                         screen.x + (screen.width - w) / 2,
-                        screen.y + screen.height - h - 80,
+                        screen.y + screen.height - h - 40,
                     )
                 } catch (e: Exception) {
                     System.err.println("Failed to position overlay window: ${e.message}")

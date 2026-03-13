@@ -64,8 +64,8 @@ fun RecordingOverlay(
     durationSeconds: Int,
     flashMessage: String?,
 ) {
-    val pillShape = RoundedCornerShape(24.dp)
-    
+    val pillShape = RoundedCornerShape(20.dp)
+
     Box(
         modifier = Modifier
             .padding(32.dp) // Provide room for Android/Desktop Window borders to NOT clip the shadow and spring bounce
@@ -84,7 +84,7 @@ fun RecordingOverlay(
                     stiffness = Spring.StiffnessLow
                 )
             )
-            .padding(horizontal = 24.dp, vertical = 14.dp),
+            .padding(horizontal = 20.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -112,12 +112,12 @@ fun RecordingOverlay(
 
             AnimatedVisibility(
                 visible = flashMessage != null,
-                enter = fadeIn(spring(stiffness = Spring.StiffnessLow)) + 
-                        expandVertically(spring(stiffness = Spring.StiffnessLow)) + 
+                enter = fadeIn(spring(stiffness = Spring.StiffnessLow)) +
+                        expandVertically(spring(stiffness = Spring.StiffnessLow)) +
                         slideInVertically(spring(stiffness = Spring.StiffnessLow)) { it / 2 },
-                exit = fadeOut(tween(200)) + 
-                       shrinkVertically(tween(200)) + 
-                       slideOutVertically(tween(200)) { it / 2 },
+                exit = fadeOut(tween(200)) +
+                        shrinkVertically(tween(200)) +
+                        slideOutVertically(tween(200)) { it / 2 },
             ) {
                 lastFlashMessage?.let { msg ->
                     Box(modifier = Modifier.padding(top = 4.dp)) {
@@ -137,7 +137,7 @@ fun RecordingOverlay(
 @Composable
 private fun RecordingBar(level: Float, durationSeconds: Int) {
     Row(
-        modifier = Modifier.heightIn(min = 28.dp),
+        modifier = Modifier.heightIn(min = 24.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -156,7 +156,7 @@ private fun RecordingBar(level: Float, durationSeconds: Int) {
 @Composable
 private fun ProcessingBar() {
     Row(
-        modifier = Modifier.heightIn(min = 28.dp),
+        modifier = Modifier.heightIn(min = 24.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -179,7 +179,7 @@ private fun ProcessingBar() {
 private fun SuccessBar() {
     var isVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { isVisible = true }
-    
+
     val scale by animateFloatAsState(
         targetValue = if (isVisible) 1f else 0.4f,
         animationSpec = spring(
@@ -190,7 +190,7 @@ private fun SuccessBar() {
     )
 
     Row(
-        modifier = Modifier.heightIn(min = 28.dp),
+        modifier = Modifier.heightIn(min = 24.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -231,14 +231,14 @@ private fun WaveformBars(level: Float) {
     }
 
     val animLevel by animateFloatAsState(
-        targetValue = level.coerceIn(0.05f, 1f),
+        targetValue = level.coerceIn(0.02f, 1f),
         animationSpec = spring(
-            dampingRatio = 0.6f, 
-            stiffness = 300f 
+            dampingRatio = 0.5f,
+            stiffness = 500f
         ),
         label = "lvl",
     )
-    
+
     val brush = Brush.verticalGradient(
         colors = listOf(Color.White.copy(alpha = 0.5f), AccentGreen)
     )
@@ -248,7 +248,7 @@ private fun WaveformBars(level: Float) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         barOffsets.forEachIndexed { _, anim ->
-            val h = (8 + 20 * anim.value * animLevel).dp
+            val h = (4 + 32 * anim.value * animLevel).dp
             Box(
                 Modifier
                     .width(4.dp)

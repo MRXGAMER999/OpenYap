@@ -15,31 +15,33 @@
 
 namespace {
 
-std::mutex g_error_mutex;
-std::string g_last_error;
-bool g_com_initialized = false;
-bool g_media_foundation_started = false;
+    std::mutex g_error_mutex;
+    std::string g_last_error;
+    bool g_com_initialized = false;
+    bool g_media_foundation_started = false;
 
-void clear_last_error() {
-    std::lock_guard<std::mutex> lock(g_error_mutex);
-    g_last_error.clear();
-}
-
-void set_last_error(std::string message) {
-    std::lock_guard<std::mutex> lock(g_error_mutex);
-    g_last_error = std::move(message);
-}
-
-void log_message(const char* message) {
-    if (message == nullptr || *message == '\0') {
-        return;
+    void clear_last_error() {
+        std::lock_guard <std::mutex> lock(g_error_mutex);
+        g_last_error.clear();
     }
-    std::fprintf(stderr, "%s\n", message);
-}
+
+    void set_last_error(std::string message) {
+        std::lock_guard <std::mutex> lock(g_error_mutex);
+        g_last_error = std::move(message);
+    }
+
+    void log_message(const char *message) {
+        if (message == nullptr || *message == '\0') {
+            return;
+        }
+        std::fprintf(stderr, "%s\n", message);
+    }
 
 }  // namespace
 
-int OPENYAP_CALL openyap_init(void) {
+int OPENYAP_CALL
+
+openyap_init(void) {
     clear_last_error();
 
     if (g_media_foundation_started) {
@@ -67,7 +69,9 @@ int OPENYAP_CALL openyap_init(void) {
     return 0;
 }
 
-void OPENYAP_CALL openyap_shutdown(void) {
+void OPENYAP_CALL
+
+openyap_shutdown(void) {
     openyap::capture::shutdown();
 
     if (g_media_foundation_started) {
@@ -83,11 +87,13 @@ void OPENYAP_CALL openyap_shutdown(void) {
     clear_last_error();
 }
 
-int OPENYAP_CALL openyap_capture_start(
-    int sample_rate,
-    int channels,
-    audio_callback_t callback,
-    void* user_data
+int OPENYAP_CALL
+
+openyap_capture_start(
+        int sample_rate,
+        int channels,
+        audio_callback_t callback,
+        void *user_data
 ) {
     clear_last_error();
 
@@ -100,7 +106,9 @@ int OPENYAP_CALL openyap_capture_start(
     return result;
 }
 
-int OPENYAP_CALL openyap_capture_stop(void) {
+int OPENYAP_CALL
+
+openyap_capture_stop(void) {
     clear_last_error();
 
     bool device_disconnected = false;
@@ -113,25 +121,27 @@ int OPENYAP_CALL openyap_capture_stop(void) {
     return result;
 }
 
-int OPENYAP_CALL openyap_encode_aac(
-    const short* pcm_data,
-    int pcm_sample_count,
-    int sample_rate,
-    int channels,
-    int bitrate,
-    const char* output_path
+int OPENYAP_CALL
+
+openyap_encode_aac(
+        const short *pcm_data,
+        int pcm_sample_count,
+        int sample_rate,
+        int channels,
+        int bitrate,
+        const char *output_path
 ) {
     clear_last_error();
 
     std::string error;
     const int result = openyap::encoder::encode_aac_to_file(
-        pcm_data,
-        pcm_sample_count,
-        sample_rate,
-        channels,
-        bitrate,
-        output_path,
-        &error
+            pcm_data,
+            pcm_sample_count,
+            sample_rate,
+            channels,
+            bitrate,
+            output_path,
+            &error
     );
     if (result != 0) {
         set_last_error(error);
@@ -140,10 +150,12 @@ int OPENYAP_CALL openyap_encode_aac(
     return result;
 }
 
-int OPENYAP_CALL openyap_vad_is_speech(
-    const short* pcm_data,
-    int sample_count,
-    int sample_rate
+int OPENYAP_CALL
+
+openyap_vad_is_speech(
+        const short *pcm_data,
+        int sample_count,
+        int sample_rate
 ) {
     clear_last_error();
 
@@ -155,7 +167,9 @@ int OPENYAP_CALL openyap_vad_is_speech(
     return result;
 }
 
-float OPENYAP_CALL openyap_amplitude(const short* pcm_data, int sample_count) {
+float OPENYAP_CALL
+
+openyap_amplitude(const short *pcm_data, int sample_count) {
     if (pcm_data == nullptr || sample_count <= 0) {
         return 0.0f;
     }
@@ -172,7 +186,9 @@ float OPENYAP_CALL openyap_amplitude(const short* pcm_data, int sample_count) {
     return static_cast<float>(peak) / 32768.0f;
 }
 
-const char* OPENYAP_CALL openyap_last_error(void) {
-    std::lock_guard<std::mutex> lock(g_error_mutex);
+const char *OPENYAP_CALL
+
+openyap_last_error(void) {
+    std::lock_guard <std::mutex> lock(g_error_mutex);
     return g_last_error.empty() ? nullptr : g_last_error.c_str();
 }

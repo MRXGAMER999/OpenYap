@@ -10,7 +10,6 @@ import com.sun.jna.platform.win32.User32
 import com.sun.jna.platform.win32.WinDef
 import com.sun.jna.platform.win32.WinUser
 import com.sun.jna.platform.win32.WinUser.MSG
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -121,6 +120,7 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
                         _hotkeyEvents.tryEmit(HotkeyEvent.HoldDown)
                     }
                 }
+
                 WM_KEYUP, WM_SYSKEYUP -> {
                     isHoldDown = false
                     _hotkeyEvents.tryEmit(HotkeyEvent.HoldUp)

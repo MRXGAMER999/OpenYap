@@ -9,6 +9,6 @@ struct IMMDevice;
 
 namespace openyap::noise {
 
-HRESULT configure_communications_mode(IAudioClient2* audio_client, IMMDevice* device, std::string* diagnostics);
+    HRESULT configure_communications_mode(IAudioClient2 *audio_client, IMMDevice *device, std::string *diagnostics);
 
 }  // namespace openyap::noise

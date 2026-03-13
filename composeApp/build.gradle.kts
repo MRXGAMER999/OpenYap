@@ -1,4 +1,3 @@
-import org.gradle.api.tasks.Copy
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
@@ -9,7 +8,8 @@ plugins {
     alias(libs.plugins.kotlinx.serialization)
 }
 
-val nativeDll = rootProject.layout.projectDirectory.file("native/prebuilt/windows-x64/openyap_native.dll")
+val nativeDll =
+    rootProject.layout.projectDirectory.file("native/prebuilt/windows-x64/openyap_native.dll")
 
 val copyNativeDll by tasks.registering(Copy::class) {
     from(nativeDll)
@@ -61,13 +61,13 @@ compose.desktop {
 
 tasks.matching {
     it.name == "jvmProcessResources" ||
-        it.name == "prepareAppResources" ||
-        it.name == "run" ||
-        it.name == "jvmRun" ||
-        it.name == "runDistributable" ||
-        it.name == "packageMsi" ||
-        it.name == "packageDistributionForCurrentOS" ||
-        it.name == "createDistributable"
+            it.name == "prepareAppResources" ||
+            it.name == "run" ||
+            it.name == "jvmRun" ||
+            it.name == "runDistributable" ||
+            it.name == "packageMsi" ||
+            it.name == "packageDistributionForCurrentOS" ||
+            it.name == "createDistributable"
 }.configureEach {
     dependsOn(copyNativeDll)
 }

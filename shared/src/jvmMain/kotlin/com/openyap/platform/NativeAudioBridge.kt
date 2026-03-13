@@ -31,7 +31,8 @@ object NativeAudioBridge {
         val candidates = candidateNames()
 
         if (candidates.none { it == "openyap_native" }) {
-            lastError = "No native audio DLL found in known locations. Expected `openyap_native.dll` in `native/prebuilt/windows-x64/`, `composeApp/resources/windows-x64/`, the packaged resources directory, or the working directory."
+            lastError =
+                "No native audio DLL found in known locations. Expected `openyap_native.dll` in `native/prebuilt/windows-x64/`, `composeApp/resources/windows-x64/`, the packaged resources directory, or the working directory."
         }
 
         for (candidate in candidates) {
@@ -49,10 +50,12 @@ object NativeAudioBridge {
                 val reason = library.openyap_last_error()
                     ?.takeUnless { it.isBlank() }
                     ?: "openyap_init failed with code $initResult"
-                lastError = "Failed to initialize native audio pipeline from ${describeCandidate(candidate)}: $reason"
+                lastError =
+                    "Failed to initialize native audio pipeline from ${describeCandidate(candidate)}: $reason"
                 runCatching { library.openyap_shutdown() }
             } catch (error: Throwable) {
-                lastError = "Failed to load native audio pipeline from ${describeCandidate(candidate)}: ${error.message ?: error.javaClass.simpleName}"
+                lastError =
+                    "Failed to load native audio pipeline from ${describeCandidate(candidate)}: ${error.message ?: error.javaClass.simpleName}"
             }
         }
 
@@ -76,7 +79,16 @@ object NativeAudioBridge {
         addPath(resourcesDir?.resolve("windows-x64")?.resolve("openyap_native.dll"))
         addPath(resourcesDir?.resolve("openyap_native.dll"))
         addPath(Paths.get("resources", "windows-x64", "openyap_native.dll"))
-        addPath(Paths.get("build", "processedResources", "jvm", "main", "windows-x64", "openyap_native.dll"))
+        addPath(
+            Paths.get(
+                "build",
+                "processedResources",
+                "jvm",
+                "main",
+                "windows-x64",
+                "openyap_native.dll"
+            )
+        )
         addPath(Paths.get("native", "prebuilt", "windows-x64", "openyap_native.dll"))
         addPath(Paths.get("native", "build", "openyap_native.dll"))
         addPath(Paths.get("native", "build", "Release", "openyap_native.dll"))
@@ -85,7 +97,17 @@ object NativeAudioBridge {
         addPath(Paths.get("..", "native", "build", "Release", "openyap_native.dll"))
         addPath(Paths.get("..", "native", "out", "build", "x64-Debug", "openyap_native.dll"))
         addPath(Paths.get("composeApp", "resources", "windows-x64", "openyap_native.dll"))
-        addPath(Paths.get("composeApp", "build", "processedResources", "jvm", "main", "windows-x64", "openyap_native.dll"))
+        addPath(
+            Paths.get(
+                "composeApp",
+                "build",
+                "processedResources",
+                "jvm",
+                "main",
+                "windows-x64",
+                "openyap_native.dll"
+            )
+        )
         addPath(Paths.get("openyap_native.dll"))
         candidates += "openyap_native"
         return candidates.toList()

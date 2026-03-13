@@ -2,13 +2,13 @@ package com.openyap.platform
 
 import com.sun.jna.CallbackThreadInitializer
 import com.sun.jna.Native
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.io.Closeable
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlin.math.min
 
 class NativeAudioRecorder(
@@ -36,11 +36,12 @@ class NativeAudioRecorder(
     @Volatile
     private var outputPath: String? = null
 
-    private val captureCallback = NativeAudioBridge.OpenYapNative.AudioCallback { pcmData, sampleCount, _ ->
-        val samples = pcmData.getShortArray(0, sampleCount)
-        pcmBuffer.offer(samples)
-        _amplitudeFlow.value = native.openyap_amplitude(samples, sampleCount).coerceIn(0f, 1f)
-    }
+    private val captureCallback =
+        NativeAudioBridge.OpenYapNative.AudioCallback { pcmData, sampleCount, _ ->
+            val samples = pcmData.getShortArray(0, sampleCount)
+            pcmBuffer.offer(samples)
+            _amplitudeFlow.value = native.openyap_amplitude(samples, sampleCount).coerceIn(0f, 1f)
+        }
 
     init {
         Native.setCallbackThreadInitializer(
@@ -60,7 +61,12 @@ class NativeAudioRecorder(
 
             val result = native.openyap_capture_start(SampleRate, Channels, captureCallback, null)
             if (result != 0) {
-                throw IllegalStateException(nativeError("Failed to start native audio capture", result))
+                throw IllegalStateException(
+                    nativeError(
+                        "Failed to start native audio capture",
+                        result
+                    )
+                )
             }
         } catch (error: Throwable) {
             isRecording.set(false)
@@ -80,7 +86,12 @@ class NativeAudioRecorder(
         }
         if (stopResult != 0 && stopResult != -2) {
             resetState()
-            throw IllegalStateException(nativeError("Failed to stop native audio capture", stopResult))
+            throw IllegalStateException(
+                nativeError(
+                    "Failed to stop native audio capture",
+                    stopResult
+                )
+            )
         }
 
         val capturedPcm = drainSamples()
