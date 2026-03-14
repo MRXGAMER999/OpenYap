@@ -4,6 +4,7 @@ import com.openyap.model.AppSettings
 import com.openyap.model.DictionaryEntry
 import com.openyap.model.EntrySource
 import com.openyap.model.HotkeyConfig
+import com.openyap.model.PrimaryUseCase
 import com.openyap.model.RecordingEntry
 import com.openyap.model.TranscriptionProvider
 import com.openyap.model.UserProfile
@@ -26,9 +27,12 @@ fun AppSettings.toEntity(): AppSettingsEntity = AppSettingsEntity(
     dismissedUpdateVersion = dismissedUpdateVersion,
     onboardingCompleted = onboardingCompleted,
     audioFeedbackEnabled = audioFeedbackEnabled,
+    soundFeedbackVolume = soundFeedbackVolume,
     startMinimized = startMinimized,
     launchOnStartup = launchOnStartup,
     audioDeviceId = audioDeviceId,
+    primaryUseCase = primaryUseCase.name,
+    useCaseContext = useCaseContext,
 )
 
 fun AppSettingsEntity.toDomain(): AppSettings = AppSettings(
@@ -50,9 +54,16 @@ fun AppSettingsEntity.toDomain(): AppSettings = AppSettings(
     dismissedUpdateVersion = dismissedUpdateVersion,
     onboardingCompleted = onboardingCompleted,
     audioFeedbackEnabled = audioFeedbackEnabled,
+    soundFeedbackVolume = soundFeedbackVolume,
     startMinimized = startMinimized,
     launchOnStartup = launchOnStartup,
     audioDeviceId = audioDeviceId,
+    primaryUseCase = try {
+        PrimaryUseCase.valueOf(primaryUseCase)
+    } catch (_: Exception) {
+        PrimaryUseCase.GENERAL
+    },
+    useCaseContext = useCaseContext,
 )
 
 // ── DictionaryEntry ─────────────────────────────────────────────────────────

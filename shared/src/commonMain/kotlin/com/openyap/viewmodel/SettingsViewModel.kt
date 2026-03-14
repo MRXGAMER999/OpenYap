@@ -31,6 +31,7 @@ data class SettingsUiState(
     val phraseExpansionEnabled: Boolean = false,
     val dictionaryEnabled: Boolean = true,
     val audioFeedbackEnabled: Boolean = true,
+    val soundFeedbackVolume: Float = 0.5f,
     val startMinimized: Boolean = false,
     val launchOnStartup: Boolean = false,
     val startupSupported: Boolean = false,
@@ -64,6 +65,7 @@ sealed interface SettingsEvent {
     data class TogglePhraseExpansion(val enabled: Boolean) : SettingsEvent
     data class ToggleDictionary(val enabled: Boolean) : SettingsEvent
     data class ToggleAudioFeedback(val enabled: Boolean) : SettingsEvent
+    data class SetSoundFeedbackVolume(val volume: Float) : SettingsEvent
     data class ToggleStartMinimized(val enabled: Boolean) : SettingsEvent
     data class ToggleLaunchOnStartup(val enabled: Boolean) : SettingsEvent
     data object ResetAppData : SettingsEvent
@@ -118,6 +120,7 @@ class SettingsViewModel(
                     phraseExpansionEnabled = settings.phraseExpansionEnabled,
                     dictionaryEnabled = settings.dictionaryEnabled,
                     audioFeedbackEnabled = settings.audioFeedbackEnabled,
+                    soundFeedbackVolume = settings.soundFeedbackVolume,
                     startMinimized = settings.startMinimized,
                     launchOnStartup = launchOnStartup,
                     startupSupported = startupManager.isSupported,
@@ -142,6 +145,7 @@ class SettingsViewModel(
             is SettingsEvent.TogglePhraseExpansion -> togglePhraseExpansion(event.enabled)
             is SettingsEvent.ToggleDictionary -> toggleDictionary(event.enabled)
             is SettingsEvent.ToggleAudioFeedback -> toggleAudioFeedback(event.enabled)
+            is SettingsEvent.SetSoundFeedbackVolume -> setSoundFeedbackVolume(event.volume)
             is SettingsEvent.ToggleStartMinimized -> toggleStartMinimized(event.enabled)
             is SettingsEvent.ToggleLaunchOnStartup -> toggleLaunchOnStartup(event.enabled)
             is SettingsEvent.ResetAppData -> resetAppData()
@@ -301,6 +305,15 @@ class SettingsViewModel(
         }
     }
 
+    private fun setSoundFeedbackVolume(volume: Float) {
+        val clamped = volume.coerceIn(0f, 1f)
+        viewModelScope.launch {
+            val settings = settingsRepository.loadSettings()
+            settingsRepository.saveSettings(settings.copy(soundFeedbackVolume = clamped))
+            _state.update { it.copy(soundFeedbackVolume = clamped) }
+        }
+    }
+
     private fun toggleDictionary(enabled: Boolean) {
         viewModelScope.launch {
             val settings = settingsRepository.loadSettings()
@@ -368,6 +381,7 @@ class SettingsViewModel(
                         phraseExpansionEnabled = defaults.phraseExpansionEnabled,
                         dictionaryEnabled = defaults.dictionaryEnabled,
                         audioFeedbackEnabled = defaults.audioFeedbackEnabled,
+                        soundFeedbackVolume = defaults.soundFeedbackVolume,
                         startMinimized = defaults.startMinimized,
                         launchOnStartup = defaults.launchOnStartup,
                         availableModels = emptyList(),

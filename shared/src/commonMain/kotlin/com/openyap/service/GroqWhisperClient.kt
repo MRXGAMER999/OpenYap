@@ -58,51 +58,73 @@ class GroqWhisperClient(private val client: HttpClient) : TranscriptionService {
     override suspend fun transcribe(
         audioBytes: ByteArray,
         mimeType: String,
-        systemPrompt: String, // ignored — Whisper is pure transcription
+        systemPrompt: String,
         apiKey: String,
         model: String,
+        whisperPrompt: String,
     ): String {
         val filename = mimeToFilename(mimeType)
 
-        val parts = listOf(
-            PartData.FileItem(
-                provider = { ByteReadChannel(audioBytes) },
-                dispose = {},
-                partHeaders = Headers.build {
-                    append(HttpHeaders.ContentDisposition, fileDisposition("file", filename))
-                    append(HttpHeaders.ContentType, mimeType)
-                    append(HttpHeaders.ContentLength, audioBytes.size.toString())
-                },
-            ),
-            PartData.FormItem(
-                value = model,
-                dispose = {},
-                partHeaders = Headers.build {
-                    append(HttpHeaders.ContentDisposition, fieldDisposition("model"))
-                },
-            ),
-            PartData.FormItem(
-                value = "json",
-                dispose = {},
-                partHeaders = Headers.build {
-                    append(HttpHeaders.ContentDisposition, fieldDisposition("response_format"))
-                },
-            ),
-            PartData.FormItem(
-                value = "en",
-                dispose = {},
-                partHeaders = Headers.build {
-                    append(HttpHeaders.ContentDisposition, fieldDisposition("language"))
-                },
-            ),
-            PartData.FormItem(
-                value = "0",
-                dispose = {},
-                partHeaders = Headers.build {
-                    append(HttpHeaders.ContentDisposition, fieldDisposition("temperature"))
-                },
-            ),
-        )
+        val parts = buildList {
+            add(
+                PartData.FileItem(
+                    provider = { ByteReadChannel(audioBytes) },
+                    dispose = {},
+                    partHeaders = Headers.build {
+                        append(HttpHeaders.ContentDisposition, fileDisposition("file", filename))
+                        append(HttpHeaders.ContentType, mimeType)
+                        append(HttpHeaders.ContentLength, audioBytes.size.toString())
+                    },
+                )
+            )
+            add(
+                PartData.FormItem(
+                    value = model,
+                    dispose = {},
+                    partHeaders = Headers.build {
+                        append(HttpHeaders.ContentDisposition, fieldDisposition("model"))
+                    },
+                )
+            )
+            add(
+                PartData.FormItem(
+                    value = "json",
+                    dispose = {},
+                    partHeaders = Headers.build {
+                        append(HttpHeaders.ContentDisposition, fieldDisposition("response_format"))
+                    },
+                )
+            )
+            add(
+                PartData.FormItem(
+                    value = "en",
+                    dispose = {},
+                    partHeaders = Headers.build {
+                        append(HttpHeaders.ContentDisposition, fieldDisposition("language"))
+                    },
+                )
+            )
+            add(
+                PartData.FormItem(
+                    value = "0",
+                    dispose = {},
+                    partHeaders = Headers.build {
+                        append(HttpHeaders.ContentDisposition, fieldDisposition("temperature"))
+                    },
+                )
+            )
+            if (whisperPrompt.isNotBlank()) {
+                add(
+                    PartData.FormItem(
+                        value = whisperPrompt,
+                        dispose = {},
+                        partHeaders = Headers.build {
+                            append(HttpHeaders.ContentDisposition, fieldDisposition("prompt"))
+                        },
+                    )
+                )
+            }
+        }
 
         val response = client.post("$BASE_URL/audio/transcriptions") {
             header(HttpHeaders.Authorization, "Bearer $apiKey")

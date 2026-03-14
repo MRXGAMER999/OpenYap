@@ -83,6 +83,7 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
         systemPrompt: String,
         apiKey: String,
         model: String,
+        whisperPrompt: String,
     ): String = processAudio(audioBytes, mimeType, systemPrompt, apiKey, model)
 
     suspend fun rewriteText(

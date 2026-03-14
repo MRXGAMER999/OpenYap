@@ -48,6 +48,7 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -529,6 +530,36 @@ fun SettingsScreen(
                     checked = state.audioFeedbackEnabled,
                     onCheckedChange = { onEvent(SettingsEvent.ToggleAudioFeedback(it)) },
                 )
+                AnimatedVisibility(visible = state.audioFeedbackEnabled) {
+                    Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "Tone volume",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                "${(state.soundFeedbackVolume * 100).toInt()}%",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Slider(
+                            value = state.soundFeedbackVolume,
+                            onValueChange = { onEvent(SettingsEvent.SetSoundFeedbackVolume(it)) },
+                            valueRange = 0f..1f,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text(
+                            "Adjust how loud the start and stop tones play.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 FeatureToggleRow(
                     label = "Start minimized to tray",
                     description = "Launch directly to the system tray without showing the main window.",

@@ -171,6 +171,11 @@ fun main() {
         var appTones by remember { mutableStateOf(emptyMap<String, String>()) }
         var appPrompts by remember { mutableStateOf(emptyMap<String, String>()) }
 
+        val settingsStateForVolume by settingsViewModel.state.collectAsState()
+        LaunchedEffect(settingsStateForVolume.soundFeedbackVolume) {
+            audioFeedbackService.setVolume(settingsStateForVolume.soundFeedbackVolume)
+        }
+
         var isVisible by remember { mutableStateOf(true) }
 
         LaunchedEffect(Unit) {
