@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.kotlinx.serialization)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.room3)
 }
 
 kotlin {
@@ -16,6 +18,8 @@ kotlin {
             implementation(libs.ktor.serialization.json)
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
+            implementation(libs.room3.runtime)
+            implementation(libs.sqlite.bundled)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -27,4 +31,12 @@ kotlin {
             implementation(libs.jna.platform)
         }
     }
+}
+
+dependencies {
+    add("kspJvm", libs.room3.compiler)
+}
+
+room3 {
+    schemaDirectory("$projectDir/schemas")
 }

@@ -60,6 +60,21 @@ namespace {
         return std::string(buffer);
     }
 
+    const char *hresult_name(HRESULT hr) {
+        switch (hr) {
+            case AUDCLNT_E_INVALID_STREAM_FLAG:
+                return "AUDCLNT_E_INVALID_STREAM_FLAG";
+            case AUDCLNT_E_UNSUPPORTED_FORMAT:
+                return "AUDCLNT_E_UNSUPPORTED_FORMAT";
+            case AUDCLNT_E_INVALID_DEVICE_PERIOD:
+                return "AUDCLNT_E_INVALID_DEVICE_PERIOD";
+            case AUDCLNT_E_DEVICE_IN_USE:
+                return "AUDCLNT_E_DEVICE_IN_USE";
+            default:
+                return nullptr;
+        }
+    }
+
     void close_handle(HANDLE &handle) {
         if (handle != nullptr) {
             CloseHandle(handle);
@@ -243,9 +258,7 @@ namespace {
         const UINT32 period = min_period_frames;
 
         hr = client3->InitializeSharedAudioStream(
-                AUDCLNT_STREAMFLAGS_EVENTCALLBACK |
-                        AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM |
-                        AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY,
+                AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
                 period,
                 format,
                 nullptr  // session GUID
@@ -508,8 +521,16 @@ namespace {
                 used_client3 = true;
                 audio_client_base = audio_client3;  // QI to IAudioClient via ComPtr assignment
             } else {
-                std::fprintf(stderr, "openyap_native: IAudioClient3 init failed (HRESULT=0x%08lX); "
-                        "falling back to IAudioClient2.\n", static_cast<unsigned long>(init_hr));
+                const char *init_name = hresult_name(init_hr);
+                if (init_name != nullptr) {
+                    std::fprintf(stderr, "openyap_native: IAudioClient3 init failed (%s, HRESULT=0x%08lX); "
+                            "falling back to IAudioClient2.\n",
+                            init_name,
+                            static_cast<unsigned long>(init_hr));
+                } else {
+                    std::fprintf(stderr, "openyap_native: IAudioClient3 init failed (HRESULT=0x%08lX); "
+                            "falling back to IAudioClient2.\n", static_cast<unsigned long>(init_hr));
+                }
                 // Release client3 — we need a fresh activation for client2
                 audio_client3.Reset();
             }

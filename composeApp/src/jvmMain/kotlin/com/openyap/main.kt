@@ -35,10 +35,11 @@ import com.openyap.platform.WindowsPasteAutomation
 import com.openyap.platform.WindowsPermissionManager
 import com.openyap.platform.WindowsStartupManager
 import com.openyap.platform.WindowsThemeHelper
-import com.openyap.repository.JvmDictionaryRepository
-import com.openyap.repository.JvmHistoryRepository
-import com.openyap.repository.JvmSettingsRepository
-import com.openyap.repository.JvmUserProfileRepository
+import com.openyap.database.createOpenYapDatabase
+import com.openyap.repository.RoomDictionaryRepository
+import com.openyap.repository.RoomHistoryRepository
+import com.openyap.repository.RoomSettingsRepository
+import com.openyap.repository.RoomUserProfileRepository
 import com.openyap.service.DictionaryEngine
 import com.openyap.ui.navigation.AppShell
 import com.openyap.ui.navigation.Route
@@ -65,10 +66,14 @@ fun main() {
 
     application {
         val secureStorage = remember { WindowsCredentialStorage() }
-        val settingsRepo = remember { JvmSettingsRepository(secureStorage, PlatformInit.dataDir) }
-        val historyRepo = remember { JvmHistoryRepository(PlatformInit.dataDir) }
-        val dictionaryRepo = remember { JvmDictionaryRepository(PlatformInit.dataDir) }
-        val userProfileRepo = remember { JvmUserProfileRepository(PlatformInit.dataDir) }
+        val database = remember {
+            val dbPath = PlatformInit.dataDir.resolve("openyap.db").toString()
+            createOpenYapDatabase(dbPath)
+        }
+        val settingsRepo = remember { RoomSettingsRepository(database, secureStorage) }
+        val historyRepo = remember { RoomHistoryRepository(database) }
+        val dictionaryRepo = remember { RoomDictionaryRepository(database) }
+        val userProfileRepo = remember { RoomUserProfileRepository(database) }
         val hotkeyManager = remember { WindowsHotkeyManager() }
         val audioPipeline = remember {
             val nativeAudio = NativeAudioBridge.instance
