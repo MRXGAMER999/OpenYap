@@ -20,6 +20,7 @@ interface TranscriptionService {
      * @param systemPrompt system prompt for rewriting — ignored by providers that do raw transcription only
      * @param apiKey provider API key
      * @param model model identifier (e.g. "gemini-2.5-flash", "whisper-large-v3")
+     * @param whisperPrompt vocabulary-guidance prompt for Whisper-based providers (max 224 tokens)
      */
     suspend fun transcribe(
         audioBytes: ByteArray,
@@ -27,6 +28,7 @@ interface TranscriptionService {
         systemPrompt: String,
         apiKey: String,
         model: String,
+        whisperPrompt: String = "",
     ): String
 
     /**

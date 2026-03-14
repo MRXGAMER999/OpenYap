@@ -24,6 +24,7 @@ import com.openyap.service.GeminiClient
 import com.openyap.service.PhraseExpansionEngine
 import com.openyap.service.PromptBuilder
 import com.openyap.service.TranscriptionService
+import com.openyap.service.WhisperPromptBuilder
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -363,6 +364,11 @@ class RecordingViewModel(
                     targetApp = targetApp,
                     customPrompt = customPrompt,
                     genZ = settings.genZEnabled,
+                    useCaseContext = settings.useCaseContext,
+                )
+                val whisperPrompt = WhisperPromptBuilder.build(
+                    useCase = settings.primaryUseCase,
+                    context = settings.useCaseContext,
                 )
 
                 val response = when (settings.transcriptionProvider) {
@@ -380,9 +386,10 @@ class RecordingViewModel(
                         groqWhisperClient.transcribe(
                             audioBytes = audioBytes,
                             mimeType = audioMimeType,
-                            systemPrompt = "", // ignored by Whisper
+                            systemPrompt = "",
                             apiKey = groqApiKey!!,
                             model = settings.groqModel,
+                            whisperPrompt = whisperPrompt,
                         )
                     }
 
@@ -390,9 +397,10 @@ class RecordingViewModel(
                         val transcript = groqWhisperClient.transcribe(
                             audioBytes = audioBytes,
                             mimeType = audioMimeType,
-                            systemPrompt = "", // ignored by Whisper
+                            systemPrompt = "",
                             apiKey = groqApiKey!!,
                             model = settings.groqModel,
+                            whisperPrompt = whisperPrompt,
                         )
                         geminiClient.rewriteText(
                             text = transcript,

@@ -3,6 +3,7 @@ package com.openyap.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.openyap.model.PermissionStatus
+import com.openyap.model.PrimaryUseCase
 import com.openyap.platform.PermissionManager
 import com.openyap.repository.SettingsRepository
 import com.openyap.service.GeminiClient
@@ -23,6 +24,8 @@ data class OnboardingUiState(
     val selectedModel: String = "",
     val isLoadingModels: Boolean = false,
     val modelsFetchError: String? = null,
+    val primaryUseCase: PrimaryUseCase = PrimaryUseCase.GENERAL,
+    val useCaseContext: String = "",
 )
 
 sealed interface OnboardingEvent {
@@ -31,6 +34,8 @@ sealed interface OnboardingEvent {
     data class SaveApiKey(val key: String) : OnboardingEvent
     data class SelectModel(val modelId: String) : OnboardingEvent
     data object RetryModelFetch : OnboardingEvent
+    data class SelectUseCase(val useCase: PrimaryUseCase) : OnboardingEvent
+    data class SaveUseCaseContext(val context: String) : OnboardingEvent
     data object CompleteOnboarding : OnboardingEvent
 }
 
@@ -60,6 +65,8 @@ class OnboardingViewModel(
                     isComplete = settings.onboardingCompleted,
                     currentStep = computeStep(micPerm, apiKey),
                     selectedModel = settings.geminiModel,
+                    primaryUseCase = settings.primaryUseCase,
+                    useCaseContext = settings.useCaseContext,
                 )
             }
             if (apiKey.isNotBlank()) fetchModels(apiKey)
@@ -73,6 +80,8 @@ class OnboardingViewModel(
             is OnboardingEvent.SaveApiKey -> saveApiKey(event.key)
             is OnboardingEvent.SelectModel -> selectModel(event.modelId)
             is OnboardingEvent.RetryModelFetch -> retryModelFetch()
+            is OnboardingEvent.SelectUseCase -> selectUseCase(event.useCase)
+            is OnboardingEvent.SaveUseCaseContext -> saveUseCaseContext(event.context)
             is OnboardingEvent.CompleteOnboarding -> completeOnboarding()
         }
     }
@@ -126,6 +135,22 @@ class OnboardingViewModel(
                     modelsFetchError = e.message ?: "Failed to fetch models",
                 )
             }
+        }
+    }
+
+    private fun selectUseCase(useCase: PrimaryUseCase) {
+        viewModelScope.launch {
+            val settings = settingsRepository.loadSettings()
+            settingsRepository.saveSettings(settings.copy(primaryUseCase = useCase))
+            _state.update { it.copy(primaryUseCase = useCase) }
+        }
+    }
+
+    private fun saveUseCaseContext(context: String) {
+        viewModelScope.launch {
+            val settings = settingsRepository.loadSettings()
+            settingsRepository.saveSettings(settings.copy(useCaseContext = context))
+            _state.update { it.copy(useCaseContext = context) }
         }
     }
 

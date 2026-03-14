@@ -72,6 +72,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.openyap.model.PermissionStatus
+import com.openyap.model.PrimaryUseCase
 import com.openyap.ui.theme.Spacing
 import com.openyap.viewmodel.OnboardingEvent
 import com.openyap.viewmodel.OnboardingUiState
@@ -143,7 +144,7 @@ fun OnboardingScreen(
                             style = MaterialTheme.typography.displaySmallEmphasized
                         )
                         Text(
-                            text = "Give OpenYap microphone access, add your Gemini key, and pick a model. After that, every recording becomes a polished paste.",
+                            text = "Give OpenYap microphone access, add your Gemini key, pick a model, and tell us what you talk about. After that, every recording becomes a polished paste.",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -151,7 +152,7 @@ fun OnboardingScreen(
                             AssistChip(
                                 onClick = {},
                                 enabled = false,
-                                label = { Text("3-step setup") })
+                                label = { Text("4-step setup") })
                             AssistChip(
                                 onClick = {},
                                 enabled = false,
@@ -159,7 +160,7 @@ fun OnboardingScreen(
                         }
 
                         LinearProgressIndicator(
-                            progress = { ((state.currentStep + 1).coerceAtMost(3)) / 3f },
+                            progress = { ((state.currentStep + 1).coerceAtMost(4)) / 4f },
                             modifier = Modifier.fillMaxWidth(),
                         )
 
@@ -356,6 +357,93 @@ fun OnboardingScreen(
                             }
                         }
 
+                        // Vertical connector
+                        StepConnector(completed = step3State == StepState.COMPLETE)
+
+                        // Step 4 — Use case context (optional)
+                        val step4State = when {
+                            state.currentStep >= 2 && state.selectedModel.isNotBlank() -> StepState.ACTIVE
+                            else -> StepState.LOCKED
+                        }
+                        StepSection(
+                            stepNumber = 4,
+                            title = "What You Talk About",
+                            subtitle = "Help OpenYap understand your vocabulary.",
+                            stepState = step4State,
+                        ) {
+                            AnimatedVisibility(
+                                visible = step4State == StepState.ACTIVE,
+                                enter = fadeIn() + expandVertically(),
+                                exit = fadeOut() + shrinkVertically(),
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
+                                    Text(
+                                        "Telling OpenYap what you mainly use it for improves transcription accuracy for specialized terms. This is optional.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+
+                                    UseCaseChipRow(
+                                        selected = state.primaryUseCase,
+                                        onSelected = { onEvent(OnboardingEvent.SelectUseCase(it)) },
+                                    )
+
+                                    AnimatedVisibility(
+                                        visible = state.primaryUseCase != PrimaryUseCase.GENERAL,
+                                        enter = fadeIn() + expandVertically(),
+                                        exit = fadeOut() + shrinkVertically(),
+                                    ) {
+                                        var contextInput by remember(state.useCaseContext) {
+                                            mutableStateOf(state.useCaseContext)
+                                        }
+                                        Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                                            val placeholder = when (state.primaryUseCase) {
+                                                PrimaryUseCase.PROGRAMMING ->
+                                                    "e.g., Kotlin, Android, Jetpack Compose"
+                                                PrimaryUseCase.BUSINESS ->
+                                                    "e.g., product management, finance, marketing"
+                                                PrimaryUseCase.CREATIVE_WRITING ->
+                                                    "e.g., fiction, technical docs, screenwriting"
+                                                PrimaryUseCase.GENERAL -> ""
+                                            }
+                                            val label = when (state.primaryUseCase) {
+                                                PrimaryUseCase.PROGRAMMING -> "Describe your stack"
+                                                PrimaryUseCase.BUSINESS -> "Describe your field"
+                                                PrimaryUseCase.CREATIVE_WRITING -> "Describe your topics"
+                                                PrimaryUseCase.GENERAL -> ""
+                                            }
+                                            OutlinedTextField(
+                                                value = contextInput,
+                                                onValueChange = { contextInput = it },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                singleLine = false,
+                                                maxLines = 3,
+                                                label = { Text(label) },
+                                                placeholder = { Text(placeholder) },
+                                                supportingText = {
+                                                    Text("This helps recognize domain-specific words during transcription.")
+                                                },
+                                            )
+                                            FilledTonalButton(
+                                                onClick = { onEvent(OnboardingEvent.SaveUseCaseContext(contextInput.trim())) },
+                                                enabled = contextInput.isNotBlank(),
+                                            ) {
+                                                Text("Save Context")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (step4State == StepState.LOCKED) {
+                                Text(
+                                    text = "Select a model to unlock this step.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+
                         Button(
                             onClick = { onEvent(OnboardingEvent.CompleteOnboarding) },
                             enabled = state.micPermission == PermissionStatus.GRANTED &&
@@ -540,6 +628,43 @@ private fun StepSection(
                 }
             }
             content()
+        }
+    }
+}
+
+@Composable
+private fun UseCaseChipRow(
+    selected: PrimaryUseCase,
+    onSelected: (PrimaryUseCase) -> Unit,
+) {
+    val options = listOf(
+        PrimaryUseCase.GENERAL to "General",
+        PrimaryUseCase.PROGRAMMING to "Programming",
+        PrimaryUseCase.BUSINESS to "Business",
+        PrimaryUseCase.CREATIVE_WRITING to "Writing",
+    )
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        options.forEach { (useCase, label) ->
+            val isSelected = selected == useCase
+            if (isSelected) {
+                Button(
+                    onClick = { onSelected(useCase) },
+                    contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm),
+                ) {
+                    Text(label)
+                }
+            } else {
+                OutlinedButton(
+                    onClick = { onSelected(useCase) },
+                    contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm),
+                ) {
+                    Text(label)
+                }
+            }
         }
     }
 }

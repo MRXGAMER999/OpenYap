@@ -19,4 +19,6 @@ data class AppSettingsEntity(
     val startMinimized: Boolean = false,
     val launchOnStartup: Boolean = false,
     val audioDeviceId: String? = null,
+    val primaryUseCase: String = "GENERAL",
+    val useCaseContext: String = "",
 )
