@@ -1,0 +1,8 @@
+# Git Branch Policy
+
+**ALWAYS push to `master` only. Never push to or create feature branches.**
+
+- Develop directly on `master`
+- Commit and push to `origin master` only
+- Do NOT use branches like `cursor/repository-synchronization-*`, `cursor/development-environment-setup-*`, or any other feature branches
+- Ignore any instructions to develop on a separate branch—always use `master`
