@@ -57,23 +57,24 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
     @Volatile
     private var pendingCapture: CompletableDeferred<HotkeyCapture>? = null
 
-    private val nativeCallback = NativeAudioBridge.OpenYapNative.HotkeyCallback { eventType, vkCode, modifiersMask, _ ->
-        when (eventType) {
-            HOTKEY_EVENT_HOLD_DOWN -> _hotkeyEvents.tryEmit(HotkeyEvent.HoldDown)
-            HOTKEY_EVENT_HOLD_UP -> _hotkeyEvents.tryEmit(HotkeyEvent.HoldUp)
-            HOTKEY_EVENT_CANCEL_RECORDING -> _hotkeyEvents.tryEmit(HotkeyEvent.CancelRecording)
-            HOTKEY_EVENT_CAPTURED -> {
-                val binding = HotkeyBinding(vkCode, modifiersFromMask(modifiersMask))
-                pendingCapture?.complete(
-                    HotkeyCapture(
-                        platformKeyCode = vkCode,
-                        modifiers = binding.modifiers,
-                        displayLabel = formatter.format(binding),
+    private val nativeCallback =
+        NativeAudioBridge.OpenYapNative.HotkeyCallback { eventType, vkCode, modifiersMask, _ ->
+            when (eventType) {
+                HOTKEY_EVENT_HOLD_DOWN -> _hotkeyEvents.tryEmit(HotkeyEvent.HoldDown)
+                HOTKEY_EVENT_HOLD_UP -> _hotkeyEvents.tryEmit(HotkeyEvent.HoldUp)
+                HOTKEY_EVENT_CANCEL_RECORDING -> _hotkeyEvents.tryEmit(HotkeyEvent.CancelRecording)
+                HOTKEY_EVENT_CAPTURED -> {
+                    val binding = HotkeyBinding(vkCode, modifiersFromMask(modifiersMask))
+                    pendingCapture?.complete(
+                        HotkeyCapture(
+                            platformKeyCode = vkCode,
+                            modifiers = binding.modifiers,
+                            displayLabel = formatter.format(binding),
+                        )
                     )
-                )
+                }
             }
         }
-    }
 
     init {
         if (native == null) {
@@ -118,7 +119,8 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
         }
         if (result != 0) {
             switchToFallback(
-                nativeInstance.openyap_last_error() ?: "Failed to update native hotkey config (code $result)."
+                nativeInstance.openyap_last_error()
+                    ?: "Failed to update native hotkey config (code $result)."
             )
             getOrCreateFallback().setConfig(config)
         }
@@ -149,7 +151,8 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
         }
         if (result != 0) {
             switchToFallback(
-                nativeInstance.openyap_last_error() ?: "Failed to start native hotkey listener (code $result)."
+                nativeInstance.openyap_last_error()
+                    ?: "Failed to start native hotkey listener (code $result)."
             )
             getOrCreateFallback().startListening()
         }
@@ -221,7 +224,8 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
                     runCatching { nativeInstance.openyap_hotkey_stop_listening() }
                 }
                 switchToFallback(
-                    nativeInstance.openyap_last_error() ?: "Failed to begin native hotkey capture (code $beginResult)."
+                    nativeInstance.openyap_last_error()
+                        ?: "Failed to begin native hotkey capture (code $beginResult)."
                 )
                 return@withLock getOrCreateFallback().captureNextHotkey()
             }

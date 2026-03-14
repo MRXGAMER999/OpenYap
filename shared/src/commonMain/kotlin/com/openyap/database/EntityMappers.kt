@@ -3,9 +3,7 @@ package com.openyap.database
 import com.openyap.model.AppSettings
 import com.openyap.model.DictionaryEntry
 import com.openyap.model.EntrySource
-import com.openyap.model.HotkeyBinding
 import com.openyap.model.HotkeyConfig
-import com.openyap.model.HotkeyModifier
 import com.openyap.model.RecordingEntry
 import com.openyap.model.TranscriptionProvider
 import com.openyap.model.UserProfile

@@ -56,7 +56,11 @@ class WindowsStartupManager(
                 allowFailure = true,
             )
 
-            if (result.exitCode != 0 && !result.output.contains("unable to find", ignoreCase = true)) {
+            if (result.exitCode != 0 && !result.output.contains(
+                    "unable to find",
+                    ignoreCase = true
+                )
+            ) {
                 error(result.output.ifBlank { "Failed to remove startup entry." })
             }
         }

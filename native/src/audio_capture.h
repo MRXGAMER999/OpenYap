@@ -13,10 +13,10 @@ namespace openyap::capture {
         bool is_default;
     };
 
-    int list_devices(std::vector<DeviceInfo> *devices, std::string *error);
+    int list_devices(std::vector <DeviceInfo> *devices, std::string *error);
 
     int start(int sample_rate, int channels, audio_callback_t callback, void *user_data,
-              const char *device_id, std::string *error);
+            const char *device_id, std::string *error);
 
     int stop(bool *device_disconnected, std::string *error);
 

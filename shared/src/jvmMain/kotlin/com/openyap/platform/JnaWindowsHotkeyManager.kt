@@ -25,11 +25,11 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.newSingleThreadContext
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.runBlocking
 import java.io.Closeable
 
 private const val WH_KEYBOARD_LL = 13
@@ -191,7 +191,7 @@ internal class JnaWindowsHotkeyManager : HotkeyManager, Closeable {
             isModifierPartOfBinding(vkCode, binding) && comboModifiers(binding) == currentModifiers
         } else {
             vkCode == binding.platformKeyCode &&
-                effectiveModifiersForKey(vkCode, currentModifiers) == binding.modifiers
+                    effectiveModifiersForKey(vkCode, currentModifiers) == binding.modifiers
         }
     }
 

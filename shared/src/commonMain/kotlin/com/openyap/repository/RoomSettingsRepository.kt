@@ -1,12 +1,12 @@
 package com.openyap.repository
 
+import com.openyap.database.AppPromptEntity
+import com.openyap.database.AppToneEntity
 import com.openyap.database.OpenYapDatabase
 import com.openyap.database.toDomain
 import com.openyap.database.toEntity
 import com.openyap.model.AppSettings
 import com.openyap.platform.SecureStorage
-import com.openyap.database.AppToneEntity
-import com.openyap.database.AppPromptEntity
 
 class RoomSettingsRepository(
     private val database: OpenYapDatabase,

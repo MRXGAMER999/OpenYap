@@ -1,17 +1,12 @@
 package com.openyap.ui.screen
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
@@ -29,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -43,8 +39,8 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
@@ -67,13 +63,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import com.openyap.ui.theme.Spacing
 import com.openyap.model.AudioDevice
 import com.openyap.model.TranscriptionProvider
+import com.openyap.ui.theme.Spacing
 import com.openyap.viewmodel.SettingsEvent
 import com.openyap.viewmodel.SettingsUiState
 
@@ -197,7 +192,10 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp
+                        )
                         Text(
                             "Loading audio devices...",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -335,7 +333,10 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.spacedBy(Spacing.md),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
                             Text(
                                 "Loading available models...",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -356,7 +357,11 @@ fun SettingsScreen(
                                     color = MaterialTheme.colorScheme.onErrorContainer,
                                     style = MaterialTheme.typography.bodySmall,
                                 )
-                                TextButton(onClick = { onEvent(SettingsEvent.RefreshModels) }) { Text("Retry") }
+                                TextButton(onClick = { onEvent(SettingsEvent.RefreshModels) }) {
+                                    Text(
+                                        "Retry"
+                                    )
+                                }
                             }
                         }
                     }
@@ -418,7 +423,10 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.spacedBy(Spacing.md),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
                             Text(
                                 "Loading available Gemini models...",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -439,7 +447,11 @@ fun SettingsScreen(
                                     color = MaterialTheme.colorScheme.onErrorContainer,
                                     style = MaterialTheme.typography.bodySmall,
                                 )
-                                TextButton(onClick = { onEvent(SettingsEvent.RefreshModels) }) { Text("Retry") }
+                                TextButton(onClick = { onEvent(SettingsEvent.RefreshModels) }) {
+                                    Text(
+                                        "Retry"
+                                    )
+                                }
                             }
                         }
                     }
@@ -792,7 +804,8 @@ private fun ProviderDropdown(
         TranscriptionProvider.GROQ_WHISPER_GEMINI to "Groq + Gemini (Context Correction)",
     )
     var expanded by remember { mutableStateOf(false) }
-    val selectedLabel = providers.firstOrNull { it.first == selectedProvider }?.second ?: selectedProvider.name
+    val selectedLabel =
+        providers.firstOrNull { it.first == selectedProvider }?.second ?: selectedProvider.name
 
     ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
         OutlinedTextField(

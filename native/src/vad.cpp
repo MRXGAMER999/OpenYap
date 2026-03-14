@@ -44,7 +44,7 @@ namespace openyap::vad {
     }
 
     void reset() {
-        std::lock_guard<std::mutex> lock(g_vad_mutex);
+        std::lock_guard <std::mutex> lock(g_vad_mutex);
         g_noise_floor = 0.0;
         g_noise_floor_initialized = false;
     }

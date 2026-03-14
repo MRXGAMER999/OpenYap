@@ -1,10 +1,10 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
-import java.io.File
 
 fun File.asJdkHomeCandidate(): File =
     if (name.equals("bin", ignoreCase = true)) parentFile ?: this else this
 
-fun File.hasJPackage(): Boolean = resolve("bin/jpackage.exe").exists() || resolve("bin/jpackage").exists()
+fun File.hasJPackage(): Boolean =
+    resolve("bin/jpackage.exe").exists() || resolve("bin/jpackage").exists()
 
 fun resolvePackagingJavaHome(): String {
     val explicitCandidates = listOfNotNull(

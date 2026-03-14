@@ -149,19 +149,36 @@ namespace {
             return count;
         }
 
-        STDMETHODIMP OnDisplayNameChanged(LPCWSTR, LPCGUID) override { return S_OK; }
-        STDMETHODIMP OnIconPathChanged(LPCWSTR, LPCGUID) override { return S_OK; }
-        STDMETHODIMP OnSimpleVolumeChanged(float, BOOL, LPCGUID) override { return S_OK; }
-        STDMETHODIMP OnChannelVolumeChanged(DWORD, float[], DWORD, LPCGUID) override { return S_OK; }
-        STDMETHODIMP OnGroupingParamChanged(LPCGUID, LPCGUID) override { return S_OK; }
-        STDMETHODIMP OnStateChanged(AudioSessionState) override { return S_OK; }
+        STDMETHODIMP OnDisplayNameChanged(LPCWSTR, LPCGUID) override {
+            return S_OK;
+        }
+
+        STDMETHODIMP OnIconPathChanged(LPCWSTR, LPCGUID) override {
+            return S_OK;
+        }
+
+        STDMETHODIMP OnSimpleVolumeChanged(float, BOOL, LPCGUID) override {
+            return S_OK;
+        }
+
+        STDMETHODIMP OnChannelVolumeChanged(DWORD, float[], DWORD, LPCGUID) override {
+            return S_OK;
+        }
+
+        STDMETHODIMP OnGroupingParamChanged(LPCGUID, LPCGUID) override {
+            return S_OK;
+        }
+
+        STDMETHODIMP OnStateChanged(AudioSessionState) override {
+            return S_OK;
+        }
 
         STDMETHODIMP OnSessionDisconnected(AudioSessionDisconnectReason reason) override {
             if (disconnected_ != nullptr) {
                 disconnected_->store(true);
             }
             if (disconnect_message_ != nullptr && disconnect_mutex_ != nullptr) {
-                std::lock_guard<std::mutex> lock(*disconnect_mutex_);
+                std::lock_guard <std::mutex> lock(*disconnect_mutex_);
                 *disconnect_message_ = disconnect_reason_message(reason);
             }
             if (wake_event_ != nullptr) {
@@ -201,13 +218,13 @@ namespace {
     CaptureContext g_capture;
 
     void store_disconnect_message(const std::string &message) {
-        std::lock_guard<std::mutex> lock(g_capture.mutex);
+        std::lock_guard <std::mutex> lock(g_capture.mutex);
         g_capture.disconnect_message = message;
     }
 
     void set_start_failure(int code, std::string message) {
         {
-            std::lock_guard<std::mutex> lock(g_capture.mutex);
+            std::lock_guard <std::mutex> lock(g_capture.mutex);
             g_capture.start_result = code;
             g_capture.start_error = std::move(message);
         }
@@ -284,11 +301,11 @@ namespace {
     // AUDIO_EFFECT_TYPE_DEEP_NOISE_SUPPRESSION if available.
 
     void try_enable_deep_noise_suppression(IAudioClient *client) {
-        ComPtr<IAudioEffectsManager> effects_manager;
+        ComPtr <IAudioEffectsManager> effects_manager;
         HRESULT hr = client->GetService(IID_PPV_ARGS(&effects_manager));
         if (FAILED(hr)) {
             std::fprintf(stderr, "openyap_native: IAudioEffectsManager not available (HRESULT=0x%08lX); "
-                    "deep noise suppression cannot be managed.\n", static_cast<unsigned long>(hr));
+                                 "deep noise suppression cannot be managed.\n", static_cast<unsigned long>(hr));
             return;
         }
 
@@ -314,7 +331,7 @@ namespace {
                         std::fprintf(stderr, "openyap_native: deep noise suppression enabled.\n");
                     } else {
                         std::fprintf(stderr, "openyap_native: failed to enable deep noise suppression "
-                                "(HRESULT=0x%08lX).\n", static_cast<unsigned long>(set_hr));
+                                             "(HRESULT=0x%08lX).\n", static_cast<unsigned long>(set_hr));
                     }
                 } else {
                     std::fprintf(stderr, "openyap_native: deep noise suppression present but state is read-only.\n");
@@ -340,16 +357,16 @@ namespace {
     // builds or endpoints that don't expose controllable AEC.
 
     void try_configure_echo_cancellation(IAudioClient *client) {
-        ComPtr<IAcousticEchoCancellationControl> aec_control;
+        ComPtr <IAcousticEchoCancellationControl> aec_control;
         HRESULT hr = client->GetService(IID_PPV_ARGS(&aec_control));
         if (hr == E_NOINTERFACE) {
             std::fprintf(stderr, "openyap_native: IAcousticEchoCancellationControl not available; "
-                    "endpoint does not expose controllable AEC.\n");
+                                 "endpoint does not expose controllable AEC.\n");
             return;
         }
         if (FAILED(hr)) {
             std::fprintf(stderr, "openyap_native: IAcousticEchoCancellationControl query failed "
-                    "(HRESULT=0x%08lX).\n", static_cast<unsigned long>(hr));
+                                 "(HRESULT=0x%08lX).\n", static_cast<unsigned long>(hr));
             return;
         }
 
@@ -359,7 +376,7 @@ namespace {
             std::fprintf(stderr, "openyap_native: AEC reference set to Windows auto-selected render endpoint.\n");
         } else {
             std::fprintf(stderr, "openyap_native: SetEchoCancellationRenderEndpoint failed "
-                    "(HRESULT=0x%08lX).\n", static_cast<unsigned long>(hr));
+                                 "(HRESULT=0x%08lX).\n", static_cast<unsigned long>(hr));
         }
     }
 
@@ -387,11 +404,15 @@ namespace {
             return E_NOINTERFACE;
         }
 
-        STDMETHODIMP_(ULONG) AddRef() override {
+        STDMETHODIMP_(ULONG)
+
+        AddRef() override {
             return static_cast<ULONG>(InterlockedIncrement(&ref_count_));
         }
 
-        STDMETHODIMP_(ULONG) Release() override {
+        STDMETHODIMP_(ULONG)
+
+        Release() override {
             const ULONG count = static_cast<ULONG>(InterlockedDecrement(&ref_count_));
             if (count == 0) delete this;
             return count;
@@ -401,7 +422,7 @@ namespace {
             // Re-query effects and re-enable deep noise suppression if it got turned off
             if (client_ == nullptr) return S_OK;
 
-            ComPtr<IAudioEffectsManager> mgr;
+            ComPtr <IAudioEffectsManager> mgr;
             HRESULT hr = client_->GetService(IID_PPV_ARGS(&mgr));
             if (FAILED(hr)) return S_OK;
 
@@ -418,9 +439,9 @@ namespace {
                         if (SUCCEEDED(set_hr)) {
                             std::fprintf(stderr, "openyap_native: effects changed — re-enabled deep noise suppression.\n");
                         } else if (set_hr != AUDCLNT_E_EFFECT_NOT_AVAILABLE &&
-                                   set_hr != AUDCLNT_E_EFFECT_STATE_READ_ONLY) {
+                                set_hr != AUDCLNT_E_EFFECT_STATE_READ_ONLY) {
                             std::fprintf(stderr, "openyap_native: effects changed — failed to re-enable "
-                                    "deep noise suppression (HRESULT=0x%08lX).\n",
+                                                 "deep noise suppression (HRESULT=0x%08lX).\n",
                                     static_cast<unsigned long>(set_hr));
                         }
                     }
@@ -450,12 +471,12 @@ namespace {
         // Read device_id from context (set by start() before spawning the thread)
         std::string device_id;
         {
-            std::lock_guard<std::mutex> lock(g_capture.mutex);
+            std::lock_guard <std::mutex> lock(g_capture.mutex);
             device_id = g_capture.device_id;
         }
 
         // ── Create enumerator ────────────────────────────────────────────
-        ComPtr<IMMDeviceEnumerator> enumerator;
+        ComPtr <IMMDeviceEnumerator> enumerator;
         HRESULT hr = CoCreateInstance(
                 __uuidof(MMDeviceEnumerator),
                 nullptr,
@@ -469,7 +490,7 @@ namespace {
         }
 
         // ── Resolve device (Phase 3a: device selection) ──────────────────
-        ComPtr<IMMDevice> device;
+        ComPtr <IMMDevice> device;
         hr = resolve_device(enumerator.Get(), device_id, &device);
         if (hr == E_NOTFOUND) {
             const std::string msg = device_id.empty()
@@ -496,9 +517,9 @@ namespace {
         target_format.cbSize = 0;
 
         // ── Phase 1: Try IAudioClient3 low-latency first ─────────────────
-        ComPtr<IAudioClient3> audio_client3;
-        ComPtr<IAudioClient2> audio_client2;
-        ComPtr<IAudioClient> audio_client_base;
+        ComPtr <IAudioClient3> audio_client3;
+        ComPtr <IAudioClient2> audio_client2;
+        ComPtr <IAudioClient> audio_client_base;
         bool used_client3 = false;
 
         hr = device->Activate(__uuidof(IAudioClient3), CLSCTX_ALL, nullptr,
@@ -507,7 +528,7 @@ namespace {
             // Apply communications category hint BEFORE initialization
             std::string diagnostics;
             // IAudioClient3 inherits from IAudioClient2; we can QI for it
-            ComPtr<IAudioClient2> client2_for_props;
+            ComPtr <IAudioClient2> client2_for_props;
             if (SUCCEEDED(audio_client3.As(&client2_for_props))) {
                 openyap::noise::configure_communications_mode(client2_for_props.Get(), device.Get(), &diagnostics);
                 if (!diagnostics.empty()) {
@@ -524,12 +545,12 @@ namespace {
                 const char *init_name = hresult_name(init_hr);
                 if (init_name != nullptr) {
                     std::fprintf(stderr, "openyap_native: IAudioClient3 init failed (%s, HRESULT=0x%08lX); "
-                            "falling back to IAudioClient2.\n",
+                                         "falling back to IAudioClient2.\n",
                             init_name,
                             static_cast<unsigned long>(init_hr));
                 } else {
                     std::fprintf(stderr, "openyap_native: IAudioClient3 init failed (HRESULT=0x%08lX); "
-                            "falling back to IAudioClient2.\n", static_cast<unsigned long>(init_hr));
+                                         "falling back to IAudioClient2.\n", static_cast<unsigned long>(init_hr));
                 }
                 // Release client3 — we need a fresh activation for client2
                 audio_client3.Reset();
@@ -552,7 +573,8 @@ namespace {
                 std::fprintf(stderr, "openyap_native: %s\n", diagnostics.c_str());
             }
 
-            constexpr REFERENCE_TIME buffer_duration = 200000;  // 20 ms
+            constexpr
+            REFERENCE_TIME buffer_duration = 200000;  // 20 ms
             hr = audio_client2->Initialize(
                     AUDCLNT_SHAREMODE_SHARED,
                     AUDCLNT_STREAMFLAGS_EVENTCALLBACK |
@@ -587,7 +609,7 @@ namespace {
         try_configure_echo_cancellation(audio_client_base.Get());
 
         // ── Phase 5: Register effects change monitoring ──────────────────
-        ComPtr<IAudioEffectsManager> effects_manager_for_monitor;
+        ComPtr <IAudioEffectsManager> effects_manager_for_monitor;
         EffectsChangedHandler *effects_handler = nullptr;
         {
             HRESULT em_hr = audio_client_base->GetService(IID_PPV_ARGS(&effects_manager_for_monitor));
@@ -599,7 +621,7 @@ namespace {
                     std::fprintf(stderr, "openyap_native: audio effects change monitoring registered.\n");
                 } else {
                     std::fprintf(stderr, "openyap_native: failed to register effects change callback "
-                            "(HRESULT=0x%08lX).\n", static_cast<unsigned long>(reg_hr));
+                                         "(HRESULT=0x%08lX).\n", static_cast<unsigned long>(reg_hr));
                     effects_handler->Release();
                     effects_handler = nullptr;
                 }
@@ -607,7 +629,7 @@ namespace {
         }
 
         // ── Get capture client ───────────────────────────────────────────
-        ComPtr<IAudioCaptureClient> capture_client;
+        ComPtr <IAudioCaptureClient> capture_client;
         hr = audio_client_base->GetService(__uuidof(IAudioCaptureClient),
                 reinterpret_cast<void **>(capture_client.GetAddressOf()));
         if (FAILED(hr)) {
@@ -621,7 +643,7 @@ namespace {
         }
 
         // ── Register session disconnect notifications ────────────────────
-        ComPtr<IAudioSessionControl> session_control;
+        ComPtr <IAudioSessionControl> session_control;
         hr = audio_client_base->GetService(__uuidof(IAudioSessionControl),
                 reinterpret_cast<void **>(session_control.GetAddressOf()));
         SessionDisconnectEvents *session_events = nullptr;
@@ -659,7 +681,7 @@ namespace {
 
         // ── Signal success ───────────────────────────────────────────────
         {
-            std::lock_guard<std::mutex> lock(g_capture.mutex);
+            std::lock_guard <std::mutex> lock(g_capture.mutex);
             g_capture.start_result = 0;
             g_capture.start_error.clear();
         }
@@ -758,7 +780,7 @@ namespace {
         }
 
         {
-            std::lock_guard<std::mutex> lock(g_capture.mutex);
+            std::lock_guard <std::mutex> lock(g_capture.mutex);
             g_capture.active.store(false);
             g_capture.disconnect_result_pending = disconnect_detected || g_capture.device_disconnected.load();
             if (capture_failed && g_capture.disconnect_message.empty()) {
@@ -780,7 +802,7 @@ namespace openyap::capture {
 
     // ── Phase 3a: Device enumeration ─────────────────────────────────────
 
-    int list_devices(std::vector<DeviceInfo> *devices, std::string *error) {
+    int list_devices(std::vector <DeviceInfo> *devices, std::string *error) {
         if (devices == nullptr) {
             if (error != nullptr) *error = "devices pointer is null.";
             return -3;
@@ -794,7 +816,7 @@ namespace openyap::capture {
             return -2;
         }
 
-        ComPtr<IMMDeviceEnumerator> enumerator;
+        ComPtr <IMMDeviceEnumerator> enumerator;
         HRESULT hr = CoCreateInstance(
                 __uuidof(MMDeviceEnumerator),
                 nullptr,
@@ -810,7 +832,7 @@ namespace openyap::capture {
         // Get default device ID for comparison
         std::wstring default_id;
         {
-            ComPtr<IMMDevice> default_device;
+            ComPtr <IMMDevice> default_device;
             if (SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eCapture, eConsole, &default_device))) {
                 LPWSTR id_str = nullptr;
                 if (SUCCEEDED(default_device->GetId(&id_str)) && id_str != nullptr) {
@@ -821,7 +843,7 @@ namespace openyap::capture {
         }
 
         // Enumerate all active capture endpoints
-        ComPtr<IMMDeviceCollection> collection;
+        ComPtr <IMMDeviceCollection> collection;
         hr = enumerator->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &collection);
         if (FAILED(hr)) {
             if (error != nullptr) *error = hresult_message("Failed to enumerate audio endpoints.", hr);
@@ -838,7 +860,7 @@ namespace openyap::capture {
         }
 
         for (UINT i = 0; i < count; ++i) {
-            ComPtr<IMMDevice> dev;
+            ComPtr <IMMDevice> dev;
             if (FAILED(collection->Item(i, &dev))) continue;
 
             LPWSTR id_str = nullptr;
@@ -846,7 +868,7 @@ namespace openyap::capture {
             const std::wstring wide_id(id_str);
             CoTaskMemFree(id_str);
 
-            ComPtr<IPropertyStore> props;
+            ComPtr <IPropertyStore> props;
             std::string friendly_name = "(Unknown)";
             if (SUCCEEDED(dev->OpenPropertyStore(STGM_READ, &props))) {
                 PROPVARIANT var;
@@ -871,7 +893,7 @@ namespace openyap::capture {
     // ── Start capture (with optional device ID) ──────────────────────────
 
     int start(int sample_rate, int channels, audio_callback_t callback, void *user_data,
-              const char *device_id, std::string *error) {
+            const char *device_id, std::string *error) {
         if (sample_rate != 48000 || channels != 1 || callback == nullptr) {
             if (error != nullptr) {
                 *error = "Native capture requires 48000 Hz mono audio and a non-null callback.";
@@ -880,7 +902,7 @@ namespace openyap::capture {
         }
 
         {
-            std::lock_guard<std::mutex> lock(g_capture.mutex);
+            std::lock_guard <std::mutex> lock(g_capture.mutex);
             if (g_capture.active.load() || g_capture.worker.joinable()) {
                 if (error != nullptr) {
                     *error = "A capture session is already active.";
@@ -930,7 +952,7 @@ namespace openyap::capture {
         int start_result = 0;
 
         {
-            std::lock_guard<std::mutex> lock(g_capture.mutex);
+            std::lock_guard <std::mutex> lock(g_capture.mutex);
             start_result = g_capture.start_result;
             start_error = g_capture.start_error;
             if (start_result != 0 && g_capture.worker.joinable()) {
@@ -968,7 +990,7 @@ namespace openyap::capture {
         HANDLE startup_event = nullptr;
 
         {
-            std::lock_guard<std::mutex> lock(g_capture.mutex);
+            std::lock_guard <std::mutex> lock(g_capture.mutex);
             if (!g_capture.active.load() && !g_capture.worker.joinable()) {
                 if (g_capture.disconnect_result_pending) {
                     if (device_disconnected != nullptr) {
@@ -1015,7 +1037,7 @@ namespace openyap::capture {
         std::string disconnect_message;
 
         {
-            std::lock_guard<std::mutex> lock(g_capture.mutex);
+            std::lock_guard <std::mutex> lock(g_capture.mutex);
             disconnected = g_capture.disconnect_result_pending;
             disconnect_message = g_capture.disconnect_message;
             g_capture.disconnect_result_pending = false;

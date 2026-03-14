@@ -8,13 +8,15 @@
 ![AI](https://img.shields.io/badge/AI-Gemini%20%2B%20Groq-cb6e17?style=for-the-badge)
 
 OpenYap is a Windows-first desktop app built with Kotlin Multiplatform and Compose Multiplatform.
-It records your voice, transcribes it, refines the result with AI, and pastes the final text back into the active app.
+It records your voice, transcribes it, refines the result with AI, and pastes the final text back
+into the active app.
 
 ## Why it exists
 
 Typing polished text is slower than saying what you mean.
 
-OpenYap turns quick voice capture into writing that feels ready to send, whether you are replying in chat, drafting notes, or writing longer-form text in another app.
+OpenYap turns quick voice capture into writing that feels ready to send, whether you are replying in
+chat, drafting notes, or writing longer-form text in another app.
 
 ## What it does
 
@@ -95,7 +97,8 @@ OpenYap turns quick voice capture into writing that feels ready to send, whether
 .\gradlew.bat :composeApp:packageMsi
 ```
 
-The desktop packaging flow expects the native DLL at `native/prebuilt/windows-x64/openyap_native.dll`.
+The desktop packaging flow expects the native DLL at
+`native/prebuilt/windows-x64/openyap_native.dll`.
 
 ## First-run setup
 
@@ -106,7 +109,8 @@ Onboarding guides the user through:
 - model selection
 - entering the main app
 
-Additional settings, including Groq keys, hotkey changes, startup behavior, and audio checks, are managed in-app.
+Additional settings, including Groq keys, hotkey changes, startup behavior, and audio checks, are
+managed in-app.
 
 ## Privacy and local data
 
@@ -135,4 +139,5 @@ Useful commands:
 
 ## Status
 
-OpenYap is actively shaped around a focused Windows desktop workflow: capture voice fast, clean it up, and paste polished text with minimal interruption.
+OpenYap is actively shaped around a focused Windows desktop workflow: capture voice fast, clean it
+up, and paste polished text with minimal interruption.

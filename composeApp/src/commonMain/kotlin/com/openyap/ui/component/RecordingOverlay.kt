@@ -38,8 +38,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.CircularWavyProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,7 +55,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -114,6 +113,7 @@ fun RecordingOverlay(
                         level = level,
                         durationSeconds = durationSeconds,
                     )
+
                     OverlayState.SUCCESS -> SuccessBar()
                     OverlayState.ERROR -> ErrorBar()
                 }
@@ -164,6 +164,7 @@ private fun ActiveBar(
                     modifier = Modifier.size(20.dp),
                     color = Color.White.copy(alpha = 0.78f),
                 )
+
                 else -> Unit
             }
         }

@@ -17,6 +17,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberTrayState
 import androidx.compose.ui.window.rememberWindowState
+import com.openyap.database.createOpenYapDatabase
 import com.openyap.platform.AudioFeedbackService
 import com.openyap.platform.AudioRecorder
 import com.openyap.platform.ComposeOverlayController
@@ -35,7 +36,6 @@ import com.openyap.platform.WindowsPasteAutomation
 import com.openyap.platform.WindowsPermissionManager
 import com.openyap.platform.WindowsStartupManager
 import com.openyap.platform.WindowsThemeHelper
-import com.openyap.database.createOpenYapDatabase
 import com.openyap.repository.RoomDictionaryRepository
 import com.openyap.repository.RoomHistoryRepository
 import com.openyap.repository.RoomSettingsRepository

@@ -42,33 +42,34 @@ class JvmAudioRecorder : AudioRecorder {
     @Volatile
     private var currentOutputPath: String? = null
 
-    override suspend fun startRecording(outputPath: String, deviceId: String?) = withContext(Dispatchers.IO) {
-        stopRecordingInternal()
+    override suspend fun startRecording(outputPath: String, deviceId: String?) =
+        withContext(Dispatchers.IO) {
+            stopRecordingInternal()
 
-        currentOutputPath = outputPath
-        audioData = ByteArrayOutputStream()
+            currentOutputPath = outputPath
+            audioData = ByteArrayOutputStream()
 
-        val info = DataLine.Info(TargetDataLine::class.java, audioFormat)
-        if (!AudioSystem.isLineSupported(info)) {
-            throw IllegalStateException("Audio line not supported")
-        }
+            val info = DataLine.Info(TargetDataLine::class.java, audioFormat)
+            if (!AudioSystem.isLineSupported(info)) {
+                throw IllegalStateException("Audio line not supported")
+            }
 
-        val line = AudioSystem.getLine(info) as TargetDataLine
-        line.open(audioFormat)
-        line.start()
-        targetDataLine = line
+            val line = AudioSystem.getLine(info) as TargetDataLine
+            line.open(audioFormat)
+            line.start()
+            targetDataLine = line
 
-        recordingJob = scope.launch {
-            val buffer = ByteArray(4096)
-            while (isActive && line.isOpen) {
-                val bytesRead = line.read(buffer, 0, buffer.size)
-                if (bytesRead > 0) {
-                    audioData?.write(buffer, 0, bytesRead)
-                    _amplitudeFlow.value = calculateRmsAmplitude(buffer, bytesRead)
+            recordingJob = scope.launch {
+                val buffer = ByteArray(4096)
+                while (isActive && line.isOpen) {
+                    val bytesRead = line.read(buffer, 0, buffer.size)
+                    if (bytesRead > 0) {
+                        audioData?.write(buffer, 0, bytesRead)
+                        _amplitudeFlow.value = calculateRmsAmplitude(buffer, bytesRead)
+                    }
                 }
             }
         }
-    }
 
     override suspend fun stopRecording(): String = withContext(Dispatchers.IO) {
         val path = currentOutputPath ?: throw IllegalStateException("No recording in progress")

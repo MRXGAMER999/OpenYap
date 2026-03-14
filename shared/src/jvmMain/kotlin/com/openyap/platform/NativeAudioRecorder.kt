@@ -66,7 +66,13 @@ class NativeAudioRecorder(
             _amplitudeFlow.value = 0f
 
             val result = if (deviceId != null) {
-                native.openyap_capture_start_device(SampleRate, Channels, captureCallback, null, deviceId)
+                native.openyap_capture_start_device(
+                    SampleRate,
+                    Channels,
+                    captureCallback,
+                    null,
+                    deviceId
+                )
             } else {
                 native.openyap_capture_start(SampleRate, Channels, captureCallback, null)
             }

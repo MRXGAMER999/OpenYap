@@ -13,6 +13,7 @@
 #endif
 
 typedef void(OPENYAP_CALL *audio_callback_t)(const short *pcm_data, int sample_count, void *user_data);
+
 typedef void(OPENYAP_CALL *hotkey_event_callback_t)(int event_type, int vk_code, int modifiers_mask, void *user_data);
 
 enum openyap_hotkey_event_type {

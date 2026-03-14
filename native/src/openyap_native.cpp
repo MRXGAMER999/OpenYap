@@ -23,12 +23,12 @@ namespace {
     bool g_media_foundation_started = false;
 
     void clear_last_error() {
-        std::lock_guard<std::mutex> lock(g_error_mutex);
+        std::lock_guard <std::mutex> lock(g_error_mutex);
         g_last_error.clear();
     }
 
     void set_last_error(std::string message) {
-        std::lock_guard<std::mutex> lock(g_error_mutex);
+        std::lock_guard <std::mutex> lock(g_error_mutex);
         g_last_error = std::move(message);
     }
 
@@ -43,15 +43,29 @@ namespace {
     std::string json_escape(const std::string &input) {
         std::string result;
         result.reserve(input.size() + 8);
-        for (char ch : input) {
+        for (char ch: input) {
             switch (ch) {
-                case '"':  result += "\\\""; break;
-                case '\\': result += "\\\\"; break;
-                case '\b': result += "\\b";  break;
-                case '\f': result += "\\f";  break;
-                case '\n': result += "\\n";  break;
-                case '\r': result += "\\r";  break;
-                case '\t': result += "\\t";  break;
+                case '"':
+                    result += "\\\"";
+                    break;
+                case '\\':
+                    result += "\\\\";
+                    break;
+                case '\b':
+                    result += "\\b";
+                    break;
+                case '\f':
+                    result += "\\f";
+                    break;
+                case '\n':
+                    result += "\\n";
+                    break;
+                case '\r':
+                    result += "\\r";
+                    break;
+                case '\t':
+                    result += "\\t";
+                    break;
                 default:
                     if (static_cast<unsigned char>(ch) < 0x20) {
                         char buf[8];
@@ -176,7 +190,7 @@ const char *OPENYAP_CALL
 openyap_list_devices(void) {
     clear_last_error();
 
-    std::vector<openyap::capture::DeviceInfo> devices;
+    std::vector <openyap::capture::DeviceInfo> devices;
     std::string error;
     const int result = openyap::capture::list_devices(&devices, &error);
     if (result != 0) {
@@ -240,18 +254,25 @@ openyap_hotkey_set_config(
 int OPENYAP_CALL
 
 openyap_hotkey_start_listening(
-        hotkey_event_callback_t callback,
-        void *user_data
+        hotkey_event_callback_t
+callback,
+void *user_data
 ) {
-    clear_last_error();
+clear_last_error();
 
-    std::string error;
-    const int result = openyap::hotkey::manager().start_listening(callback, user_data, &error);
-    if (result != 0) {
-        set_last_error(error);
-        log_message(error.c_str());
-    }
-    return result;
+std::string error;
+const int result = openyap::hotkey::manager().start_listening(callback, user_data, &error);
+if (result != 0) {
+set_last_error(error);
+log_message(error
+.
+
+c_str()
+
+);
+}
+return
+result;
 }
 
 int OPENYAP_CALL
@@ -384,6 +405,6 @@ openyap_paste_text(const wchar_t *text, int restore_clipboard) {
 const char *OPENYAP_CALL
 
 openyap_last_error(void) {
-    std::lock_guard<std::mutex> lock(g_error_mutex);
+    std::lock_guard <std::mutex> lock(g_error_mutex);
     return g_last_error.empty() ? nullptr : g_last_error.c_str();
 }
