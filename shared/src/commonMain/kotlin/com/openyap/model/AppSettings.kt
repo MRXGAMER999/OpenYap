@@ -29,6 +29,7 @@ data class AppSettings(
     val dismissedUpdateVersion: String? = null,
     val onboardingCompleted: Boolean = false,
     val audioFeedbackEnabled: Boolean = true,
+    val soundFeedbackVolume: Float = 0.5f,
     val startMinimized: Boolean = false,
     val launchOnStartup: Boolean = false,
     val audioDeviceId: String? = null,
