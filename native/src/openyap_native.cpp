@@ -2,6 +2,7 @@
 
 #include "audio_capture.h"
 #include "audio_encoder.h"
+#include "hotkey_manager.h"
 #include "paste_automation.h"
 #include "vad.h"
 
@@ -100,6 +101,7 @@ openyap_init(void) {
 void OPENYAP_CALL
 
 openyap_shutdown(void) {
+    openyap::hotkey::manager().shutdown();
     openyap::capture::shutdown();
 
     if (g_media_foundation_started) {
@@ -211,6 +213,87 @@ void OPENYAP_CALL
 
 openyap_free_string(const char *str) {
     std::free(const_cast<char *>(str));
+}
+
+int OPENYAP_CALL
+
+openyap_hotkey_set_config(
+        int key_code,
+        unsigned int modifiers_mask,
+        int enabled
+) {
+    clear_last_error();
+
+    std::string error;
+    openyap::hotkey::HotkeyBinding binding;
+    binding.key_code = key_code;
+    binding.modifiers = modifiers_mask;
+    binding.enabled = enabled != 0 && key_code != 0;
+    const int result = openyap::hotkey::manager().set_config(binding, &error);
+    if (result != 0) {
+        set_last_error(error);
+        log_message(error.c_str());
+    }
+    return result;
+}
+
+int OPENYAP_CALL
+
+openyap_hotkey_start_listening(
+        hotkey_event_callback_t callback,
+        void *user_data
+) {
+    clear_last_error();
+
+    std::string error;
+    const int result = openyap::hotkey::manager().start_listening(callback, user_data, &error);
+    if (result != 0) {
+        set_last_error(error);
+        log_message(error.c_str());
+    }
+    return result;
+}
+
+int OPENYAP_CALL
+
+openyap_hotkey_stop_listening(void) {
+    clear_last_error();
+
+    std::string error;
+    const int result = openyap::hotkey::manager().stop_listening(&error);
+    if (result != 0) {
+        set_last_error(error);
+        log_message(error.c_str());
+    }
+    return result;
+}
+
+int OPENYAP_CALL
+
+openyap_hotkey_begin_capture(void) {
+    clear_last_error();
+
+    std::string error;
+    const int result = openyap::hotkey::manager().begin_capture(&error);
+    if (result != 0) {
+        set_last_error(error);
+        log_message(error.c_str());
+    }
+    return result;
+}
+
+int OPENYAP_CALL
+
+openyap_hotkey_cancel_capture(void) {
+    clear_last_error();
+
+    std::string error;
+    const int result = openyap::hotkey::manager().cancel_capture(&error);
+    if (result != 0) {
+        set_last_error(error);
+        log_message(error.c_str());
+    }
+    return result;
 }
 
 int OPENYAP_CALL

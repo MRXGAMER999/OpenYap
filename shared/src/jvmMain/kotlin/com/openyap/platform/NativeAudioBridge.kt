@@ -3,6 +3,7 @@ package com.openyap.platform
 import com.sun.jna.Native
 import com.sun.jna.Pointer
 import com.sun.jna.WString
+import com.sun.jna.ptr.IntByReference
 import com.sun.jna.win32.StdCallLibrary
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -138,6 +139,23 @@ object NativeAudioBridge {
 
         fun openyap_capture_stop(): Int
 
+        fun openyap_hotkey_set_config(
+            keyCode: Int,
+            modifiersMask: Int,
+            enabled: Int,
+        ): Int
+
+        fun openyap_hotkey_start_listening(
+            callback: HotkeyCallback,
+            userData: Pointer?,
+        ): Int
+
+        fun openyap_hotkey_stop_listening(): Int
+
+        fun openyap_hotkey_begin_capture(): Int
+
+        fun openyap_hotkey_cancel_capture(): Int
+
         fun openyap_list_devices(): Pointer?
         fun openyap_free_string(str: Pointer?)
 
@@ -172,6 +190,10 @@ object NativeAudioBridge {
 
         fun interface AudioCallback : StdCallLibrary.StdCallCallback {
             fun invoke(pcmData: Pointer, sampleCount: Int, userData: Pointer?)
+        }
+
+        fun interface HotkeyCallback : StdCallLibrary.StdCallCallback {
+            fun invoke(eventType: Int, vkCode: Int, modifiersMask: Int, userData: Pointer?)
         }
     }
 }

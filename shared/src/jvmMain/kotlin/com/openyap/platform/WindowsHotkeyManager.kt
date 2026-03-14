@@ -5,320 +5,320 @@ import com.openyap.model.HotkeyCapture
 import com.openyap.model.HotkeyConfig
 import com.openyap.model.HotkeyEvent
 import com.openyap.model.HotkeyModifier
-import com.sun.jna.platform.win32.Kernel32
-import com.sun.jna.platform.win32.User32
-import com.sun.jna.platform.win32.WinDef
-import com.sun.jna.platform.win32.WinUser
-import com.sun.jna.platform.win32.WinUser.MSG
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.newSingleThreadContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.Closeable
 
-private const val WH_KEYBOARD_LL = 13
-private const val WM_KEYDOWN = 0x0100
-private const val WM_KEYUP = 0x0101
-private const val WM_SYSKEYDOWN = 0x0104
-private const val WM_SYSKEYUP = 0x0105
-private const val VK_ESCAPE = 0x1B
 private const val CAPTURE_TIMEOUT_MS = 10_000L
-private const val LLKHF_INJECTED = 0x10
+private const val HOTKEY_EVENT_HOLD_DOWN = 1
+private const val HOTKEY_EVENT_HOLD_UP = 2
+private const val HOTKEY_EVENT_CANCEL_RECORDING = 3
+private const val HOTKEY_EVENT_CAPTURED = 4
+private const val MODIFIER_CTRL = 1 shl 0
+private const val MODIFIER_ALT = 1 shl 1
+private const val MODIFIER_SHIFT = 1 shl 2
+private const val MODIFIER_META = 1 shl 3
 
-/**
- * Windows hotkey manager using a WH_KEYBOARD_LL low-level keyboard hook
- * to detect key-down **and** key-up events for hold-to-record.
- *
- * All Win32 calls run on a single dedicated thread ([win32Dispatcher]) to
- * satisfy the Win32 thread-affinity requirement for the message pump that
- * drives the hook callback.
- */
 class WindowsHotkeyManager : HotkeyManager, Closeable {
 
-    companion object {
-        private val MODIFIER_VK_CODES = setOf(
-            0x10, 0x11, 0x12,   // VK_SHIFT, VK_CONTROL, VK_MENU
-            0xA0, 0xA1,         // VK_LSHIFT, VK_RSHIFT
-            0xA2, 0xA3,         // VK_LCONTROL, VK_RCONTROL
-            0xA4, 0xA5,         // VK_LMENU, VK_RMENU
-            0x5B, 0x5C,         // VK_LWIN, VK_RWIN
-        )
-    }
-
-    @OptIn(DelicateCoroutinesApi::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    private val win32Dispatcher = newSingleThreadContext("HotkeyThread")
-
-    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    private val scope = CoroutineScope(win32Dispatcher + SupervisorJob())
-
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val _hotkeyEvents = MutableSharedFlow<HotkeyEvent>(extraBufferCapacity = 16)
     override val hotkeyEvents: SharedFlow<HotkeyEvent> = _hotkeyEvents.asSharedFlow()
 
+    private val formatter = WindowsHotkeyDisplayFormatter()
+    private val native = NativeAudioBridge.instance
+    private val controlMutex = Mutex()
+    private val captureMutex = Mutex()
+    private val fallbackLock = Any()
+    private var fallbackManager: JnaWindowsHotkeyManager? = null
+    private var fallbackCollectorJob: Job? = null
+
+    @Volatile
+    private var usingFallback = native == null
+
     @Volatile
     private var config: HotkeyConfig = HotkeyConfig()
-    private var listenerJob: Job? = null
-    private val formatter = WindowsHotkeyDisplayFormatter()
+
+    @Volatile
+    private var isListening = false
 
     @Volatile
     private var pendingCapture: CompletableDeferred<HotkeyCapture>? = null
 
-    private val captureMutex = Mutex()
-
-    // Low-level keyboard hook handle — must be unhooked on shutdown.
-    @Volatile
-    private var keyboardHook: WinUser.HHOOK? = null
-
-    // Debounce flag: Windows sends repeated WM_KEYDOWN while held.
-    @Volatile
-    private var isHoldDown = false
-
-    /**
-     * Stored as a class field to prevent garbage collection of the JNA callback.
-     * If the GC collects the callback reference, the native side will crash.
-     */
-    private val keyboardProc = WinUser.LowLevelKeyboardProc { nCode, wParam, info ->
-        if (nCode >= 0) {
-            val vkCode = info.vkCode
-            val msgType = wParam.toInt()
-            val isInjected = (info.flags and LLKHF_INJECTED) != 0
-
-            if (isInjected) {
-                return@LowLevelKeyboardProc User32.INSTANCE.CallNextHookEx(
-                    keyboardHook, nCode, wParam,
-                    WinDef.LPARAM(com.sun.jna.Pointer.nativeValue(info.pointer)),
+    private val nativeCallback = NativeAudioBridge.OpenYapNative.HotkeyCallback { eventType, vkCode, modifiersMask, _ ->
+        when (eventType) {
+            HOTKEY_EVENT_HOLD_DOWN -> _hotkeyEvents.tryEmit(HotkeyEvent.HoldDown)
+            HOTKEY_EVENT_HOLD_UP -> _hotkeyEvents.tryEmit(HotkeyEvent.HoldUp)
+            HOTKEY_EVENT_CANCEL_RECORDING -> _hotkeyEvents.tryEmit(HotkeyEvent.CancelRecording)
+            HOTKEY_EVENT_CAPTURED -> {
+                val binding = HotkeyBinding(vkCode, modifiersFromMask(modifiersMask))
+                pendingCapture?.complete(
+                    HotkeyCapture(
+                        platformKeyCode = vkCode,
+                        modifiers = binding.modifiers,
+                        displayLabel = formatter.format(binding),
+                    )
                 )
             }
+        }
+    }
 
-            val capture = pendingCapture
-            if (capture != null) {
-                handleCaptureKeyEvent(vkCode, msgType, capture)
+    init {
+        if (native == null) {
+            val reason = NativeAudioBridge.failureReason
+            if (!reason.isNullOrBlank()) {
+                System.err.println("Native hotkeys unavailable, using JNA fallback: $reason")
             } else {
-                val consumed = handleHotkeyEvent(vkCode, msgType)
-                if (consumed) {
-                    return@LowLevelKeyboardProc WinDef.LRESULT(1)
-                }
+                System.err.println("Native hotkeys unavailable, using JNA fallback.")
             }
+        } else {
+            System.err.println("Native hotkeys active.")
         }
-        User32.INSTANCE.CallNextHookEx(
-            keyboardHook, nCode, wParam,
-            WinDef.LPARAM(com.sun.jna.Pointer.nativeValue(info.pointer)),
-        )
-    }
-
-    private fun handleHotkeyEvent(vkCode: Int, msgType: Int): Boolean {
-        val currentModifiers = detectCurrentModifiers()
-        val binding = config.startHotkey ?: return false
-        if (!binding.enabled) return false
-
-        if (matchesConfiguredHotkey(vkCode, currentModifiers, binding)) {
-            when (msgType) {
-                WM_KEYDOWN, WM_SYSKEYDOWN -> {
-                    if (!isHoldDown) {
-                        isHoldDown = true
-                        _hotkeyEvents.tryEmit(HotkeyEvent.HoldDown)
-                    }
-                }
-
-                WM_KEYUP, WM_SYSKEYUP -> {
-                    isHoldDown = false
-                    _hotkeyEvents.tryEmit(HotkeyEvent.HoldUp)
-                }
-            }
-            return true
-        }
-
-        // While held, releasing ANY constituent key (the primary key or a modifier)
-        // should stop recording. Without this, releasing modifiers before the main key
-        // (e.g. letting go of Ctrl before R) would leave isHoldDown stuck as true.
-        if (isHoldDown && (msgType == WM_KEYUP || msgType == WM_SYSKEYUP)) {
-            val isMainKey = vkCode == binding.platformKeyCode
-            val isRequiredModifier = isModifierForBinding(vkCode, binding.modifiers)
-            if (isMainKey || isRequiredModifier) {
-                isHoldDown = false
-                _hotkeyEvents.tryEmit(HotkeyEvent.HoldUp)
-                return true
-            }
-        }
-
-        // Escape key cancellation while recording
-        if (vkCode == VK_ESCAPE && isHoldDown && (msgType == WM_KEYDOWN || msgType == WM_SYSKEYDOWN)) {
-            isHoldDown = false
-            _hotkeyEvents.tryEmit(HotkeyEvent.CancelRecording)
-            return true
-        }
-
-        return false
-    }
-
-    /**
-     * Returns true if [vkCode] is a virtual-key code that corresponds to one
-     * of the [requiredModifiers] in the hotkey binding.
-     */
-    private fun isModifierForBinding(vkCode: Int, requiredModifiers: Set<HotkeyModifier>): Boolean {
-        return when (vkCode) {
-            0x10, 0xA0, 0xA1 -> HotkeyModifier.SHIFT in requiredModifiers  // VK_SHIFT, VK_LSHIFT, VK_RSHIFT
-            0x11, 0xA2, 0xA3 -> HotkeyModifier.CTRL in requiredModifiers   // VK_CONTROL, VK_LCONTROL, VK_RCONTROL
-            0x12, 0xA4, 0xA5 -> HotkeyModifier.ALT in requiredModifiers    // VK_MENU, VK_LMENU, VK_RMENU
-            0x5B, 0x5C -> HotkeyModifier.META in requiredModifiers          // VK_LWIN, VK_RWIN
-            else -> false
-        }
-    }
-
-    private fun handleCaptureKeyEvent(
-        vkCode: Int,
-        msgType: Int,
-        capture: CompletableDeferred<HotkeyCapture>,
-    ) {
-        if (vkCode in MODIFIER_VK_CODES) return
-        if (msgType != WM_KEYDOWN && msgType != WM_SYSKEYDOWN) return
-
-        val modifiers = detectCurrentModifiers()
-        val binding = HotkeyBinding(vkCode, modifiers)
-        capture.complete(
-            HotkeyCapture(
-                platformKeyCode = vkCode,
-                modifiers = modifiers,
-                displayLabel = formatter.format(binding),
-            )
-        )
-    }
-
-    private fun matchesConfiguredHotkey(
-        vkCode: Int,
-        currentModifiers: Set<HotkeyModifier>,
-        binding: HotkeyBinding,
-    ): Boolean {
-        return vkCode == binding.platformKeyCode && currentModifiers == binding.modifiers
     }
 
     override fun setConfig(config: HotkeyConfig) {
-        scope.launch {
-            this@WindowsHotkeyManager.config = config
+        this.config = config
+        if (usingFallback) {
+            getOrCreateFallback().setConfig(config)
+            return
+        }
+
+        val nativeInstance = native ?: run {
+            switchToFallback("Native DLL is unavailable while updating hotkey config.")
+            getOrCreateFallback().setConfig(config)
+            return
+        }
+
+        val binding = config.startHotkey
+        val result = runNativeIntCall(
+            action = "update native hotkey config",
+            fallbackReason = "Native DLL is missing required hotkey exports while updating hotkey config.",
+        ) {
+            nativeInstance.openyap_hotkey_set_config(
+                keyCode = binding?.platformKeyCode ?: 0,
+                modifiersMask = binding?.modifiers?.toMask() ?: 0,
+                enabled = if (binding?.enabled == true) 1 else 0,
+            )
+        }
+        if (usingFallback) {
+            getOrCreateFallback().setConfig(config)
+            return
+        }
+        if (result != 0) {
+            switchToFallback(
+                nativeInstance.openyap_last_error() ?: "Failed to update native hotkey config (code $result)."
+            )
+            getOrCreateFallback().setConfig(config)
         }
     }
 
     override fun startListening() {
-        if (listenerJob?.isActive == true) return
+        isListening = true
+        if (usingFallback) {
+            getOrCreateFallback().startListening()
+            return
+        }
 
-        listenerJob = scope.launch {
-            try {
-                ensureMessageQueue()
-                installHook()
+        val nativeInstance = native ?: run {
+            switchToFallback("Native DLL is unavailable while starting hotkeys.")
+            getOrCreateFallback().startListening()
+            return
+        }
 
-                val msg = MSG()
-                while (isActive) {
-                    val result = User32.INSTANCE.PeekMessage(msg, null, 0, 0, 1)
-                    if (!result) {
-                        delay(10)
-                    }
-                }
-            } finally {
-                uninstallHook()
-            }
+        val result = runNativeIntCall(
+            action = "start native hotkey listener",
+            fallbackReason = "Native DLL is missing required hotkey exports while starting hotkeys.",
+        ) {
+            nativeInstance.openyap_hotkey_start_listening(nativeCallback, null)
+        }
+        if (usingFallback) {
+            getOrCreateFallback().startListening()
+            return
+        }
+        if (result != 0) {
+            switchToFallback(
+                nativeInstance.openyap_last_error() ?: "Failed to start native hotkey listener (code $result)."
+            )
+            getOrCreateFallback().startListening()
         }
     }
 
     override fun stopListening() {
-        listenerJob?.cancel()
-        listenerJob = null
+        isListening = false
+        pendingCapture?.cancel(CancellationException("Hotkey listening stopped."))
+        pendingCapture = null
+
+        if (usingFallback) {
+            fallbackManager?.stopListening()
+            return
+        }
+
+        runCatching { native?.openyap_hotkey_cancel_capture() }
+        runCatching { native?.openyap_hotkey_stop_listening() }
     }
 
     override suspend fun captureNextHotkey(): HotkeyCapture = captureMutex.withLock {
-        withTimeout(CAPTURE_TIMEOUT_MS) {
-            if (listenerJob?.isActive == true) {
-                val deferred = CompletableDeferred<HotkeyCapture>()
-                pendingCapture = deferred
-                try {
-                    deferred.await()
-                } finally {
-                    deferred.cancel()
-                    pendingCapture = null
+        if (usingFallback) {
+            return@withLock getOrCreateFallback().captureNextHotkey()
+        }
+
+        val nativeInstance = native ?: run {
+            switchToFallback("Native DLL is unavailable while capturing a hotkey.")
+            return@withLock getOrCreateFallback().captureNextHotkey()
+        }
+
+        controlMutex.withLock {
+            val wasListening = isListening
+            if (!wasListening) {
+                val startResult = runNativeIntCall(
+                    action = "start native hotkey listener for capture",
+                    fallbackReason = "Native DLL is missing required hotkey exports while capturing a hotkey.",
+                ) {
+                    nativeInstance.openyap_hotkey_start_listening(nativeCallback, null)
                 }
-            } else {
-                @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-                withContext(win32Dispatcher) {
-                    ensureMessageQueue()
-                    installHook()
-                    try {
-                        val deferred = CompletableDeferred<HotkeyCapture>()
-                        pendingCapture = deferred
-                        try {
-                            val msg = MSG()
-                            while (!deferred.isCompleted && !deferred.isCancelled) {
-                                User32.INSTANCE.PeekMessage(msg, null, 0, 0, 1)
-                                delay(10)
-                            }
-                            deferred.await()
-                        } finally {
-                            pendingCapture = null
-                        }
-                    } finally {
-                        uninstallHook()
-                    }
+                if (usingFallback) {
+                    return@withLock getOrCreateFallback().captureNextHotkey()
+                }
+                if (startResult != 0) {
+                    switchToFallback(
+                        nativeInstance.openyap_last_error()
+                            ?: "Failed to start native hotkey listener for capture (code $startResult)."
+                    )
+                    return@withLock getOrCreateFallback().captureNextHotkey()
+                }
+            }
+
+            val deferred = CompletableDeferred<HotkeyCapture>()
+            pendingCapture = deferred
+            val beginResult = runNativeIntCall(
+                action = "begin native hotkey capture",
+                fallbackReason = "Native DLL is missing required hotkey exports while capturing a hotkey.",
+            ) {
+                nativeInstance.openyap_hotkey_begin_capture()
+            }
+            if (usingFallback) {
+                pendingCapture = null
+                if (!wasListening) {
+                    runCatching { nativeInstance.openyap_hotkey_stop_listening() }
+                }
+                return@withLock getOrCreateFallback().captureNextHotkey()
+            }
+            if (beginResult != 0) {
+                pendingCapture = null
+                if (!wasListening) {
+                    runCatching { nativeInstance.openyap_hotkey_stop_listening() }
+                }
+                switchToFallback(
+                    nativeInstance.openyap_last_error() ?: "Failed to begin native hotkey capture (code $beginResult)."
+                )
+                return@withLock getOrCreateFallback().captureNextHotkey()
+            }
+
+            try {
+                withTimeout(CAPTURE_TIMEOUT_MS) {
+                    deferred.await()
+                }
+            } finally {
+                pendingCapture = null
+                runCatching { nativeInstance.openyap_hotkey_cancel_capture() }
+                deferred.cancel()
+                if (!wasListening) {
+                    runCatching { nativeInstance.openyap_hotkey_stop_listening() }
                 }
             }
         }
     }
 
-    // ── Win32 helpers — ALL called on win32Dispatcher ──
-
-    private fun installHook() {
-        if (keyboardHook != null) return
-        val hMod = Kernel32.INSTANCE.GetModuleHandle(null)
-        keyboardHook = User32.INSTANCE.SetWindowsHookEx(
-            WH_KEYBOARD_LL,
-            keyboardProc,
-            hMod,
-            0,
-        )
-        if (keyboardHook == null) {
-            val err = Kernel32.INSTANCE.GetLastError()
-            throw IllegalStateException("SetWindowsHookEx(WH_KEYBOARD_LL) failed: Win32 error code $err")
+    private fun getOrCreateFallback(): JnaWindowsHotkeyManager {
+        synchronized(fallbackLock) {
+            fallbackManager?.let { return it }
+            val manager = JnaWindowsHotkeyManager()
+            manager.setConfig(config)
+            fallbackManager = manager
+            System.err.println("JNA hotkey fallback active.")
+            attachFallbackCollector(manager)
+            return manager
         }
     }
 
-    private fun uninstallHook() {
-        keyboardHook?.let { hook ->
-            User32.INSTANCE.UnhookWindowsHookEx(hook)
+    private fun attachFallbackCollector(manager: JnaWindowsHotkeyManager) {
+        check(Thread.holdsLock(fallbackLock))
+        if (fallbackCollectorJob != null) return
+        fallbackCollectorJob = scope.launch {
+            manager.hotkeyEvents.collect { event ->
+                _hotkeyEvents.emit(event)
+            }
         }
-        keyboardHook = null
-        isHoldDown = false
     }
 
-    private fun ensureMessageQueue() {
-        val msg = MSG()
-        User32.INSTANCE.PeekMessage(msg, null, 0, 0, 0)
+    private fun switchToFallback(reason: String) {
+        synchronized(fallbackLock) {
+            if (usingFallback) return
+            usingFallback = true
+        }
+        runCatching { native?.openyap_hotkey_cancel_capture() }
+        runCatching { native?.openyap_hotkey_stop_listening() }
+        pendingCapture?.cancel(CancellationException(reason))
+        pendingCapture = null
+        System.err.println("Native hotkeys failed, using JNA fallback: $reason")
+
+        val fallback = getOrCreateFallback()
+        fallback.setConfig(config)
+        if (isListening) {
+            fallback.startListening()
+        }
     }
 
-    private fun detectCurrentModifiers(): Set<HotkeyModifier> {
-        val user32 = User32.INSTANCE
-        return buildSet {
-            if (user32.GetAsyncKeyState(0x11).toInt() and 0x8000 != 0) add(HotkeyModifier.CTRL)
-            if (user32.GetAsyncKeyState(0x10).toInt() and 0x8000 != 0) add(HotkeyModifier.SHIFT)
-            if (user32.GetAsyncKeyState(0x12).toInt() and 0x8000 != 0) add(HotkeyModifier.ALT)
-            if (user32.GetAsyncKeyState(0x5B).toInt() and 0x8000 != 0 ||
-                user32.GetAsyncKeyState(0x5C).toInt() and 0x8000 != 0
-            ) add(HotkeyModifier.META)
+    private fun runNativeIntCall(
+        action: String,
+        fallbackReason: String,
+        block: () -> Int,
+    ): Int {
+        return try {
+            block()
+        } catch (_: UnsatisfiedLinkError) {
+            switchToFallback(fallbackReason)
+            -1
+        } catch (error: NoSuchMethodError) {
+            switchToFallback("$fallbackReason (${error.message ?: action})")
+            -1
         }
+    }
+
+    private fun modifiersFromMask(mask: Int): Set<HotkeyModifier> = buildSet {
+        if (mask and MODIFIER_CTRL != 0) add(HotkeyModifier.CTRL)
+        if (mask and MODIFIER_ALT != 0) add(HotkeyModifier.ALT)
+        if (mask and MODIFIER_SHIFT != 0) add(HotkeyModifier.SHIFT)
+        if (mask and MODIFIER_META != 0) add(HotkeyModifier.META)
+    }
+
+    private fun Set<HotkeyModifier>.toMask(): Int {
+        var mask = 0
+        if (HotkeyModifier.CTRL in this) mask = mask or MODIFIER_CTRL
+        if (HotkeyModifier.ALT in this) mask = mask or MODIFIER_ALT
+        if (HotkeyModifier.SHIFT in this) mask = mask or MODIFIER_SHIFT
+        if (HotkeyModifier.META in this) mask = mask or MODIFIER_META
+        return mask
     }
 
     override fun close() {
         stopListening()
+        fallbackCollectorJob?.cancel()
+        fallbackCollectorJob = null
+        fallbackManager?.close()
+        fallbackManager = null
         scope.cancel()
-        @OptIn(DelicateCoroutinesApi::class, kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-        win32Dispatcher.close()
     }
 }
