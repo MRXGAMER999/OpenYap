@@ -124,11 +124,10 @@ fun AppShell(
         return
     }
 
-    // DEBUG: Skip onboarding for testing
-    // if (!onboardingState.isComplete) {
-    //     OnboardingScreen(state = onboardingState, onEvent = onOnboardingEvent)
-    //     return
-    // }
+    if (!onboardingState.isComplete) {
+        OnboardingScreen(state = onboardingState, onEvent = onOnboardingEvent)
+        return
+    }
 
     val currentRoute = backStack.lastOrNull() ?: Route.Home
 
