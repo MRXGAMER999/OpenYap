@@ -6,5 +6,6 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 fun createOpenYapDatabase(dbFilePath: String): OpenYapDatabase {
     return Room.databaseBuilder<OpenYapDatabase>(dbFilePath)
         .setDriver(BundledSQLiteDriver())
+        .addMigrations(MIGRATION_1_2)
         .build()
 }

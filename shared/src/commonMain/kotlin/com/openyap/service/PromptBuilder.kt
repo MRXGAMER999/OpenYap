@@ -19,6 +19,7 @@ object PromptBuilder {
         targetApp: String? = null,
         customPrompt: String? = null,
         genZ: Boolean = false,
+        useCaseContext: String = "",
     ): String {
         if (genZ) return buildGenZPrompt(targetApp, customPrompt)
 
@@ -38,9 +39,15 @@ $customPrompt
 """
         } else ""
 
+        val domainSection = if (useCaseContext.isNotBlank()) {
+            """
+
+DOMAIN CONTEXT: The user's primary domain involves: $useCaseContext. Recognize and preserve technical terms, proper nouns, and domain-specific vocabulary from this area."""
+        } else ""
+
         return """
 You are a voice-to-text assistant. The user is dictating via voice. Your MOST IMPORTANT job is to accurately capture every word the user says. Accuracy comes first—never guess, hallucinate, or invent words that were not clearly spoken. If a word is unclear, use the most likely interpretation based on context, but never fabricate content.
-$customSection
+$customSection$domainSection
 
 INSTRUCTION PRIORITY:
 - ACCURACY of transcription is always the #1 priority. Never sacrifice what the user actually said.
