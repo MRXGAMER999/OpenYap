@@ -54,6 +54,12 @@ object WindowsThemeHelper {
      */
     fun setDarkTitleBar(window: Window, dark: Boolean) {
         try {
+            // Skip on non-Windows platforms
+            val osName = System.getProperty("os.name").lowercase()
+            if (!osName.contains("windows")) {
+                return
+            }
+            
             if (!window.isDisplayable) return
             val hwnd = getHwnd(window) ?: return
 

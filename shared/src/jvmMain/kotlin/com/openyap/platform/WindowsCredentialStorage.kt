@@ -17,8 +17,15 @@ import java.util.prefs.Preferences
 class WindowsCredentialStorage : SecureStorage {
 
     private val prefs = Preferences.userNodeForPackage(WindowsCredentialStorage::class.java)
+    private val isWindows = System.getProperty("os.name").lowercase().contains("windows")
 
     override suspend fun save(key: String, value: String) = withContext(Dispatchers.IO) {
+        if (!isWindows) {
+            // On non-Windows, store as plaintext (for development/testing only)
+            prefs.put(key, value)
+            prefs.flush()
+            return@withContext
+        }
         val encrypted = dpApiEncrypt(value)
         prefs.put(key, Base64.getEncoder().encodeToString(encrypted))
         prefs.flush()
@@ -26,6 +33,10 @@ class WindowsCredentialStorage : SecureStorage {
 
     override suspend fun load(key: String): String? = withContext(Dispatchers.IO) {
         val stored = prefs.get(key, null) ?: return@withContext null
+        if (!isWindows) {
+            // On non-Windows, return plaintext value
+            return@withContext stored
+        }
         try {
             val encrypted = Base64.getDecoder().decode(stored)
             dpApiDecrypt(encrypted)
