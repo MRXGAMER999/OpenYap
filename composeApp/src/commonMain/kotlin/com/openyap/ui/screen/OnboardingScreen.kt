@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -74,7 +75,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -520,12 +520,12 @@ fun OnboardingScreen(
                         Button(
                             onClick = { onEvent(OnboardingEvent.CompleteOnboarding) },
                             enabled = state.canComplete,
-                            modifier = Modifier.fillMaxWidth().height(52.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
                             shape = RoundedCornerShape(14.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary,
                             ),
-                            contentPadding = PaddingValues(horizontal = Spacing.xl, vertical = Spacing.md),
+                            contentPadding = PaddingValues(horizontal = Spacing.xl, vertical = Spacing.sm),
                         ) {
                             Text(
                                 "Enter OpenYap",
@@ -735,31 +735,32 @@ private fun StepSection(
         label = "glowAlpha$stepNumber",
     )
 
-    val cardModifier = Modifier
+    val alphaModifier = Modifier
         .alpha(
             when (stepState) {
                 StepState.LOCKED -> 0.5f * entranceAlpha
                 else -> entranceAlpha
             }
         )
-        .then(
-            if (stepState == StepState.ACTIVE) {
-                Modifier.border(
-                    width = 1.5.dp,
-                    brush = Brush.linearGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.primary.copy(alpha = glowAlpha),
-                            MaterialTheme.colorScheme.tertiary.copy(alpha = glowAlpha * 0.5f),
-                        )
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                )
-            } else {
-                Modifier
-            }
-        )
 
-    ElevatedCard(modifier = cardModifier) {
+    val borderModifier = if (stepState == StepState.ACTIVE) {
+        Modifier
+            .padding(1.5.dp)
+            .border(
+                width = 1.5.dp,
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.primary.copy(alpha = glowAlpha),
+                        MaterialTheme.colorScheme.tertiary.copy(alpha = glowAlpha * 0.5f),
+                    )
+                ),
+                shape = RoundedCornerShape(12.dp),
+            )
+    } else {
+        Modifier
+    }
+
+    ElevatedCard(modifier = alphaModifier.then(borderModifier)) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(Spacing.lg),
             verticalArrangement = Arrangement.spacedBy(Spacing.md),
