@@ -48,6 +48,9 @@ class GroqLLMClient(private val client: HttpClient) {
             val response = client.get("$BASE_URL/models") {
                 header(HttpHeaders.Authorization, "Bearer $apiKey")
             }
+            if (response.status == HttpStatusCode.Unauthorized || response.status == HttpStatusCode.Forbidden) {
+                throw GroqLLMException("Authentication failed (${response.status.value}): check your API key")
+            }
             if (response.status != HttpStatusCode.OK) return DEFAULT_MODELS
 
             val body = response.body<GroqModelsListResponse>()
@@ -69,6 +72,8 @@ class GroqLLMClient(private val client: HttpClient) {
                 .toList()
 
             filtered.ifEmpty { DEFAULT_MODELS }
+        } catch (e: GroqLLMException) {
+            throw e
         } catch (_: Exception) {
             DEFAULT_MODELS
         }
@@ -99,7 +104,7 @@ class GroqLLMClient(private val client: HttpClient) {
             appendLine("- If you are uncertain, keep the original word or phrase.")
             appendLine("- Do not paraphrase, summarize, expand, add detail, or change tone unless clearly required by the system instructions.")
             appendLine("- Do not invent names, facts, or context that are not strongly implied by the transcript.")
-            appendLine("- NEVER censor, mask, or replace any words with asterisks or symbols. Preserve all words exactly as they appear, including profanity, slang, and explicit language. If the transcript contains asterisks from a previous transcription step, restore the original uncensored word based on context.")
+            appendLine("- NEVER censor, mask, or replace any words with asterisks or symbols. Preserve all words exactly as they appear, including profanity, slang, and explicit language. If the transcript contains masked or redacted tokens (asterisks), preserve them exactly as they appear and do not attempt to reconstruct or guess the redacted words.")
             appendLine()
             appendLine("Return only the final corrected text to paste.")
         }
@@ -116,7 +121,7 @@ class GroqLLMClient(private val client: HttpClient) {
                 GroqChatMessage(role = "system", content = fullSystemPrompt),
                 GroqChatMessage(role = "user", content = "Transcript:\n$text"),
             ),
-            temperature = 0f,
+            temperature = 0.2f,
         )
 
         val response = executeWithRetry {
@@ -194,7 +199,7 @@ private class TemporaryGroqLLMException(message: String) : Exception(message)
 data class GroqChatRequest(
     val model: String,
     val messages: List<GroqChatMessage>,
-    val temperature: Float = 0f,
+    val temperature: Float = 0.2f,
 )
 
 @Serializable

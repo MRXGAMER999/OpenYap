@@ -56,6 +56,6 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
 
 val MIGRATION_4_5 = object : Migration(4, 5) {
     override suspend fun migrate(connection: SQLiteConnection) {
-        connection.execSQL("ALTER TABLE app_settings ADD COLUMN groqLLMModel TEXT NOT NULL DEFAULT 'moonshotai/kimi-k2-instruct'")
+        connection.execSQL("ALTER TABLE app_settings ADD COLUMN groqLLMModel TEXT NOT NULL DEFAULT 'moonshotai/kimi-k2-instruct-0905'")
     }
 }

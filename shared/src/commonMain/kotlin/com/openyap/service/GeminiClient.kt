@@ -114,7 +114,7 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
             appendLine("- If you are uncertain, keep the original word or phrase.")
             appendLine("- Do not paraphrase, summarize, expand, add detail, or change tone unless clearly required by the system instructions.")
             appendLine("- Do not invent names, facts, or context that are not strongly implied by the transcript.")
-            appendLine("- NEVER censor, mask, or replace any words with asterisks or symbols. Preserve all words exactly as they appear, including profanity, slang, and explicit language. If the transcript contains asterisks from a previous transcription step, restore the original uncensored word based on context.")
+            appendLine("- NEVER censor, mask, or replace any words with asterisks or symbols. Preserve all words exactly as they appear, including profanity, slang, and explicit language. If the transcript contains masked or redacted tokens (asterisks), preserve them exactly as they appear and do not attempt to reconstruct or guess the redacted words.")
             appendLine()
             appendLine("Return only the final corrected text to paste.")
             appendLine()
@@ -138,7 +138,7 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
                 )
             ),
             generationConfig = GenerationConfig(
-                temperature = 0f,
+                temperature = 0.2f,
                 responseMimeType = "text/plain",
             ),
             safetySettings = ALL_DISABLED_SAFETY_SETTINGS,
@@ -166,6 +166,8 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
             ?.text
 
         if (rewrittenText.isNullOrBlank()) {
+            val blockReason = geminiResponse.promptFeedback?.blockReason
+            if (blockReason != null) throw GeminiException("Gemini blocked the request: $blockReason")
             throw GeminiException("Gemini returned an empty response.")
         }
         return rewrittenText
@@ -201,7 +203,7 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
                 )
             ),
             generationConfig = GenerationConfig(
-                temperature = 0f,
+                temperature = 0.2f,
                 responseMimeType = "text/plain",
             ),
             safetySettings = ALL_DISABLED_SAFETY_SETTINGS,
@@ -230,6 +232,8 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
             ?.text
 
         if (text.isNullOrBlank()) {
+            val blockReason = geminiResponse.promptFeedback?.blockReason
+            if (blockReason != null) throw GeminiException("Gemini blocked the request: $blockReason")
             throw GeminiException("Gemini returned an empty response.")
         }
         return text
@@ -294,6 +298,12 @@ data class SafetySetting(
 @Serializable
 data class GeminiResponse(
     val candidates: List<GeminiCandidate>? = null,
+    val promptFeedback: GeminiPromptFeedback? = null,
+)
+
+@Serializable
+data class GeminiPromptFeedback(
+    @SerialName("blockReason") val blockReason: String? = null,
 )
 
 @Serializable
