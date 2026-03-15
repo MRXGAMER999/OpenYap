@@ -24,3 +24,4 @@ See `README.md` "Development" section for standard commands. Key ones:
 - **No lint tools** (detekt, ktlint, spotless) are configured. The only check task is the built-in Gradle `check` which runs compilation and tests.
 - **No test files** exist in the project. `./gradlew :shared:jvmTest :composeApp:jvmTest` completes with `NO-SOURCE`.
 - Native Windows DLL (`openyap_native.dll`) is only needed on Windows; the app falls back to `JvmAudioRecorder` on Linux.
+- **Onboarding**: On first launch the app shows a 4-step onboarding (mic check, Gemini API key, model selection, optional use-case). The `Gemini Api key` secret must be available as an environment variable. Copy it to the X clipboard (`printenv "Gemini Api key" | tr -d '\n' | DISPLAY=:1 xclip -selection clipboard`) then paste into the API key field and click "Save & Verify".
