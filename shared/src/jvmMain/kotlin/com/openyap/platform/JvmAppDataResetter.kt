@@ -13,7 +13,7 @@ class JvmAppDataResetter(
     private val tempDir: Path,
 ) {
     suspend fun reset() {
-        secureStorage.delete("gemini_api_key")
+        secureStorage.clear()
 
         if (dataDir.exists()) {
             dataDir.deleteRecursively()

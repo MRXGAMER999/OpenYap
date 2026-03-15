@@ -62,6 +62,11 @@ class WindowsCredentialStorage : SecureStorage {
         prefs.flush()
     }
 
+    override suspend fun clear() = withContext(Dispatchers.IO) {
+        prefs.clear()
+        prefs.flush()
+    }
+
     private fun dpApiEncrypt(plaintext: String): ByteArray {
         val bytes = plaintext.toByteArray(Charsets.UTF_8)
         val input = DATA_BLOB().apply {

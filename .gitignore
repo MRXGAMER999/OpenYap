@@ -31,3 +31,4 @@ node_modules/
 .opencode
 .cursor
 .specify
+.worktrees/

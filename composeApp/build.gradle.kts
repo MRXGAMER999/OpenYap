@@ -1,10 +1,20 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+import java.util.Properties
 
 fun File.asJdkHomeCandidate(): File =
     if (name.equals("bin", ignoreCase = true)) parentFile ?: this else this
 
 fun File.hasJPackage(): Boolean =
     resolve("bin/jpackage.exe").exists() || resolve("bin/jpackage").exists()
+
+fun Project.readAppVersion(): String {
+    val properties = Properties()
+    layout.projectDirectory.file("src/commonMain/resources/version.properties").asFile.inputStream().use {
+        properties.load(it)
+    }
+    return properties.getProperty("version")
+        ?: error("Missing 'version' in composeApp/src/commonMain/resources/version.properties")
+}
 
 fun resolvePackagingJavaHome(): String {
     val explicitCandidates = listOfNotNull(
@@ -50,6 +60,8 @@ val copyNativeDll by tasks.registering(Copy::class) {
     into(layout.projectDirectory.dir("resources/windows-x64"))
 }
 
+val appVersion = project.readAppVersion()
+
 kotlin {
     jvm()
 
@@ -91,7 +103,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi)
             packageName = "OpenYap"
-            packageVersion = "1.0.0"
+            packageVersion = appVersion
             appResourcesRootDir.set(layout.projectDirectory.dir("resources"))
 
             windows {

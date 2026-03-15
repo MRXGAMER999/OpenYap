@@ -326,6 +326,7 @@ fun main() {
                             if (event is SettingsEvent.ResetAppData) {
                                 recordingViewModel.onEvent(RecordingEvent.RefreshState)
                                 historyViewModel.refresh()
+                                onboardingViewModel.resetState()
                                 onboardingViewModel.refresh()
                                 dictionaryViewModel.refresh()
                                 userProfileViewModel.refresh()

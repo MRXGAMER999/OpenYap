@@ -52,6 +52,10 @@ class OnboardingViewModel(
         refresh()
     }
 
+    fun resetState() {
+        _state.value = OnboardingUiState()
+    }
+
     fun refresh() {
         viewModelScope.launch {
             val micPerm = permissionManager.checkMicrophonePermission()

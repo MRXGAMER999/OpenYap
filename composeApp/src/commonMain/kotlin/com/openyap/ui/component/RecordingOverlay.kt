@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -184,6 +185,7 @@ private fun ActiveBar(
                     fontFamily = FontFamily.Monospace,
                     color = Color.White.copy(alpha = 0.85f),
                     letterSpacing = 0.5.sp,
+                    modifier = Modifier.widthIn(min = 36.dp),
                 )
 
                 OverlayState.PROCESSING -> Text(

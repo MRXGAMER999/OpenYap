@@ -6,8 +6,10 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +29,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -68,6 +71,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.openyap.model.AudioDevice
+import com.openyap.model.PrimaryUseCase
 import com.openyap.model.TranscriptionProvider
 import com.openyap.ui.theme.Spacing
 import com.openyap.viewmodel.SettingsEvent
@@ -523,6 +527,60 @@ fun SettingsScreen(
 
                 HorizontalDivider()
 
+                Text("Transcription context", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Tell OpenYap what you mainly talk about so it can better recognize specialized vocabulary.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                UseCaseChipRow(
+                    selected = state.primaryUseCase,
+                    onSelected = { onEvent(SettingsEvent.SelectUseCase(it)) },
+                )
+                AnimatedVisibility(
+                    visible = state.primaryUseCase != PrimaryUseCase.GENERAL,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically(),
+                ) {
+                    var contextInput by remember(state.useCaseContext) {
+                        mutableStateOf(state.useCaseContext)
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                        val placeholder = when (state.primaryUseCase) {
+                            PrimaryUseCase.PROGRAMMING -> "e.g., Kotlin, Android, Jetpack Compose"
+                            PrimaryUseCase.BUSINESS -> "e.g., product management, finance, marketing"
+                            PrimaryUseCase.CREATIVE_WRITING -> "e.g., fiction, technical docs, screenwriting"
+                            PrimaryUseCase.GENERAL -> ""
+                        }
+                        val label = when (state.primaryUseCase) {
+                            PrimaryUseCase.PROGRAMMING -> "Describe your stack"
+                            PrimaryUseCase.BUSINESS -> "Describe your field"
+                            PrimaryUseCase.CREATIVE_WRITING -> "Describe your topics"
+                            PrimaryUseCase.GENERAL -> ""
+                        }
+                        OutlinedTextField(
+                            value = contextInput,
+                            onValueChange = { contextInput = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = false,
+                            maxLines = 3,
+                            label = { Text(label) },
+                            placeholder = { Text(placeholder) },
+                            supportingText = {
+                                Text("This context is passed into transcription prompts.")
+                            },
+                        )
+                        FilledTonalButton(
+                            onClick = { onEvent(SettingsEvent.SaveUseCaseContext(contextInput.trim())) },
+                            enabled = contextInput.trim() != state.useCaseContext,
+                        ) {
+                            Text("Save context")
+                        }
+                    }
+                }
+
+                HorizontalDivider()
+
                 Text("Recording", style = MaterialTheme.typography.titleMedium)
                 FeatureToggleRow(
                     label = "Audio feedback",
@@ -621,7 +679,7 @@ fun SettingsScreen(
             title = { Text("Reset app data?") },
             text = {
                 Text(
-                    "This deletes local settings, saved prompts, history, dictionary entries, profile info, and the stored API key."
+                    "This deletes local settings, saved prompts, history, dictionary entries, profile info, and stored API keys."
                 )
             },
             confirmButton = {
@@ -711,6 +769,43 @@ private fun FeatureToggleRow(
             enabled = enabled,
             onCheckedChange = onCheckedChange,
         )
+    }
+}
+
+@Composable
+private fun UseCaseChipRow(
+    selected: PrimaryUseCase,
+    onSelected: (PrimaryUseCase) -> Unit,
+) {
+    val options = listOf(
+        PrimaryUseCase.GENERAL to "General",
+        PrimaryUseCase.PROGRAMMING to "Programming",
+        PrimaryUseCase.BUSINESS to "Business",
+        PrimaryUseCase.CREATIVE_WRITING to "Writing",
+    )
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        options.forEach { (useCase, label) ->
+            val isSelected = selected == useCase
+            if (isSelected) {
+                Button(
+                    onClick = { onSelected(useCase) },
+                    contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm),
+                ) {
+                    Text(label)
+                }
+            } else {
+                OutlinedButton(
+                    onClick = { onSelected(useCase) },
+                    contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm),
+                ) {
+                    Text(label)
+                }
+            }
+        }
     }
 }
 

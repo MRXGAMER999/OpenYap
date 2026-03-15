@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.openyap.model.AppSettings
 import com.openyap.model.AudioDevice
 import com.openyap.model.HotkeyBinding
+import com.openyap.model.PrimaryUseCase
 import com.openyap.model.TranscriptionProvider
 import com.openyap.platform.AudioRecorder
 import com.openyap.platform.HotkeyDisplayFormatter
@@ -53,6 +54,8 @@ data class SettingsUiState(
     val selectedAudioDeviceId: String? = null,
     val isLoadingDevices: Boolean = false,
     val devicesFetchError: String? = null,
+    val primaryUseCase: PrimaryUseCase = PrimaryUseCase.GENERAL,
+    val useCaseContext: String = "",
 )
 
 sealed interface SettingsEvent {
@@ -75,6 +78,8 @@ sealed interface SettingsEvent {
     data object CaptureHotkey : SettingsEvent
     data object ClearHotkeyMessage : SettingsEvent
     data object DismissSaveMessage : SettingsEvent
+    data class SelectUseCase(val useCase: PrimaryUseCase) : SettingsEvent
+    data class SaveUseCaseContext(val context: String) : SettingsEvent
 }
 
 class SettingsViewModel(
@@ -127,6 +132,8 @@ class SettingsViewModel(
                     hotkeyLabel = formatHotkey(settings.hotkeyConfig.startHotkey),
                     appVersion = version,
                     selectedAudioDeviceId = settings.audioDeviceId,
+                    primaryUseCase = settings.primaryUseCase,
+                    useCaseContext = settings.useCaseContext,
                 )
             }
             if (apiKey.isNotBlank()) fetchModels(apiKey)
@@ -155,6 +162,8 @@ class SettingsViewModel(
             is SettingsEvent.DismissSaveMessage -> _state.update { it.copy(saveMessage = null) }
             is SettingsEvent.SelectAudioDevice -> selectAudioDevice(event.deviceId)
             is SettingsEvent.RefreshDevices -> refreshDevices()
+            is SettingsEvent.SelectUseCase -> selectUseCase(event.useCase)
+            is SettingsEvent.SaveUseCaseContext -> saveUseCaseContext(event.context)
         }
     }
 
@@ -384,12 +393,14 @@ class SettingsViewModel(
                         soundFeedbackVolume = defaults.soundFeedbackVolume,
                         startMinimized = defaults.startMinimized,
                         launchOnStartup = defaults.launchOnStartup,
+                        primaryUseCase = defaults.primaryUseCase,
+                        useCaseContext = defaults.useCaseContext,
                         availableModels = emptyList(),
                         isLoadingModels = false,
                         modelsFetchError = null,
                         hotkeyLabel = formatHotkey(defaults.hotkeyConfig.startHotkey),
                         isResettingData = false,
-                        saveMessage = "App data reset. Restart OpenYap if old data is still visible.",
+                        saveMessage = "App data reset. OpenYap will walk you through onboarding again.",
                         selectedAudioDeviceId = null,
                     )
                 }
@@ -406,6 +417,22 @@ class SettingsViewModel(
 
     private fun refreshDevices() {
         viewModelScope.launch { fetchDevices() }
+    }
+
+    private fun selectUseCase(useCase: PrimaryUseCase) {
+        viewModelScope.launch {
+            val settings = settingsRepository.loadSettings()
+            settingsRepository.saveSettings(settings.copy(primaryUseCase = useCase))
+            _state.update { it.copy(primaryUseCase = useCase) }
+        }
+    }
+
+    private fun saveUseCaseContext(context: String) {
+        viewModelScope.launch {
+            val settings = settingsRepository.loadSettings()
+            settingsRepository.saveSettings(settings.copy(useCaseContext = context))
+            _state.update { it.copy(useCaseContext = context) }
+        }
     }
 
     private suspend fun fetchDevices() {
