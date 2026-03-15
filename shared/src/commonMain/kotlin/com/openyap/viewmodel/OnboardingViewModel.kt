@@ -47,7 +47,7 @@ data class OnboardingUiState(
         get() = selectedModel.isNotBlank() && availableModels.isNotEmpty()
 
     val useCaseStepComplete: Boolean
-        get() = primaryUseCase != PrimaryUseCase.GENERAL || useCaseContext.isNotBlank()
+        get() = primaryUseCase == PrimaryUseCase.GENERAL || useCaseContext.isNotBlank()
 
     val completedStepCount: Int
         get() = listOf(micStepComplete, apiKeyStepComplete, modelStepComplete, useCaseStepComplete).count { it }

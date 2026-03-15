@@ -37,12 +37,16 @@ fun ComposeOverlayWindow(uiState: OverlayUiState) {
     ) {
         val window = this.window
         var lastMeasuredSize by remember { mutableStateOf(IntSize.Zero) }
+        var positionLocked by remember { mutableStateOf(false) }
 
         androidx.compose.foundation.layout.Box(
             modifier = Modifier.onGloballyPositioned { coordinates ->
                 try {
                     val size = coordinates.size
-                    if (size.width <= 0 || size.height <= 0 || size == lastMeasuredSize) {
+                    if (size.width <= 0 || size.height <= 0) {
+                        return@onGloballyPositioned
+                    }
+                    if (positionLocked && size == lastMeasuredSize) {
                         return@onGloballyPositioned
                     }
                     lastMeasuredSize = size
@@ -62,10 +66,15 @@ fun ComposeOverlayWindow(uiState: OverlayUiState) {
 
                     val w = window.width.coerceAtLeast(100)
                     val h = window.height.coerceAtLeast(32)
-                    window.setLocation(
-                        screen.x + (screen.width - w) / 2,
-                        screen.y + screen.height - h - 40,
-                    )
+                    if (!positionLocked) {
+                        window.setLocation(
+                            screen.x + (screen.width - w) / 2,
+                            screen.y + screen.height - h - 40,
+                        )
+                        positionLocked = true
+                    } else {
+                        window.pack()
+                    }
                 } catch (e: Exception) {
                     System.err.println("Failed to position overlay window: ${e.message}")
                 }

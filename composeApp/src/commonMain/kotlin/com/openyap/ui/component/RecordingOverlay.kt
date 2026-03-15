@@ -62,8 +62,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.openyap.model.OverlayState
 
-private val OverlayBarBg = Color(0xFF1A1A1A)
-
 @Composable
 fun RecordingOverlay(
     state: OverlayState,
@@ -72,10 +70,11 @@ fun RecordingOverlay(
     flashMessage: String?,
 ) {
     val pillShape = RoundedCornerShape(20.dp)
+    val overlayBg = MaterialTheme.colorScheme.inverseSurface
 
     Box(
         modifier = Modifier
-            .padding(32.dp) // Provide room for Android/Desktop Window borders to NOT clip the shadow and spring bounce
+            .padding(32.dp)
             .shadow(
                 elevation = 20.dp,
                 shape = pillShape,
@@ -83,8 +82,8 @@ fun RecordingOverlay(
                 spotColor = Color.Black.copy(alpha = 0.4f),
                 clip = true
             )
-            .background(OverlayBarBg.copy(alpha = 0.72f))
-            .border(1.dp, Color.White.copy(alpha = 0.15f), pillShape)
+            .background(overlayBg.copy(alpha = 0.92f))
+            .border(1.dp, MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.15f), pillShape)
             .animateContentSize(
                 animationSpec = spring(
                     dampingRatio = Spring.DampingRatioLowBouncy,
@@ -163,7 +162,7 @@ private fun ActiveBar(
                 OverlayState.RECORDING -> WaveformBars(level)
                 OverlayState.PROCESSING -> CircularWavyProgressIndicator(
                     modifier = Modifier.size(20.dp),
-                    color = Color.White.copy(alpha = 0.78f),
+                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.78f),
                 )
 
                 else -> Unit
@@ -183,7 +182,7 @@ private fun ActiveBar(
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = FontFamily.Monospace,
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.85f),
                     letterSpacing = 0.5.sp,
                     modifier = Modifier.widthIn(min = 36.dp),
                 )
@@ -192,7 +191,7 @@ private fun ActiveBar(
                     text = "Refining...",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color.White.copy(alpha = 0.7f),
+                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.7f),
                     letterSpacing = 0.5.sp,
                 )
 
@@ -265,7 +264,7 @@ private fun FlashMessageRow(message: String, state: OverlayState) {
     val (icon, tint) = when (state) {
         OverlayState.SUCCESS -> Icons.Default.CheckCircle to MaterialTheme.colorScheme.tertiary
         OverlayState.ERROR -> Icons.Default.WarningAmber to MaterialTheme.colorScheme.error
-        else -> Icons.Default.WarningAmber to Color.White.copy(alpha = 0.72f)
+        else -> Icons.Default.WarningAmber to MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f)
     }
 
     Row(
@@ -283,7 +282,7 @@ private fun FlashMessageRow(message: String, state: OverlayState) {
             text = message,
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
-            color = Color.White.copy(alpha = 0.7f),
+            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.7f),
         )
     }
 }
@@ -319,7 +318,7 @@ private fun WaveformBars(level: Float) {
     val effectiveLevel = if (animLevel < 0.05f) 0f else animLevel
 
     val brush = Brush.verticalGradient(
-        colors = listOf(Color.White.copy(alpha = 0.5f), MaterialTheme.colorScheme.tertiary)
+        colors = listOf(MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.5f), MaterialTheme.colorScheme.tertiary)
     )
 
     Row(

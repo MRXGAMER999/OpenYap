@@ -17,7 +17,6 @@ import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -25,7 +24,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.newSingleThreadContext
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -259,9 +257,7 @@ internal class JnaWindowsHotkeyManager : HotkeyManager, Closeable {
         pendingCapture = null
         val job = listenerJob
         listenerJob = null
-        if (job != null) {
-            runBlocking { job.cancelAndJoin() }
-        }
+        job?.cancel()
     }
 
     override suspend fun captureNextHotkey(): HotkeyCapture = captureMutex.withLock {
