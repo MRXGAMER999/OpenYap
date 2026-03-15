@@ -320,7 +320,7 @@ fun SettingsScreen(
                         }
                     }
                     Text(
-                        "The key is stored locally and used only for Groq Whisper requests.",
+                        "The key is stored locally and used for Groq Whisper plus Groq LLM model listing and correction.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

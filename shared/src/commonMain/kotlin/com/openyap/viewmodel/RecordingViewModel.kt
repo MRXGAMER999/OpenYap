@@ -26,6 +26,7 @@ import com.openyap.service.PhraseExpansionEngine
 import com.openyap.service.PromptBuilder
 import com.openyap.service.TranscriptionService
 import com.openyap.service.WhisperPromptBuilder
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -434,12 +435,18 @@ class RecordingViewModel(
                             whisperPrompt = whisperPrompt,
                             language = settings.whisperLanguage,
                         )
-                        groqLLMClient.rewriteText(
-                            text = transcript,
-                            systemPrompt = systemPrompt,
-                            apiKey = groqApiKey!!,
-                            model = settings.groqLLMModel,
-                        )
+                        try {
+                            groqLLMClient.rewriteText(
+                                text = transcript,
+                                systemPrompt = systemPrompt,
+                                apiKey = groqApiKey!!,
+                                model = settings.groqLLMModel,
+                            )
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            transcript
+                        }
                     }
                 }
 

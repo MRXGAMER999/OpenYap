@@ -279,7 +279,11 @@ class SettingsViewModel(
                 fetchGroqLLMModels(trimmed)
             } else {
                 _state.update {
-                    it.copy(groqLLMModels = emptyList(), groqLLMModelsFetchError = null)
+                    it.copy(
+                        groqLLMModels = emptyList(),
+                        groqLLMModelsFetchError = null,
+                        isLoadingGroqLLMModels = false,
+                    )
                 }
             }
         }
@@ -307,15 +311,20 @@ class SettingsViewModel(
     }
 
     private suspend fun fetchGroqLLMModels(apiKey: String) {
+        val expectedKey = apiKey
         _state.update { it.copy(isLoadingGroqLLMModels = true, groqLLMModelsFetchError = null) }
         try {
             val models = groqLLMClient.listModels(apiKey)
+            if (_state.value.groqApiKey != expectedKey) return
+
             _state.update { it.copy(groqLLMModels = models, isLoadingGroqLLMModels = false) }
 
             if (models.isNotEmpty() && models.none { it.id == _state.value.groqLLMModel }) {
                 selectGroqLLMModel(models.first().id)
             }
         } catch (e: Exception) {
+            if (_state.value.groqApiKey != expectedKey) return
+
             _state.update {
                 it.copy(
                     isLoadingGroqLLMModels = false,

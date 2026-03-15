@@ -10,6 +10,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -112,11 +113,17 @@ class GroqLLMClient(private val client: HttpClient) {
         )
 
         val response = executeWithRetry {
-            client.post("$BASE_URL/chat/completions") {
+            val response = client.post("$BASE_URL/chat/completions") {
                 header(HttpHeaders.Authorization, "Bearer $apiKey")
                 contentType(ContentType.Application.Json)
                 setBody(requestBody)
             }
+
+            if (response.status == HttpStatusCode.TooManyRequests || response.status.value >= 500) {
+                throw TemporaryGroqLLMException("Temporary Groq LLM API error (${response.status.value}).")
+            }
+
+            response
         }
 
         if (response.status != HttpStatusCode.OK) {
@@ -141,6 +148,8 @@ class GroqLLMClient(private val client: HttpClient) {
         for (attempt in 0..MAX_RETRIES) {
             try {
                 return block()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 lastException = e
                 if (attempt < MAX_RETRIES) {
@@ -171,6 +180,8 @@ class GroqLLMClient(private val client: HttpClient) {
 }
 
 class GroqLLMException(message: String) : Exception(message)
+
+private class TemporaryGroqLLMException(message: String) : Exception(message)
 
 @Serializable
 data class GroqChatRequest(
