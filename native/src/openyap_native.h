@@ -65,7 +65,8 @@ OPENYAP_API int OPENYAP_CALL openyap_hotkey_cancel_capture(void);
 /// Returns nullptr on failure (check openyap_last_error()).
 OPENYAP_API const char *OPENYAP_CALL openyap_list_devices(void);
 
-/// Frees a string previously returned by openyap_list_devices().
+/// Frees a heap-allocated string returned by openyap_list_devices() or
+/// openyap_last_error().
 OPENYAP_API void OPENYAP_CALL openyap_free_string(const char *str);
 
 OPENYAP_API int OPENYAP_CALL openyap_encode_aac(

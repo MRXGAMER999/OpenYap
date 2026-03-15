@@ -232,7 +232,7 @@ internal class JnaWindowsHotkeyManager : HotkeyManager, Closeable {
     }
 
     override fun startListening() {
-        if (listenerJob?.isActive == true) return
+        if (listenerJob?.isCompleted == false) return
 
         listenerJob = scope.launch {
             try {
@@ -255,9 +255,13 @@ internal class JnaWindowsHotkeyManager : HotkeyManager, Closeable {
     override fun stopListening() {
         pendingCapture?.cancel(CancellationException("Hotkey listening stopped."))
         pendingCapture = null
-        val job = listenerJob
-        listenerJob = null
-        job?.cancel()
+        val job = listenerJob ?: return
+        job.invokeOnCompletion {
+            if (listenerJob === job) {
+                listenerJob = null
+            }
+        }
+        job.cancel()
     }
 
     override suspend fun captureNextHotkey(): HotkeyCapture = captureMutex.withLock {

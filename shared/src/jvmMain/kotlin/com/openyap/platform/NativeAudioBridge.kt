@@ -121,7 +121,7 @@ object NativeAudioBridge {
     fun OpenYapNative.readLastError(): String? {
         val ptr = openyap_last_error() ?: return null
         return try {
-            ptr.getString(0)
+            ptr.getString(0, Charsets.UTF_8.name())
         } finally {
             openyap_free_string(ptr)
         }

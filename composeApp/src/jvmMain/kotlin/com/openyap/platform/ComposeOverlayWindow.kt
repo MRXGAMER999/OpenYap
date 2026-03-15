@@ -72,8 +72,6 @@ fun ComposeOverlayWindow(uiState: OverlayUiState) {
                             screen.y + screen.height - h - 40,
                         )
                         positionLocked = true
-                    } else {
-                        window.pack()
                     }
                 } catch (e: Exception) {
                     System.err.println("Failed to position overlay window: ${e.message}")

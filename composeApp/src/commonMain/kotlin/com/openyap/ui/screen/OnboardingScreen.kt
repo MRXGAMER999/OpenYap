@@ -373,16 +373,18 @@ fun OnboardingScreen(
                                             }
                                         },
                                         isError = state.keyValidationSuccess == false || keyFormatError != null,
-                                        supportingText = when {
-                                            keyFormatError != null -> {{ Text(keyFormatError) }}
-                                            state.keyValidationSuccess == false -> {{ Text("Key appears invalid — model fetch failed. Double-check and retry.") }}
-                                            else -> null
+                                        supportingText = if (keyFormatError != null) {
+                                            { Text(keyFormatError) }
+                                        } else if (state.keyValidationSuccess == false) {
+                                            { Text("Key appears invalid — model fetch failed. Double-check and retry.") }
+                                        } else {
+                                            null
                                         },
                                     )
 
                                     FilledTonalButton(
                                         onClick = { onEvent(OnboardingEvent.SaveApiKey(apiKeyInput)) },
-                                        enabled = apiKeyInput.isNotBlank() && !state.isValidatingKey,
+                                        enabled = apiKeyInput.isNotBlank() && !state.isValidatingKey && keyFormatError == null,
                                     ) {
                                         if (state.isValidatingKey) {
                                             CircularProgressIndicator(
