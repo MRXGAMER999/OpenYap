@@ -188,20 +188,44 @@ fun AppShell(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(Spacing.sm),
                 ) {
-                    // App icon — smaller 40dp circle
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.GraphicEq,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
+                    Box(contentAlignment = Alignment.TopEnd) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.GraphicEq,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
+                        val isRecordingOrProcessing =
+                            recordingState.recordingState is RecordingState.Recording ||
+                                    recordingState.recordingState is RecordingState.Processing
+                        if (isRecordingOrProcessing) {
+                            val pulseTransition = rememberInfiniteTransition(label = "navRecPulse")
+                            val pulseAlpha by pulseTransition.animateFloat(
+                                initialValue = 0.4f,
+                                targetValue = 1f,
+                                animationSpec = infiniteRepeatable(tween(800), RepeatMode.Reverse),
+                                label = "navRecAlpha",
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (recordingState.recordingState is RecordingState.Recording)
+                                            MaterialTheme.colorScheme.error.copy(alpha = pulseAlpha)
+                                        else
+                                            MaterialTheme.colorScheme.primary.copy(alpha = pulseAlpha)
+                                    ),
+                            )
+                        }
                     }
                     Text("OpenYap", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(Spacing.sm))
@@ -305,9 +329,7 @@ fun AppShell(
                 }
             }
 
-            // In-window indicator — secondary to the floating overlay.
-            // Only shown for error states (overlay doesn't persist errors).
-            val showInWindowIndicator = recordingState.recordingState is RecordingState.Error
+            val showInWindowIndicator = recordingState.recordingState !is RecordingState.Idle
             if (showInWindowIndicator) {
                 RecordingIndicator(
                     recordingState = recordingState.recordingState,
@@ -349,7 +371,7 @@ private fun HomeContent(
     val canStart = state.recordingState is RecordingState.Idle ||
             state.recordingState is RecordingState.Success ||
             state.recordingState is RecordingState.Error
-    var latestResultText by remember { mutableStateOf(state.lastResultText) }
+    var latestResultText by remember(state.lastResultText) { mutableStateOf(state.lastResultText) }
 
     LaunchedEffect(state.recordingState) {
         when (val recordingState = state.recordingState) {
@@ -370,7 +392,7 @@ private fun HomeContent(
             snackbarHostState.showSnackbar(
                 message = it,
                 actionLabel = "Dismiss",
-                duration = SnackbarDuration.Short,
+                duration = SnackbarDuration.Long,
             )
             onEvent(RecordingEvent.DismissError)
         }
@@ -465,7 +487,33 @@ private fun HomeContent(
                         )
                     }
 
-                    // Interactive status chips
+                    AnimatedVisibility(
+                        visible = state.recordingState is RecordingState.Idle && latestResultText == null,
+                        enter = fadeIn(),
+                        exit = fadeOut(),
+                    ) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(Spacing.md),
+                                verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+                            ) {
+                                Text(
+                                    "Quick start",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                )
+                                Text(
+                                    "Hold ${settingsState.hotkeyLabel} to record, release to transcribe and paste. You can also press the mic button below.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
+                                )
+                            }
+                        }
+                    }
+
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                         verticalArrangement = Arrangement.spacedBy(Spacing.sm),

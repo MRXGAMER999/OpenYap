@@ -35,4 +35,5 @@ data class AppSettings(
     val audioDeviceId: String? = null,
     val primaryUseCase: PrimaryUseCase = PrimaryUseCase.GENERAL,
     val useCaseContext: String = "",
+    val whisperLanguage: String = "en",
 )

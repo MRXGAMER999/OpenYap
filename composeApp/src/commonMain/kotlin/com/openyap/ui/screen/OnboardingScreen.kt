@@ -338,6 +338,13 @@ fun OnboardingScreen(
                                         }
                                     }
 
+                                    val keyFormatError = when {
+                                        apiKeyInput.isBlank() -> null
+                                        apiKeyInput.length < 10 -> "Key looks too short"
+                                        apiKeyInput.contains(" ") -> "Key should not contain spaces"
+                                        else -> null
+                                    }
+
                                     OutlinedTextField(
                                         value = apiKeyInput,
                                         onValueChange = { apiKeyInput = it },
@@ -365,15 +372,19 @@ fun OnboardingScreen(
                                                 }
                                             }
                                         },
-                                        isError = state.keyValidationSuccess == false,
-                                        supportingText = if (state.keyValidationSuccess == false) {
+                                        isError = state.keyValidationSuccess == false || keyFormatError != null,
+                                        supportingText = if (keyFormatError != null) {
+                                            { Text(keyFormatError) }
+                                        } else if (state.keyValidationSuccess == false) {
                                             { Text("Key appears invalid — model fetch failed. Double-check and retry.") }
-                                        } else null,
+                                        } else {
+                                            null
+                                        },
                                     )
 
                                     FilledTonalButton(
                                         onClick = { onEvent(OnboardingEvent.SaveApiKey(apiKeyInput)) },
-                                        enabled = apiKeyInput.isNotBlank() && !state.isValidatingKey,
+                                        enabled = apiKeyInput.isNotBlank() && !state.isValidatingKey && keyFormatError == null,
                                     ) {
                                         if (state.isValidatingKey) {
                                             CircularProgressIndicator(

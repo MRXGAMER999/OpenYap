@@ -5,6 +5,7 @@ import com.openyap.model.HotkeyCapture
 import com.openyap.model.HotkeyConfig
 import com.openyap.model.HotkeyEvent
 import com.openyap.model.HotkeyModifier
+import com.openyap.platform.NativeAudioBridge.readLastError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -119,7 +120,7 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
         }
         if (result != 0) {
             switchToFallback(
-                nativeInstance.openyap_last_error()
+                nativeInstance.readLastError()
                     ?: "Failed to update native hotkey config (code $result)."
             )
             getOrCreateFallback().setConfig(config)
@@ -151,7 +152,7 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
         }
         if (result != 0) {
             switchToFallback(
-                nativeInstance.openyap_last_error()
+                nativeInstance.readLastError()
                     ?: "Failed to start native hotkey listener (code $result)."
             )
             getOrCreateFallback().startListening()
@@ -196,7 +197,7 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
                 }
                 if (startResult != 0) {
                     switchToFallback(
-                        nativeInstance.openyap_last_error()
+                        nativeInstance.readLastError()
                             ?: "Failed to start native hotkey listener for capture (code $startResult)."
                     )
                     return@withLock getOrCreateFallback().captureNextHotkey()
@@ -224,7 +225,7 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
                     runCatching { nativeInstance.openyap_hotkey_stop_listening() }
                 }
                 switchToFallback(
-                    nativeInstance.openyap_last_error()
+                    nativeInstance.readLastError()
                         ?: "Failed to begin native hotkey capture (code $beginResult)."
                 )
                 return@withLock getOrCreateFallback().captureNextHotkey()

@@ -28,6 +28,7 @@ class ComposeOverlayController : OverlayController, Closeable {
     val uiState: StateFlow<OverlayUiState> = _uiState.asStateFlow()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val flashLock = Any()
     private var lastFlashJob: Job? = null
 
     override fun show() {
@@ -63,11 +64,13 @@ class ComposeOverlayController : OverlayController, Closeable {
     }
 
     override fun flashMessage(message: String) {
-        lastFlashJob?.cancel()
-        _uiState.update { it.copy(flashMessage = message) }
-        lastFlashJob = scope.launch {
-            delay(1500)
-            _uiState.update { it.copy(flashMessage = null) }
+        synchronized(flashLock) {
+            lastFlashJob?.cancel()
+            _uiState.update { it.copy(flashMessage = message) }
+            lastFlashJob = scope.launch {
+                delay(1500)
+                _uiState.update { it.copy(flashMessage = null) }
+            }
         }
     }
 

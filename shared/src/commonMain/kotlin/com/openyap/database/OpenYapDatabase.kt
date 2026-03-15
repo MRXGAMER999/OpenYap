@@ -15,7 +15,7 @@ import androidx.sqlite.execSQL
         AppToneEntity::class,
         AppPromptEntity::class,
     ],
-    version = 3,
+    version = 4,
 )
 abstract class OpenYapDatabase : RoomDatabase() {
     abstract fun appSettingsDao(): AppSettingsDao
@@ -45,5 +45,11 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
 val MIGRATION_2_3 = object : Migration(2, 3) {
     override suspend fun migrate(connection: SQLiteConnection) {
         connection.execSQL("ALTER TABLE app_settings ADD COLUMN soundFeedbackVolume REAL NOT NULL DEFAULT 0.5")
+    }
+}
+
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE app_settings ADD COLUMN whisperLanguage TEXT NOT NULL DEFAULT 'en'")
     }
 }
