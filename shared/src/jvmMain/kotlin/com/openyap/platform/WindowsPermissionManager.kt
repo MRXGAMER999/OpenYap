@@ -28,11 +28,22 @@ class WindowsPermissionManager : PermissionManager {
             }
         }
 
-    override fun openMicrophoneSettings() {
-        try {
-            ProcessBuilder("cmd", "/c", "start", "ms-settings:privacy-microphone").start()
+    override fun openMicrophoneSettings(): Boolean {
+        return try {
+            val os = System.getProperty("os.name", "").lowercase()
+            when {
+                "win" in os -> {
+                    ProcessBuilder("cmd", "/c", "start", "ms-settings:privacy-microphone").start()
+                    true
+                }
+                "mac" in os || "darwin" in os -> {
+                    ProcessBuilder("open", "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone").start()
+                    true
+                }
+                else -> false
+            }
         } catch (_: Exception) {
-            // Best-effort
+            false
         }
     }
 }
