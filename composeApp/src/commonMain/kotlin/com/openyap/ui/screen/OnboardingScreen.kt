@@ -187,7 +187,7 @@ fun OnboardingScreen(
                             style = MaterialTheme.typography.displaySmallEmphasized,
                         )
                         Text(
-                            text = "Give OpenYap microphone access, add your Gemini key, pick a model, and tell us what you talk about. After that, every recording becomes a polished paste.",
+                            text = "Give OpenYap microphone access, add your Groq key, pick a model, and tell us what you talk about. After that, every recording becomes a polished paste.",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -298,7 +298,7 @@ fun OnboardingScreen(
 
                         StepSection(
                             stepNumber = 2,
-                            title = "Gemini API Key",
+                            title = "Groq API Key",
                             subtitle = "Connect the voice pipeline to your model backend.",
                             stepState = step2State,
                             delayMs = 80,
@@ -312,7 +312,7 @@ fun OnboardingScreen(
                                 exit = fadeOut() + shrinkVertically(),
                             ) {
                                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                                    Text("Paste your Gemini API key. OpenYap stores it locally and uses it for transcription and rewriting.")
+                                    Text("Paste your Groq API key. OpenYap stores it locally and uses it for transcription and rewriting.")
 
                                     // Inline "Get a free key" link — more discoverable
                                     Row(
@@ -325,11 +325,11 @@ fun OnboardingScreen(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                         TextButton(
-                                            onClick = { uriHandler.openUri("https://aistudio.google.com/app/apikey") },
+                                            onClick = { uriHandler.openUri("https://console.groq.com/keys") },
                                             contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = 0.dp),
                                         ) {
                                             Text(
-                                                "Get a free key \u2197",
+                                                "Free key: how to get one \u2197",
                                                 style = MaterialTheme.typography.bodySmall.copy(
                                                     fontWeight = FontWeight.SemiBold,
                                                     textDecoration = TextDecoration.Underline,
@@ -350,7 +350,7 @@ fun OnboardingScreen(
                                         onValueChange = { apiKeyInput = it },
                                         modifier = Modifier.fillMaxWidth().focusRequester(apiFocusRequester),
                                         singleLine = true,
-                                        placeholder = { Text("Gemini API key") },
+                                        placeholder = { Text("Groq API key") },
                                         visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
                                         trailingIcon = {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
