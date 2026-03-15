@@ -112,8 +112,7 @@ class OnboardingViewModel(
 
     private fun selectModel(modelId: String) {
         viewModelScope.launch {
-            val settings = settingsRepository.loadSettings()
-            settingsRepository.saveSettings(settings.copy(geminiModel = modelId))
+            settingsRepository.updateSettings { it.copy(geminiModel = modelId) }
             _state.update { it.copy(selectedModel = modelId) }
         }
     }
@@ -144,16 +143,14 @@ class OnboardingViewModel(
 
     private fun selectUseCase(useCase: PrimaryUseCase) {
         viewModelScope.launch {
-            val settings = settingsRepository.loadSettings()
-            settingsRepository.saveSettings(settings.copy(primaryUseCase = useCase))
+            settingsRepository.updateSettings { it.copy(primaryUseCase = useCase) }
             _state.update { it.copy(primaryUseCase = useCase) }
         }
     }
 
     private fun saveUseCaseContext(context: String) {
         viewModelScope.launch {
-            val settings = settingsRepository.loadSettings()
-            settingsRepository.saveSettings(settings.copy(useCaseContext = context))
+            settingsRepository.updateSettings { it.copy(useCaseContext = context) }
             _state.update { it.copy(useCaseContext = context) }
         }
     }
@@ -166,8 +163,7 @@ class OnboardingViewModel(
 
     private fun completeOnboarding() {
         viewModelScope.launch {
-            val settings = settingsRepository.loadSettings()
-            settingsRepository.saveSettings(settings.copy(onboardingCompleted = true))
+            settingsRepository.updateSettings { it.copy(onboardingCompleted = true) }
             _state.update { it.copy(isComplete = true) }
         }
     }

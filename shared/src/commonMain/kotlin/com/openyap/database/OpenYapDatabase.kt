@@ -24,6 +24,15 @@ abstract class OpenYapDatabase : RoomDatabase() {
     abstract fun userProfileDao(): UserProfileDao
     abstract fun appToneDao(): AppToneDao
     abstract fun appPromptDao(): AppPromptDao
+
+    suspend fun deleteAllData() {
+        appSettingsDao().deleteAll()
+        recordingEntryDao().deleteAll()
+        dictionaryEntryDao().deleteAll()
+        userProfileDao().deleteAll()
+        appToneDao().deleteAll()
+        appPromptDao().deleteAll()
+    }
 }
 
 val MIGRATION_1_2 = object : Migration(1, 2) {

@@ -7,11 +7,16 @@ import com.openyap.database.toDomain
 import com.openyap.database.toEntity
 import com.openyap.model.AppSettings
 import com.openyap.platform.SecureStorage
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class RoomSettingsRepository(
     private val database: OpenYapDatabase,
     private val secureStorage: SecureStorage,
 ) : SettingsRepository {
+
+    /** Guards load-modify-save sequences against concurrent overwrites. */
+    private val settingsMutex = Mutex()
 
     override suspend fun loadSettings(): AppSettings {
         return database.appSettingsDao().get()?.toDomain() ?: AppSettings()
@@ -19,6 +24,15 @@ class RoomSettingsRepository(
 
     override suspend fun saveSettings(settings: AppSettings) {
         database.appSettingsDao().upsert(settings.toEntity())
+    }
+
+    override suspend fun updateSettings(transform: (AppSettings) -> AppSettings): AppSettings {
+        return settingsMutex.withLock {
+            val current = loadSettings()
+            val updated = transform(current)
+            saveSettings(updated)
+            updated
+        }
     }
 
     override suspend fun loadApiKey(): String? = secureStorage.load("gemini_api_key")

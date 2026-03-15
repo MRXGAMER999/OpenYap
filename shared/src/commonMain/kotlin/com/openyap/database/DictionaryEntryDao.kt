@@ -15,4 +15,7 @@ interface DictionaryEntryDao {
 
     @Query("DELETE FROM dictionary_entries WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    @Query("DELETE FROM dictionary_entries")
+    suspend fun deleteAll()
 }

@@ -18,4 +18,7 @@ interface AppPromptDao {
 
     @Query("DELETE FROM app_prompts WHERE appName = :appName")
     suspend fun deleteByAppName(appName: String)
+
+    @Query("DELETE FROM app_prompts")
+    suspend fun deleteAll()
 }

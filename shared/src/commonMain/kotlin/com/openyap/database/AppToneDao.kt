@@ -18,4 +18,7 @@ interface AppToneDao {
 
     @Query("DELETE FROM app_tones WHERE appName = :appName")
     suspend fun deleteByAppName(appName: String)
+
+    @Query("DELETE FROM app_tones")
+    suspend fun deleteAll()
 }

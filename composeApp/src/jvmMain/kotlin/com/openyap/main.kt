@@ -107,6 +107,7 @@ fun main() {
         val appDataResetter = remember {
             JvmAppDataResetter(
                 secureStorage = secureStorage,
+                database = database,
                 dataDir = PlatformInit.dataDir,
                 tempDir = PlatformInit.tempDir,
             )
@@ -305,6 +306,28 @@ fun main() {
                 val statsState by statsViewModel.state.collectAsState()
                 val scope = rememberCoroutineScope()
 
+                // After SettingsViewModel.resetAppData() finishes (disk wipe + state
+                // reset), refresh all ViewModels so they pick up the empty database.
+                // This avoids the race where refresh() reads stale data before the
+                // reset coroutine deletes the DB.
+                LaunchedEffect(Unit) {
+                    var wasResetting = false
+                    settingsViewModel.state.collect { state ->
+                        if (state.isResettingData) {
+                            wasResetting = true
+                        } else if (wasResetting) {
+                            wasResetting = false
+                            // Reset completed — DB is now wiped, safe to refresh
+                            recordingViewModel.onEvent(RecordingEvent.RefreshState)
+                            historyViewModel.refresh()
+                            onboardingViewModel.refresh()
+                            dictionaryViewModel.refresh()
+                            userProfileViewModel.refresh()
+                            statsViewModel.refresh()
+                        }
+                    }
+                }
+
                 AppTheme {
                     AppShell(
                         backStack = backStack,
@@ -324,13 +347,11 @@ fun main() {
                                 recordingViewModel.onEvent(RecordingEvent.RefreshState)
                             }
                             if (event is SettingsEvent.ResetAppData) {
-                                recordingViewModel.onEvent(RecordingEvent.RefreshState)
-                                historyViewModel.refresh()
+                                // Synchronously clear onboarding state so AppShell's
+                                // guard immediately hides the main UI. The actual
+                                // ViewModel refreshes happen in the LaunchedEffect
+                                // below once SettingsViewModel.resetAppData() completes.
                                 onboardingViewModel.resetState()
-                                onboardingViewModel.refresh()
-                                dictionaryViewModel.refresh()
-                                userProfileViewModel.refresh()
-                                statsViewModel.refresh()
                                 appTones = emptyMap()
                                 appPrompts = emptyMap()
                                 backStack.clear()
@@ -340,7 +361,14 @@ fun main() {
                         onHistoryEvent = historyViewModel::onEvent,
                         onOnboardingEvent = { event ->
                             onboardingViewModel.onEvent(event)
-                            if (event is OnboardingEvent.CompleteOnboarding || event is OnboardingEvent.SaveApiKey) {
+                            if (event is OnboardingEvent.CompleteOnboarding) {
+                                // Onboarding saved settings (model, use case, API keys)
+                                // that SettingsViewModel and RecordingViewModel loaded at
+                                // init (before onboarding ran). Refresh them so the main
+                                // UI reflects the onboarding choices immediately.
+                                settingsViewModel.refresh()
+                                recordingViewModel.onEvent(RecordingEvent.RefreshState)
+                            } else if (event is OnboardingEvent.SaveApiKey) {
                                 recordingViewModel.onEvent(RecordingEvent.RefreshState)
                             }
                         },

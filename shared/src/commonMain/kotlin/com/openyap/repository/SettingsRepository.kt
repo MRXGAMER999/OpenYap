@@ -6,6 +6,15 @@ interface SettingsRepository {
     suspend fun loadSettings(): AppSettings
     suspend fun saveSettings(settings: AppSettings)
 
+    /**
+     * Atomically loads the current settings, applies [transform], and saves
+     * the result. This avoids the race condition where two concurrent
+     * load-modify-save sequences overwrite each other's changes.
+     *
+     * Returns the settings after the transform has been applied and saved.
+     */
+    suspend fun updateSettings(transform: (AppSettings) -> AppSettings): AppSettings
+
     suspend fun loadApiKey(): String?
     suspend fun saveApiKey(key: String)
 

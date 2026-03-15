@@ -97,6 +97,10 @@ class SettingsViewModel(
     val state: StateFlow<SettingsUiState> = _state.asStateFlow()
 
     init {
+        refresh()
+    }
+
+    fun refresh() {
         viewModelScope.launch {
             val apiKey = settingsRepository.loadApiKey() ?: ""
             val groqApiKey = settingsRepository.loadGroqApiKey() ?: ""
@@ -182,11 +186,11 @@ class SettingsViewModel(
                     platformKeyCode = capture.platformKeyCode,
                     modifiers = capture.modifiers,
                 )
-                val settings = settingsRepository.loadSettings()
-                val updatedSettings = settings.copy(
-                    hotkeyConfig = settings.hotkeyConfig.copy(startHotkey = binding)
-                )
-                settingsRepository.saveSettings(updatedSettings)
+                val updatedSettings = settingsRepository.updateSettings { settings ->
+                    settings.copy(
+                        hotkeyConfig = settings.hotkeyConfig.copy(startHotkey = binding)
+                    )
+                }
                 hotkeyManager.setConfig(updatedSettings.hotkeyConfig)
                 _state.update {
                     it.copy(
@@ -231,16 +235,14 @@ class SettingsViewModel(
 
     private fun selectModel(modelId: String) {
         viewModelScope.launch {
-            val settings = settingsRepository.loadSettings()
-            settingsRepository.saveSettings(settings.copy(geminiModel = modelId))
+            settingsRepository.updateSettings { it.copy(geminiModel = modelId) }
             _state.update { it.copy(geminiModel = modelId) }
         }
     }
 
     private fun selectProvider(provider: TranscriptionProvider) {
         viewModelScope.launch {
-            val settings = settingsRepository.loadSettings()
-            settingsRepository.saveSettings(settings.copy(transcriptionProvider = provider))
+            settingsRepository.updateSettings { it.copy(transcriptionProvider = provider) }
             _state.update { it.copy(transcriptionProvider = provider) }
             if (provider != TranscriptionProvider.GROQ_WHISPER && _state.value.apiKey.isNotBlank() && _state.value.availableModels.isEmpty()) {
                 fetchModels(_state.value.apiKey)
@@ -258,8 +260,7 @@ class SettingsViewModel(
 
     private fun selectGroqModel(modelId: String) {
         viewModelScope.launch {
-            val settings = settingsRepository.loadSettings()
-            settingsRepository.saveSettings(settings.copy(groqModel = modelId))
+            settingsRepository.updateSettings { it.copy(groqModel = modelId) }
             _state.update { it.copy(groqModel = modelId) }
         }
     }
@@ -292,24 +293,21 @@ class SettingsViewModel(
 
     private fun toggleGenZ(enabled: Boolean) {
         viewModelScope.launch {
-            val settings = settingsRepository.loadSettings()
-            settingsRepository.saveSettings(settings.copy(genZEnabled = enabled))
+            settingsRepository.updateSettings { it.copy(genZEnabled = enabled) }
             _state.update { it.copy(genZEnabled = enabled) }
         }
     }
 
     private fun togglePhraseExpansion(enabled: Boolean) {
         viewModelScope.launch {
-            val settings = settingsRepository.loadSettings()
-            settingsRepository.saveSettings(settings.copy(phraseExpansionEnabled = enabled))
+            settingsRepository.updateSettings { it.copy(phraseExpansionEnabled = enabled) }
             _state.update { it.copy(phraseExpansionEnabled = enabled) }
         }
     }
 
     private fun toggleAudioFeedback(enabled: Boolean) {
         viewModelScope.launch {
-            val settings = settingsRepository.loadSettings()
-            settingsRepository.saveSettings(settings.copy(audioFeedbackEnabled = enabled))
+            settingsRepository.updateSettings { it.copy(audioFeedbackEnabled = enabled) }
             _state.update { it.copy(audioFeedbackEnabled = enabled) }
         }
     }
@@ -317,24 +315,21 @@ class SettingsViewModel(
     private fun setSoundFeedbackVolume(volume: Float) {
         val clamped = volume.coerceIn(0f, 1f)
         viewModelScope.launch {
-            val settings = settingsRepository.loadSettings()
-            settingsRepository.saveSettings(settings.copy(soundFeedbackVolume = clamped))
+            settingsRepository.updateSettings { it.copy(soundFeedbackVolume = clamped) }
             _state.update { it.copy(soundFeedbackVolume = clamped) }
         }
     }
 
     private fun toggleDictionary(enabled: Boolean) {
         viewModelScope.launch {
-            val settings = settingsRepository.loadSettings()
-            settingsRepository.saveSettings(settings.copy(dictionaryEnabled = enabled))
+            settingsRepository.updateSettings { it.copy(dictionaryEnabled = enabled) }
             _state.update { it.copy(dictionaryEnabled = enabled) }
         }
     }
 
     private fun toggleStartMinimized(enabled: Boolean) {
         viewModelScope.launch {
-            val settings = settingsRepository.loadSettings()
-            settingsRepository.saveSettings(settings.copy(startMinimized = enabled))
+            settingsRepository.updateSettings { it.copy(startMinimized = enabled) }
             _state.update { it.copy(startMinimized = enabled) }
         }
     }
@@ -348,8 +343,7 @@ class SettingsViewModel(
 
             try {
                 startupManager.setEnabled(enabled)
-                val settings = settingsRepository.loadSettings()
-                settingsRepository.saveSettings(settings.copy(launchOnStartup = enabled))
+                settingsRepository.updateSettings { it.copy(launchOnStartup = enabled) }
                 _state.update {
                     it.copy(
                         launchOnStartup = enabled,
@@ -421,16 +415,14 @@ class SettingsViewModel(
 
     private fun selectUseCase(useCase: PrimaryUseCase) {
         viewModelScope.launch {
-            val settings = settingsRepository.loadSettings()
-            settingsRepository.saveSettings(settings.copy(primaryUseCase = useCase))
+            settingsRepository.updateSettings { it.copy(primaryUseCase = useCase) }
             _state.update { it.copy(primaryUseCase = useCase) }
         }
     }
 
     private fun saveUseCaseContext(context: String) {
         viewModelScope.launch {
-            val settings = settingsRepository.loadSettings()
-            settingsRepository.saveSettings(settings.copy(useCaseContext = context))
+            settingsRepository.updateSettings { it.copy(useCaseContext = context) }
             _state.update { it.copy(useCaseContext = context) }
         }
     }
@@ -452,8 +444,7 @@ class SettingsViewModel(
 
     private fun selectAudioDevice(deviceId: String?) {
         viewModelScope.launch {
-            val settings = settingsRepository.loadSettings()
-            settingsRepository.saveSettings(settings.copy(audioDeviceId = deviceId))
+            settingsRepository.updateSettings { it.copy(audioDeviceId = deviceId) }
             _state.update { it.copy(selectedAudioDeviceId = deviceId) }
         }
     }
