@@ -406,5 +406,13 @@ const char *OPENYAP_CALL
 
 openyap_last_error(void) {
     std::lock_guard <std::mutex> lock(g_error_mutex);
-    return g_last_error.empty() ? nullptr : g_last_error.c_str();
+    if (g_last_error.empty()) {
+        return nullptr;
+    }
+    char *copy = static_cast<char *>(std::malloc(g_last_error.size() + 1));
+    if (copy == nullptr) {
+        return nullptr;
+    }
+    std::memcpy(copy, g_last_error.c_str(), g_last_error.size() + 1);
+    return copy;
 }

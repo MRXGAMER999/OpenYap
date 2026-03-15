@@ -1,5 +1,6 @@
 package com.openyap.platform
 
+import com.openyap.platform.NativeAudioBridge.readLastError
 import com.sun.jna.WString
 import com.sun.jna.platform.win32.User32
 import com.sun.jna.platform.win32.WinDef.DWORD
@@ -44,7 +45,7 @@ class WindowsPasteAutomation : PasteAutomation {
             if (restoreClipboard) 1 else 0,
         )
         if (result != 0) {
-            val reason = native.openyap_last_error() ?: "unknown error (code $result)"
+            val reason = native.readLastError() ?: "unknown error (code $result)"
             System.err.println("Native paste failed: $reason — falling back to JNA path")
             pasteJnaBlocking(text, restoreClipboard)
         }

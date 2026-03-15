@@ -62,6 +62,7 @@ class GroqWhisperClient(private val client: HttpClient) : TranscriptionService {
         apiKey: String,
         model: String,
         whisperPrompt: String,
+        language: String,
     ): String {
         val filename = mimeToFilename(mimeType)
 
@@ -95,15 +96,17 @@ class GroqWhisperClient(private val client: HttpClient) : TranscriptionService {
                     },
                 )
             )
-            add(
-                PartData.FormItem(
-                    value = "en",
-                    dispose = {},
-                    partHeaders = Headers.build {
-                        append(HttpHeaders.ContentDisposition, fieldDisposition("language"))
-                    },
+            if (language.isNotBlank()) {
+                add(
+                    PartData.FormItem(
+                        value = language,
+                        dispose = {},
+                        partHeaders = Headers.build {
+                            append(HttpHeaders.ContentDisposition, fieldDisposition("language"))
+                        },
+                    )
                 )
-            )
+            }
             add(
                 PartData.FormItem(
                     value = "0",

@@ -21,6 +21,7 @@ interface TranscriptionService {
      * @param apiKey provider API key
      * @param model model identifier (e.g. "gemini-2.5-flash", "whisper-large-v3")
      * @param whisperPrompt vocabulary-guidance prompt for Whisper-based providers (max 224 tokens)
+     * @param language ISO 639-1 language code for transcription (e.g. "en", "es", "fr")
      */
     suspend fun transcribe(
         audioBytes: ByteArray,
@@ -29,6 +30,7 @@ interface TranscriptionService {
         apiKey: String,
         model: String,
         whisperPrompt: String = "",
+        language: String = "en",
     ): String
 
     /**
