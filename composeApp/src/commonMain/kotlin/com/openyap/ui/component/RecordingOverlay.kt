@@ -62,6 +62,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.openyap.model.OverlayState
 
+// ── Overlay-specific palette (always dark glass, independent of app theme) ──
+private val OverlayBg = Color(0xFF1A1A2E)
+private val OverlayText = Color.White
+private val OverlayAccent = Color(0xFF76D1C1)   // teal – matches app primary
+private val OverlaySuccess = Color(0xFF4ADE80)   // green
+private val OverlayBorder = Color.White
+
 @Composable
 fun RecordingOverlay(
     state: OverlayState,
@@ -69,29 +76,28 @@ fun RecordingOverlay(
     durationSeconds: Int,
     flashMessage: String?,
 ) {
-    val pillShape = RoundedCornerShape(20.dp)
-    val overlayBg = MaterialTheme.colorScheme.inverseSurface
+    val capsuleShape = RoundedCornerShape(50)
 
     Box(
         modifier = Modifier
-            .padding(32.dp)
+            .padding(4.dp)
             .shadow(
-                elevation = 20.dp,
-                shape = pillShape,
-                ambientColor = Color.Black.copy(alpha = 0.6f),
-                spotColor = Color.Black.copy(alpha = 0.4f),
+                elevation = 8.dp,
+                shape = capsuleShape,
+                ambientColor = Color.Black.copy(alpha = 0.3f),
+                spotColor = Color.Black.copy(alpha = 0.2f),
                 clip = false
             )
-            .clip(pillShape)
-            .background(overlayBg.copy(alpha = 0.92f))
-            .border(1.dp, MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.15f), pillShape)
+            .clip(capsuleShape)
+            .background(OverlayBg.copy(alpha = 0.70f))
+            .border(0.5.dp, OverlayBorder.copy(alpha = 0.08f), capsuleShape)
             .animateContentSize(
                 animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioLowBouncy,
-                    stiffness = Spring.StiffnessLow
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMedium
                 )
             )
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 14.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -101,8 +107,8 @@ fun RecordingOverlay(
             AnimatedContent(
                 targetState = state,
                 transitionSpec = {
-                    (fadeIn(animationSpec = spring(stiffness = Spring.StiffnessLow)) togetherWith
-                            fadeOut(animationSpec = tween(150)))
+                    (fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMedium)) togetherWith
+                            fadeOut(animationSpec = tween(120)))
                         .using(SizeTransform(clip = false))
                 },
                 label = "flowBar",
@@ -125,12 +131,12 @@ fun RecordingOverlay(
 
             AnimatedVisibility(
                 visible = flashMessage != null,
-                enter = fadeIn(spring(stiffness = Spring.StiffnessLow)) +
-                        expandVertically(spring(stiffness = Spring.StiffnessLow)) +
-                        slideInVertically(spring(stiffness = Spring.StiffnessLow)) { it / 2 },
-                exit = fadeOut(tween(200)) +
-                        shrinkVertically(tween(200)) +
-                        slideOutVertically(tween(200)) { it / 2 },
+                enter = fadeIn(spring(stiffness = Spring.StiffnessMedium)) +
+                        expandVertically(spring(stiffness = Spring.StiffnessMedium)) +
+                        slideInVertically(spring(stiffness = Spring.StiffnessMedium)) { it / 2 },
+                exit = fadeOut(tween(150)) +
+                        shrinkVertically(tween(150)) +
+                        slideOutVertically(tween(150)) { it / 2 },
             ) {
                 lastFlashMessage?.let { msg ->
                     FlashMessageRow(message = msg, state = state)
@@ -148,22 +154,22 @@ private fun ActiveBar(
     durationSeconds: Int,
 ) {
     Row(
-        modifier = Modifier.heightIn(min = 24.dp),
+        modifier = Modifier.heightIn(min = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         AnimatedContent(
             targetState = state,
             transitionSpec = {
-                fadeIn(tween(180)) togetherWith fadeOut(tween(180))
+                fadeIn(tween(150)) togetherWith fadeOut(tween(150))
             },
             label = "overlayLeading",
         ) { currentState ->
             when (currentState) {
                 OverlayState.RECORDING -> WaveformBars(level)
                 OverlayState.PROCESSING -> CircularWavyProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.78f),
+                    modifier = Modifier.size(16.dp),
+                    color = OverlayAccent,
                 )
 
                 else -> Unit
@@ -173,26 +179,26 @@ private fun ActiveBar(
         AnimatedContent(
             targetState = state,
             transitionSpec = {
-                fadeIn(tween(180)) togetherWith fadeOut(tween(180))
+                fadeIn(tween(150)) togetherWith fadeOut(tween(150))
             },
             label = "overlayLabel",
         ) { currentState ->
             when (currentState) {
                 OverlayState.RECORDING -> Text(
                     text = formatDuration(durationSeconds),
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.85f),
+                    color = OverlayText.copy(alpha = 0.85f),
                     letterSpacing = 0.5.sp,
-                    modifier = Modifier.widthIn(min = 36.dp),
+                    modifier = Modifier.widthIn(min = 32.dp),
                 )
 
                 OverlayState.PROCESSING -> Text(
                     text = "Refining...",
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.7f),
+                    color = OverlayAccent.copy(alpha = 0.85f),
                     letterSpacing = 0.5.sp,
                 )
 
@@ -211,28 +217,28 @@ private fun SuccessBar() {
         targetValue = if (isVisible) 1f else 0.4f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
+            stiffness = Spring.StiffnessMedium
         ),
         label = "success_scale"
     )
 
     Row(
-        modifier = Modifier.heightIn(min = 24.dp),
+        modifier = Modifier.heightIn(min = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box(
             Modifier
-                .size(8.dp)
+                .size(6.dp)
                 .scale(scale)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.tertiary)
+                .background(OverlaySuccess)
         )
         Text(
-            text = "Pasted ✓",
-            fontSize = 14.sp,
+            text = "Pasted",
+            fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.tertiary,
+            color = OverlaySuccess,
             letterSpacing = 0.5.sp,
         )
     }
@@ -241,19 +247,19 @@ private fun SuccessBar() {
 @Composable
 private fun ErrorBar() {
     Row(
-        modifier = Modifier.heightIn(min = 24.dp),
+        modifier = Modifier.heightIn(min = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Icon(
             imageVector = Icons.Default.ErrorOutline,
             contentDescription = null,
-            modifier = Modifier.size(16.dp),
+            modifier = Modifier.size(14.dp),
             tint = MaterialTheme.colorScheme.error,
         )
         Text(
             text = "Could not paste",
-            fontSize = 14.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.error,
         )
@@ -262,28 +268,29 @@ private fun ErrorBar() {
 
 @Composable
 private fun FlashMessageRow(message: String, state: OverlayState) {
+    val errorColor = MaterialTheme.colorScheme.error
     val (icon, tint) = when (state) {
-        OverlayState.SUCCESS -> Icons.Default.CheckCircle to MaterialTheme.colorScheme.tertiary
-        OverlayState.ERROR -> Icons.Default.WarningAmber to MaterialTheme.colorScheme.error
-        else -> Icons.Default.WarningAmber to MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f)
+        OverlayState.SUCCESS -> Icons.Default.CheckCircle to OverlaySuccess
+        OverlayState.ERROR -> Icons.Default.WarningAmber to errorColor
+        else -> Icons.Default.WarningAmber to OverlayText.copy(alpha = 0.60f)
     }
 
     Row(
-        modifier = Modifier.padding(top = 4.dp),
+        modifier = Modifier.padding(top = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            modifier = Modifier.size(14.dp),
+            modifier = Modifier.size(12.dp),
             tint = tint,
         )
         Text(
             text = message,
-            fontSize = 13.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.7f),
+            color = OverlayText.copy(alpha = 0.60f),
         )
     }
 }
@@ -291,7 +298,7 @@ private fun FlashMessageRow(message: String, state: OverlayState) {
 @Composable
 private fun WaveformBars(level: Float) {
     val transition = rememberInfiniteTransition(label = "wave")
-    val barCount = 5
+    val barCount = 4
     val barOffsets = (0 until barCount).map { i ->
         transition.animateFloat(
             initialValue = 0.15f,
@@ -319,7 +326,7 @@ private fun WaveformBars(level: Float) {
     val effectiveLevel = if (animLevel < 0.05f) 0f else animLevel
 
     val brush = Brush.verticalGradient(
-        colors = listOf(MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.5f), MaterialTheme.colorScheme.tertiary)
+        colors = listOf(OverlayAccent.copy(alpha = 0.4f), OverlayAccent)
     )
 
     Row(
@@ -327,12 +334,12 @@ private fun WaveformBars(level: Float) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         barOffsets.forEachIndexed { _, anim ->
-            val h = if (effectiveLevel == 0f) 4.dp else (4 + 32 * anim.value * effectiveLevel).dp
+            val h = if (effectiveLevel == 0f) 3.dp else (3 + 13 * anim.value * effectiveLevel).dp
             Box(
                 Modifier
-                    .width(4.dp)
+                    .width(3.dp)
                     .height(h)
-                    .clip(RoundedCornerShape(2.dp))
+                    .clip(RoundedCornerShape(1.5.dp))
                     .background(brush)
             )
         }

@@ -11,9 +11,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -26,7 +24,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -55,6 +52,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
@@ -142,34 +140,24 @@ fun SettingsScreen(
                         animationSpec = infiniteRepeatable(tween(850), RepeatMode.Reverse),
                         label = "hotkeyBorderAlpha",
                     )
-                    Box(
-                        modifier = Modifier
-                            .then(
-                                if (state.isCapturingHotkey) {
-                                    Modifier.border(
-                                        BorderStroke(
-                                            2.dp,
-                                            MaterialTheme.colorScheme.primary.copy(alpha = hotkeyBorderAlpha)
-                                        ),
-                                        RoundedCornerShape(18.dp)
-                                    )
-                                } else {
-                                    Modifier
-                                }
-                            )
-                            .padding(2.dp)
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+                        tooltip = { PlainTooltip { Text("Press new key combination to reassign the global recording hotkey") } },
+                        state = rememberTooltipState(),
                     ) {
-                        TooltipBox(
-                            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
-                            tooltip = { PlainTooltip { Text("Press new key combination to reassign the global recording hotkey") } },
-                            state = rememberTooltipState(),
+                        FilledTonalButton(
+                            onClick = { onEvent(SettingsEvent.CaptureHotkey) },
+                            enabled = !state.isCapturingHotkey,
+                            border = if (state.isCapturingHotkey) {
+                                BorderStroke(
+                                    2.dp,
+                                    MaterialTheme.colorScheme.primary.copy(alpha = hotkeyBorderAlpha)
+                                )
+                            } else {
+                                null
+                            },
                         ) {
-                            FilledTonalButton(
-                                onClick = { onEvent(SettingsEvent.CaptureHotkey) },
-                                enabled = !state.isCapturingHotkey,
-                            ) {
-                                Text(if (state.isCapturingHotkey) "Press keys..." else "Change hotkey")
-                            }
+                            Text(if (state.isCapturingHotkey) "Press keys..." else "Change hotkey")
                         }
                     }
                     if (state.isCapturingHotkey) {
@@ -391,7 +379,7 @@ fun SettingsScreen(
                         exit = fadeOut(),
                     ) {
                         TooltipBox(
-                            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+                            positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
                             tooltip = { PlainTooltip { Text("Select which Gemini model powers transcription and rewriting") } },
                             state = rememberTooltipState(),
                         ) {
@@ -513,7 +501,7 @@ fun SettingsScreen(
             ) {
                 Text("Writing features", style = MaterialTheme.typography.titleMedium)
                 TooltipBox(
-                    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+                    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
                     tooltip = { PlainTooltip { Text("Automatically replace shortcuts like your name, company, and dictionary phrases in transcribed text") } },
                     state = rememberTooltipState(),
                 ) {
@@ -525,7 +513,7 @@ fun SettingsScreen(
                     )
                 }
                 TooltipBox(
-                    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+                    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
                     tooltip = { PlainTooltip { Text("Turn dictionary replacements and auto-learning on or off without deleting saved entries") } },
                     state = rememberTooltipState(),
                 ) {
@@ -537,7 +525,7 @@ fun SettingsScreen(
                     )
                 }
                 TooltipBox(
-                    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+                    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
                     tooltip = { PlainTooltip { Text("Example: \"Please review the report\" -> \"pls check the report rq\"") } },
                     state = rememberTooltipState(),
                 ) {
