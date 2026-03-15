@@ -56,6 +56,7 @@ data class SettingsUiState(
     val devicesFetchError: String? = null,
     val primaryUseCase: PrimaryUseCase = PrimaryUseCase.GENERAL,
     val useCaseContext: String = "",
+    val whisperLanguage: String = "en",
 )
 
 sealed interface SettingsEvent {
@@ -80,6 +81,7 @@ sealed interface SettingsEvent {
     data object DismissSaveMessage : SettingsEvent
     data class SelectUseCase(val useCase: PrimaryUseCase) : SettingsEvent
     data class SaveUseCaseContext(val context: String) : SettingsEvent
+    data class SelectWhisperLanguage(val language: String) : SettingsEvent
 }
 
 class SettingsViewModel(
@@ -138,6 +140,7 @@ class SettingsViewModel(
                     selectedAudioDeviceId = settings.audioDeviceId,
                     primaryUseCase = settings.primaryUseCase,
                     useCaseContext = settings.useCaseContext,
+                    whisperLanguage = settings.whisperLanguage,
                 )
             }
             if (apiKey.isNotBlank()) fetchModels(apiKey)
@@ -168,6 +171,7 @@ class SettingsViewModel(
             is SettingsEvent.RefreshDevices -> refreshDevices()
             is SettingsEvent.SelectUseCase -> selectUseCase(event.useCase)
             is SettingsEvent.SaveUseCaseContext -> saveUseCaseContext(event.context)
+            is SettingsEvent.SelectWhisperLanguage -> selectWhisperLanguage(event.language)
         }
     }
 
@@ -389,6 +393,7 @@ class SettingsViewModel(
                         launchOnStartup = defaults.launchOnStartup,
                         primaryUseCase = defaults.primaryUseCase,
                         useCaseContext = defaults.useCaseContext,
+                        whisperLanguage = defaults.whisperLanguage,
                         availableModels = emptyList(),
                         isLoadingModels = false,
                         modelsFetchError = null,
@@ -424,6 +429,13 @@ class SettingsViewModel(
         viewModelScope.launch {
             settingsRepository.updateSettings { it.copy(useCaseContext = context) }
             _state.update { it.copy(useCaseContext = context) }
+        }
+    }
+
+    private fun selectWhisperLanguage(language: String) {
+        viewModelScope.launch {
+            settingsRepository.updateSettings { it.copy(whisperLanguage = language) }
+            _state.update { it.copy(whisperLanguage = language) }
         }
     }
 

@@ -22,4 +22,5 @@ data class AppSettingsEntity(
     val audioDeviceId: String? = null,
     val primaryUseCase: String = "GENERAL",
     val useCaseContext: String = "",
+    val whisperLanguage: String = "en",
 )

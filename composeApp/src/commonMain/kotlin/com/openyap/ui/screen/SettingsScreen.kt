@@ -260,6 +260,12 @@ fun SettingsScreen(
 
                 if (state.transcriptionProvider != TranscriptionProvider.GROQ_WHISPER) {
                     Text("Gemini API key", style = MaterialTheme.typography.titleMedium)
+                    val geminiKeyFormatError = when {
+                        apiKeyInput.isBlank() -> null
+                        apiKeyInput.length < 10 -> "Key looks too short"
+                        apiKeyInput.contains(" ") -> "Key should not contain spaces"
+                        else -> null
+                    }
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                         verticalAlignment = Alignment.CenterVertically,
@@ -271,13 +277,15 @@ fun SettingsScreen(
                             singleLine = true,
                             placeholder = { Text("Enter your Gemini API key") },
                             visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                            isError = geminiKeyFormatError != null,
+                            supportingText = geminiKeyFormatError?.let { err -> { Text(err) } },
                         )
                         TextButton(onClick = {
                             showKey = !showKey
                         }) { Text(if (showKey) "Hide" else "Show") }
                         FilledTonalButton(
                             onClick = { onEvent(SettingsEvent.SaveApiKey(apiKeyInput)) },
-                            enabled = apiKeyInput.isNotBlank(),
+                            enabled = apiKeyInput.isNotBlank() && geminiKeyFormatError == null,
                         ) {
                             Text("Save")
                         }
@@ -295,6 +303,12 @@ fun SettingsScreen(
 
                 if (state.transcriptionProvider != TranscriptionProvider.GEMINI) {
                     Text("Groq API key", style = MaterialTheme.typography.titleMedium)
+                    val groqKeyFormatError = when {
+                        groqApiKeyInput.isBlank() -> null
+                        groqApiKeyInput.length < 10 -> "Key looks too short"
+                        groqApiKeyInput.contains(" ") -> "Key should not contain spaces"
+                        else -> null
+                    }
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                         verticalAlignment = Alignment.CenterVertically,
@@ -306,13 +320,15 @@ fun SettingsScreen(
                             singleLine = true,
                             placeholder = { Text("Enter your Groq API key") },
                             visualTransformation = if (showGroqKey) VisualTransformation.None else PasswordVisualTransformation(),
+                            isError = groqKeyFormatError != null,
+                            supportingText = groqKeyFormatError?.let { err -> { Text(err) } },
                         )
                         TextButton(onClick = {
                             showGroqKey = !showGroqKey
                         }) { Text(if (showGroqKey) "Hide" else "Show") }
                         FilledTonalButton(
                             onClick = { onEvent(SettingsEvent.SaveGroqApiKey(groqApiKeyInput)) },
-                            enabled = groqApiKeyInput.isNotBlank(),
+                            enabled = groqApiKeyInput.isNotBlank() && groqKeyFormatError == null,
                         ) {
                             Text("Save")
                         }
@@ -481,6 +497,16 @@ fun SettingsScreen(
                         )
                     }
                 }
+            }
+
+            SettingsSectionCard(
+                title = "Transcription language",
+                description = "Set the language for Whisper-based transcription. Gemini auto-detects language.",
+            ) {
+                WhisperLanguageDropdown(
+                    selectedLanguage = state.whisperLanguage,
+                    onLanguageSelected = { onEvent(SettingsEvent.SelectWhisperLanguage(it)) },
+                )
             }
 
             SettingsSectionCard(
@@ -950,6 +976,73 @@ private fun ProviderDropdown(
                     text = { Text(label, style = MaterialTheme.typography.bodyMedium) },
                     onClick = {
                         onProviderSelected(provider)
+                        expanded = false
+                    },
+                    contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm),
+                )
+            }
+        }
+    }
+}
+
+private val WHISPER_LANGUAGES = listOf(
+    "en" to "English",
+    "es" to "Spanish",
+    "fr" to "French",
+    "de" to "German",
+    "it" to "Italian",
+    "pt" to "Portuguese",
+    "nl" to "Dutch",
+    "ja" to "Japanese",
+    "ko" to "Korean",
+    "zh" to "Chinese",
+    "ru" to "Russian",
+    "ar" to "Arabic",
+    "hi" to "Hindi",
+    "pl" to "Polish",
+    "tr" to "Turkish",
+    "sv" to "Swedish",
+    "da" to "Danish",
+    "no" to "Norwegian",
+    "fi" to "Finnish",
+    "uk" to "Ukrainian",
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WhisperLanguageDropdown(
+    selectedLanguage: String,
+    onLanguageSelected: (String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = WHISPER_LANGUAGES.firstOrNull { it.first == selectedLanguage }?.second
+        ?: "$selectedLanguage (custom)"
+
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = selectedLabel,
+            onValueChange = {},
+            readOnly = true,
+            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth(),
+            singleLine = true,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            WHISPER_LANGUAGES.forEach { (code, name) ->
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(name, style = MaterialTheme.typography.bodyMedium)
+                            Text(code, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    },
+                    onClick = {
+                        onLanguageSelected(code)
                         expanded = false
                     },
                     contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm),

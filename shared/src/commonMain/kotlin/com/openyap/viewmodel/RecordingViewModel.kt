@@ -397,6 +397,7 @@ class RecordingViewModel(
                             apiKey = groqApiKey!!,
                             model = settings.groqModel,
                             whisperPrompt = whisperPrompt,
+                            language = settings.whisperLanguage,
                         )
                     }
 
@@ -408,6 +409,7 @@ class RecordingViewModel(
                             apiKey = groqApiKey!!,
                             model = settings.groqModel,
                             whisperPrompt = whisperPrompt,
+                            language = settings.whisperLanguage,
                         )
                         geminiClient.rewriteText(
                             text = transcript,

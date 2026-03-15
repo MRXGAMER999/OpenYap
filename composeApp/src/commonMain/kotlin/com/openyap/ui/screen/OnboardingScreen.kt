@@ -338,6 +338,13 @@ fun OnboardingScreen(
                                         }
                                     }
 
+                                    val keyFormatError = when {
+                                        apiKeyInput.isBlank() -> null
+                                        apiKeyInput.length < 10 -> "Key looks too short"
+                                        apiKeyInput.contains(" ") -> "Key should not contain spaces"
+                                        else -> null
+                                    }
+
                                     OutlinedTextField(
                                         value = apiKeyInput,
                                         onValueChange = { apiKeyInput = it },
@@ -365,10 +372,12 @@ fun OnboardingScreen(
                                                 }
                                             }
                                         },
-                                        isError = state.keyValidationSuccess == false,
-                                        supportingText = if (state.keyValidationSuccess == false) {
-                                            { Text("Key appears invalid — model fetch failed. Double-check and retry.") }
-                                        } else null,
+                                        isError = state.keyValidationSuccess == false || keyFormatError != null,
+                                        supportingText = when {
+                                            keyFormatError != null -> {{ Text(keyFormatError) }}
+                                            state.keyValidationSuccess == false -> {{ Text("Key appears invalid — model fetch failed. Double-check and retry.") }}
+                                            else -> null
+                                        },
                                     )
 
                                     FilledTonalButton(

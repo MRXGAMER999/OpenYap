@@ -33,6 +33,7 @@ fun AppSettings.toEntity(): AppSettingsEntity = AppSettingsEntity(
     audioDeviceId = audioDeviceId,
     primaryUseCase = primaryUseCase.name,
     useCaseContext = useCaseContext,
+    whisperLanguage = whisperLanguage,
 )
 
 fun AppSettingsEntity.toDomain(): AppSettings = AppSettings(
@@ -64,6 +65,7 @@ fun AppSettingsEntity.toDomain(): AppSettings = AppSettings(
         PrimaryUseCase.GENERAL
     },
     useCaseContext = useCaseContext,
+    whisperLanguage = whisperLanguage,
 )
 
 // ── DictionaryEntry ─────────────────────────────────────────────────────────
