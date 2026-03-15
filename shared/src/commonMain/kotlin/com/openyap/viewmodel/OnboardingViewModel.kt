@@ -44,7 +44,7 @@ data class OnboardingUiState(
         get() = apiKey.isNotBlank()
 
     val modelStepComplete: Boolean
-        get() = selectedModel.isNotBlank()
+        get() = selectedModel.isNotBlank() && availableModels.isNotEmpty()
 
     val useCaseStepComplete: Boolean
         get() = primaryUseCase != PrimaryUseCase.GENERAL || useCaseContext.isNotBlank()
@@ -253,10 +253,11 @@ class OnboardingViewModel(
         apiKey: String,
         micSkipped: Boolean,
         selectedModel: String,
+        hasModels: Boolean = _state.value.availableModels.isNotEmpty(),
     ): Int = when {
         micPerm != PermissionStatus.GRANTED && !micSkipped -> 0
         apiKey.isBlank() -> 1
-        selectedModel.isBlank() -> 2
+        selectedModel.isBlank() || !hasModels -> 2
         else -> 3
     }
 
