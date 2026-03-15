@@ -8,14 +8,20 @@ import com.openyap.platform.PermissionManager
 import com.openyap.repository.SettingsRepository
 import com.openyap.service.GeminiClient
 import com.openyap.service.ModelInfo
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 data class OnboardingUiState(
     val micPermission: PermissionStatus = PermissionStatus.UNKNOWN,
+    val micSkipped: Boolean = false,
     val apiKey: String = "",
     val isLoaded: Boolean = false,
     val isComplete: Boolean = false,
@@ -24,13 +30,39 @@ data class OnboardingUiState(
     val selectedModel: String = "",
     val isLoadingModels: Boolean = false,
     val modelsFetchError: String? = null,
+    val modelsFetchErrorId: Long = 0,
+    val isValidatingKey: Boolean = false,
+    val keyValidationSuccess: Boolean? = null,
     val primaryUseCase: PrimaryUseCase = PrimaryUseCase.GENERAL,
     val useCaseContext: String = "",
-)
+    val micSettingsUnavailable: Boolean = false,
+) {
+    val micStepComplete: Boolean
+        get() = micPermission == PermissionStatus.GRANTED || micSkipped
+
+    val apiKeyStepComplete: Boolean
+        get() = apiKey.isNotBlank()
+
+    val modelStepComplete: Boolean
+        get() = selectedModel.isNotBlank()
+
+    val useCaseStepComplete: Boolean
+        get() = primaryUseCase != PrimaryUseCase.GENERAL || useCaseContext.isNotBlank()
+
+    val completedStepCount: Int
+        get() = listOf(micStepComplete, apiKeyStepComplete, modelStepComplete, useCaseStepComplete).count { it }
+
+    val progress: Float
+        get() = completedStepCount / 4f
+
+    val canComplete: Boolean
+        get() = micStepComplete && apiKeyStepComplete && modelStepComplete
+}
 
 sealed interface OnboardingEvent {
     data object CheckMicPermission : OnboardingEvent
     data object OpenMicSettings : OnboardingEvent
+    data object SkipMicPermission : OnboardingEvent
     data class SaveApiKey(val key: String) : OnboardingEvent
     data class SelectModel(val modelId: String) : OnboardingEvent
     data object RetryModelFetch : OnboardingEvent
@@ -48,12 +80,30 @@ class OnboardingViewModel(
     private val _state = MutableStateFlow(OnboardingUiState())
     val state: StateFlow<OnboardingUiState> = _state.asStateFlow()
 
+    private var fetchJob: Job? = null
+    private var onboardingJob: Job? = null
+    private val apiKeyMutex = Mutex()
+    private var errorCounter = 0L
+    private var epoch = 0L
+
+    private val eventChannel = Channel<OnboardingEvent>(Channel.UNLIMITED)
+
     init {
+        viewModelScope.launch {
+            eventChannel.receiveAsFlow().collect { event ->
+                processEvent(event)
+            }
+        }
         refresh()
     }
 
     fun resetState() {
-        _state.value = OnboardingUiState()
+        epoch++
+        fetchJob?.cancel()
+        fetchJob = null
+        onboardingJob?.cancel()
+        onboardingJob = null
+        _state.value = OnboardingUiState(isLoaded = true)
     }
 
     fun refresh() {
@@ -67,7 +117,7 @@ class OnboardingViewModel(
                     apiKey = apiKey,
                     isLoaded = true,
                     isComplete = settings.onboardingCompleted,
-                    currentStep = computeStep(micPerm, apiKey),
+                    currentStep = computeStep(micPerm, apiKey, false, settings.geminiModel),
                     selectedModel = settings.geminiModel,
                     primaryUseCase = settings.primaryUseCase,
                     useCaseContext = settings.useCaseContext,
@@ -78,9 +128,14 @@ class OnboardingViewModel(
     }
 
     fun onEvent(event: OnboardingEvent) {
+        eventChannel.trySend(event)
+    }
+
+    private suspend fun processEvent(event: OnboardingEvent) {
         when (event) {
             is OnboardingEvent.CheckMicPermission -> checkMic()
-            is OnboardingEvent.OpenMicSettings -> permissionManager.openMicrophoneSettings()
+            is OnboardingEvent.OpenMicSettings -> openMicSettings()
+            is OnboardingEvent.SkipMicPermission -> skipMic()
             is OnboardingEvent.SaveApiKey -> saveApiKey(event.key)
             is OnboardingEvent.SelectModel -> selectModel(event.modelId)
             is OnboardingEvent.RetryModelFetch -> retryModelFetch()
@@ -90,81 +145,129 @@ class OnboardingViewModel(
         }
     }
 
-    private fun checkMic() {
-        viewModelScope.launch {
-            val perm = permissionManager.checkMicrophonePermission()
-            _state.update {
-                it.copy(micPermission = perm, currentStep = computeStep(perm, it.apiKey))
-            }
+    private suspend fun checkMic() {
+        val perm = permissionManager.checkMicrophonePermission()
+        _state.update {
+            it.copy(
+                micPermission = perm,
+                currentStep = computeStep(perm, it.apiKey, it.micSkipped, it.selectedModel),
+            )
         }
     }
 
-    private fun saveApiKey(key: String) {
-        viewModelScope.launch {
-            val trimmed = key.trim()
+    private fun openMicSettings() {
+        val success = permissionManager.openMicrophoneSettings()
+        if (!success) {
+            _state.update { it.copy(micSettingsUnavailable = true) }
+        }
+    }
+
+    private fun skipMic() {
+        _state.update {
+            it.copy(
+                micSkipped = true,
+                currentStep = computeStep(it.micPermission, it.apiKey, true, it.selectedModel),
+            )
+        }
+    }
+
+    private suspend fun saveApiKey(key: String) {
+        val trimmed = key.trim()
+        if (trimmed.isBlank()) return
+        apiKeyMutex.withLock {
+            _state.update { it.copy(isValidatingKey = true, keyValidationSuccess = null) }
             settingsRepository.saveApiKey(trimmed)
             _state.update {
-                it.copy(apiKey = trimmed, currentStep = computeStep(it.micPermission, trimmed))
+                it.copy(
+                    apiKey = trimmed,
+                    currentStep = computeStep(it.micPermission, trimmed, it.micSkipped, it.selectedModel),
+                )
             }
-            if (trimmed.isNotBlank()) fetchModels(trimmed)
+            fetchModels(trimmed)
+            val success = _state.value.availableModels.isNotEmpty()
+            _state.update { it.copy(isValidatingKey = false, keyValidationSuccess = success) }
         }
     }
 
-    private fun selectModel(modelId: String) {
-        viewModelScope.launch {
-            settingsRepository.updateSettings { it.copy(geminiModel = modelId) }
-            _state.update { it.copy(selectedModel = modelId) }
+    private suspend fun selectModel(modelId: String) {
+        settingsRepository.updateSettings { it.copy(geminiModel = modelId) }
+        _state.update {
+            it.copy(
+                selectedModel = modelId,
+                currentStep = computeStep(it.micPermission, it.apiKey, it.micSkipped, modelId),
+            )
         }
     }
 
-    private fun retryModelFetch() {
+    private suspend fun retryModelFetch() {
         val apiKey = _state.value.apiKey
         if (apiKey.isBlank()) return
-        viewModelScope.launch { fetchModels(apiKey) }
+        fetchModels(apiKey)
     }
 
     private suspend fun fetchModels(apiKey: String) {
-        _state.update { it.copy(isLoadingModels = true, modelsFetchError = null) }
-        try {
-            val models = geminiClient.listModels(apiKey)
-            _state.update { it.copy(availableModels = models, isLoadingModels = false) }
-            if (models.isNotEmpty() && models.none { it.id == _state.value.selectedModel }) {
-                selectModel(models.first().id)
+        fetchJob?.cancel()
+        val currentEpoch = epoch
+        fetchJob = viewModelScope.launch {
+            _state.update { it.copy(isLoadingModels = true, modelsFetchError = null) }
+            try {
+                val models = geminiClient.listModels(apiKey)
+                if (currentEpoch != epoch) return@launch
+                _state.update { it.copy(availableModels = models, isLoadingModels = false) }
+                if (models.isNotEmpty() && models.none { it.id == _state.value.selectedModel }) {
+                    settingsRepository.updateSettings { it.copy(geminiModel = models.first().id) }
+                    _state.update {
+                        it.copy(
+                            selectedModel = models.first().id,
+                            currentStep = computeStep(it.micPermission, it.apiKey, it.micSkipped, models.first().id),
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                if (currentEpoch != epoch) return@launch
+                val id = ++errorCounter
+                _state.update {
+                    it.copy(
+                        isLoadingModels = false,
+                        modelsFetchError = e.message ?: "Failed to fetch models",
+                        modelsFetchErrorId = id,
+                    )
+                }
             }
-        } catch (e: Exception) {
-            _state.update {
-                it.copy(
-                    isLoadingModels = false,
-                    modelsFetchError = e.message ?: "Failed to fetch models",
-                )
-            }
         }
+        fetchJob?.join()
     }
 
-    private fun selectUseCase(useCase: PrimaryUseCase) {
-        viewModelScope.launch {
-            settingsRepository.updateSettings { it.copy(primaryUseCase = useCase) }
-            _state.update { it.copy(primaryUseCase = useCase) }
-        }
+    private suspend fun selectUseCase(useCase: PrimaryUseCase) {
+        settingsRepository.updateSettings { it.copy(primaryUseCase = useCase) }
+        _state.update { it.copy(primaryUseCase = useCase) }
     }
 
-    private fun saveUseCaseContext(context: String) {
-        viewModelScope.launch {
-            settingsRepository.updateSettings { it.copy(useCaseContext = context) }
-            _state.update { it.copy(useCaseContext = context) }
-        }
+    private suspend fun saveUseCaseContext(context: String) {
+        settingsRepository.updateSettings { it.copy(useCaseContext = context) }
+        _state.update { it.copy(useCaseContext = context) }
     }
 
-    private fun computeStep(micPerm: PermissionStatus, apiKey: String): Int = when {
-        micPerm != PermissionStatus.GRANTED -> 0
+    private fun computeStep(
+        micPerm: PermissionStatus,
+        apiKey: String,
+        micSkipped: Boolean,
+        selectedModel: String,
+    ): Int = when {
+        micPerm != PermissionStatus.GRANTED && !micSkipped -> 0
         apiKey.isBlank() -> 1
-        else -> 2
+        selectedModel.isBlank() -> 2
+        else -> 3
     }
 
     private fun completeOnboarding() {
-        viewModelScope.launch {
+        val currentEpoch = epoch
+        onboardingJob?.cancel()
+        onboardingJob = viewModelScope.launch {
             settingsRepository.updateSettings { it.copy(onboardingCompleted = true) }
-            _state.update { it.copy(isComplete = true) }
+            if (currentEpoch == epoch) {
+                _state.update { it.copy(isComplete = true) }
+            }
         }
     }
 }
