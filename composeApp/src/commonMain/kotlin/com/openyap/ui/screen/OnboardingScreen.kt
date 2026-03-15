@@ -743,22 +743,24 @@ private fun StepSection(
             }
         )
 
-    val borderModifier = if (stepState == StepState.ACTIVE) {
-        Modifier
-            .padding(1.5.dp)
-            .border(
-                width = 1.5.dp,
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.primary.copy(alpha = glowAlpha),
-                        MaterialTheme.colorScheme.tertiary.copy(alpha = glowAlpha * 0.5f),
-                    )
-                ),
-                shape = RoundedCornerShape(12.dp),
-            )
-    } else {
-        Modifier
-    }
+    val borderModifier = Modifier
+        .padding(1.5.dp)
+        .then(
+            if (stepState == StepState.ACTIVE) {
+                Modifier.border(
+                    width = 1.5.dp,
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.primary.copy(alpha = glowAlpha),
+                            MaterialTheme.colorScheme.tertiary.copy(alpha = glowAlpha * 0.5f),
+                        )
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                )
+            } else {
+                Modifier
+            }
+        )
 
     ElevatedCard(modifier = alphaModifier.then(borderModifier)) {
         Column(
