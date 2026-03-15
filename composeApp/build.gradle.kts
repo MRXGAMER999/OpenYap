@@ -60,6 +60,11 @@ val copyNativeDll by tasks.registering(Copy::class) {
     into(layout.projectDirectory.dir("resources/windows-x64"))
 }
 
+val copyWindowsPackageResources by tasks.registering(Copy::class) {
+    from(layout.projectDirectory.dir("resources/windows"))
+    into(layout.buildDirectory.dir("compose/tmp/resources"))
+}
+
 val appVersion = project.readAppVersion()
 
 kotlin {
@@ -127,6 +132,14 @@ tasks.matching {
             it.name == "createDistributable"
 }.configureEach {
     dependsOn(copyNativeDll)
+}
+
+tasks.matching {
+    it.name == "packageMsi" ||
+            it.name == "packageDistributionForCurrentOS" ||
+            it.name == "createDistributable"
+}.configureEach {
+    dependsOn(copyWindowsPackageResources)
 }
 
 gradle.projectsEvaluated {
