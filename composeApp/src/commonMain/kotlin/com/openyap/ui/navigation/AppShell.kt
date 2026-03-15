@@ -599,7 +599,6 @@ private fun HomeContent(
                                 modifier = Modifier
                                     .size(88.dp)
                                     .scale(pulseScale)
-                                    .clip(CircleShape)
                                     .border(
                                         width = 3.dp,
                                         color = MaterialTheme.colorScheme.error.copy(alpha = 0.4f),

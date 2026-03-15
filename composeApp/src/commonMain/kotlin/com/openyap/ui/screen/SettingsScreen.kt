@@ -66,7 +66,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -145,7 +144,6 @@ fun SettingsScreen(
                     )
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(18.dp))
                             .then(
                                 if (state.isCapturingHotkey) {
                                     Modifier.border(

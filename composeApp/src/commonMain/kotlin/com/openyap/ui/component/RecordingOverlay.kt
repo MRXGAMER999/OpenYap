@@ -80,8 +80,9 @@ fun RecordingOverlay(
                 shape = pillShape,
                 ambientColor = Color.Black.copy(alpha = 0.6f),
                 spotColor = Color.Black.copy(alpha = 0.4f),
-                clip = true
+                clip = false
             )
+            .clip(pillShape)
             .background(overlayBg.copy(alpha = 0.92f))
             .border(1.dp, MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.15f), pillShape)
             .animateContentSize(
@@ -90,7 +91,7 @@ fun RecordingOverlay(
                     stiffness = Spring.StiffnessLow
                 )
             )
-            .padding(horizontal = 20.dp, vertical = 10.dp),
+            .padding(horizontal = 20.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(
