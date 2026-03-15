@@ -6,7 +6,8 @@ import com.openyap.model.PermissionStatus
 import com.openyap.model.PrimaryUseCase
 import com.openyap.platform.PermissionManager
 import com.openyap.repository.SettingsRepository
-import com.openyap.service.GeminiClient
+import com.openyap.model.TranscriptionProvider
+import com.openyap.service.GroqLLMClient
 import com.openyap.service.ModelInfo
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -74,7 +75,7 @@ sealed interface OnboardingEvent {
 class OnboardingViewModel(
     private val settingsRepository: SettingsRepository,
     private val permissionManager: PermissionManager,
-    private val geminiClient: GeminiClient,
+    private val groqLLMClient: GroqLLMClient,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(OnboardingUiState())
@@ -109,7 +110,7 @@ class OnboardingViewModel(
     fun refresh() {
         viewModelScope.launch {
             val micPerm = permissionManager.checkMicrophonePermission()
-            val apiKey = settingsRepository.loadApiKey() ?: ""
+            val apiKey = settingsRepository.loadGroqApiKey() ?: ""
             val settings = settingsRepository.loadSettings()
             _state.update {
                 it.copy(
@@ -117,8 +118,8 @@ class OnboardingViewModel(
                     apiKey = apiKey,
                     isLoaded = true,
                     isComplete = settings.onboardingCompleted,
-                    currentStep = computeStep(micPerm, apiKey, false, settings.geminiModel),
-                    selectedModel = settings.geminiModel,
+                    currentStep = computeStep(micPerm, apiKey, false, settings.groqLLMModel),
+                    selectedModel = settings.groqLLMModel,
                     primaryUseCase = settings.primaryUseCase,
                     useCaseContext = settings.useCaseContext,
                 )
@@ -176,7 +177,7 @@ class OnboardingViewModel(
         if (trimmed.isBlank()) return
         apiKeyMutex.withLock {
             _state.update { it.copy(isValidatingKey = true, keyValidationSuccess = null) }
-            settingsRepository.saveApiKey(trimmed)
+            settingsRepository.saveGroqApiKey(trimmed)
             _state.update {
                 it.copy(
                     apiKey = trimmed,
@@ -190,7 +191,7 @@ class OnboardingViewModel(
     }
 
     private suspend fun selectModel(modelId: String) {
-        settingsRepository.updateSettings { it.copy(geminiModel = modelId) }
+        settingsRepository.updateSettings { it.copy(groqLLMModel = modelId) }
         _state.update {
             it.copy(
                 selectedModel = modelId,
@@ -211,11 +212,11 @@ class OnboardingViewModel(
         fetchJob = viewModelScope.launch {
             _state.update { it.copy(isLoadingModels = true, modelsFetchError = null) }
             try {
-                val models = geminiClient.listModels(apiKey)
+                val models = groqLLMClient.listModels(apiKey)
                 if (currentEpoch != epoch) return@launch
                 _state.update { it.copy(availableModels = models, isLoadingModels = false) }
                 if (models.isNotEmpty() && models.none { it.id == _state.value.selectedModel }) {
-                    settingsRepository.updateSettings { it.copy(geminiModel = models.first().id) }
+                    settingsRepository.updateSettings { it.copy(groqLLMModel = models.first().id) }
                     _state.update {
                         it.copy(
                             selectedModel = models.first().id,
@@ -265,7 +266,13 @@ class OnboardingViewModel(
         val currentEpoch = epoch
         onboardingJob?.cancel()
         onboardingJob = viewModelScope.launch {
-            settingsRepository.updateSettings { it.copy(onboardingCompleted = true) }
+            settingsRepository.updateSettings {
+                it.copy(
+                    onboardingCompleted = true,
+                    transcriptionProvider = TranscriptionProvider.GROQ_WHISPER_GROQ,
+                    groqModel = "whisper-large-v3",
+                )
+            }
             if (currentEpoch == epoch) {
                 _state.update { it.copy(isComplete = true) }
             }

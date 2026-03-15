@@ -71,6 +71,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,8 +91,9 @@ import com.openyap.model.PrimaryUseCase
 import com.openyap.ui.theme.Spacing
 import com.openyap.viewmodel.OnboardingEvent
 import com.openyap.viewmodel.OnboardingUiState
+import kotlinx.coroutines.launch
 
-private const val RECOMMENDED_MODEL_PREFIX = "gemini-3.1-flash-lite"
+private const val RECOMMENDED_MODEL_PREFIX = "moonshotai/kimi-k2"
 
 enum class StepState { LOCKED, ACTIVE, COMPLETE }
 
@@ -103,6 +105,22 @@ fun OnboardingScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val uriHandler = LocalUriHandler.current
+    val scope = rememberCoroutineScope()
+
+    val openExternalUrl: (String) -> Unit = remember(uriHandler, snackbarHostState, scope) {
+        { url ->
+            runCatching {
+                uriHandler.openUri(url)
+            }.onFailure {
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "Couldn't open your browser automatically. Open this link manually: $url",
+                        duration = SnackbarDuration.Long,
+                    )
+                }
+            }
+        }
+    }
 
     LaunchedEffect(state.modelsFetchErrorId) {
         val errorMsg = state.modelsFetchError ?: return@LaunchedEffect
@@ -325,7 +343,7 @@ fun OnboardingScreen(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                         TextButton(
-                                            onClick = { uriHandler.openUri("https://console.groq.com/keys") },
+                                            onClick = { openExternalUrl("https://console.groq.com/keys") },
                                             contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = 0.dp),
                                         ) {
                                             Text(
@@ -696,9 +714,10 @@ private fun OnboardingModelDropdown(
 }
 
 private fun buildModelHint(id: String): String = when {
-    "flash-lite" in id -> "$id · Faster + cheaper"
-    "flash" in id -> "$id · Balanced speed & quality"
-    "pro" in id -> "$id · Higher quality, slower"
+    "kimi-k2" in id -> "$id · Best quality, recommended"
+    "gpt-oss-120b" in id -> "$id · Large, high quality"
+    "70b" in id -> "$id · Balanced speed & quality"
+    "32b" in id || "8b" in id -> "$id · Faster, lighter"
     else -> id
 }
 

@@ -23,7 +23,7 @@ class GroqLLMClient(private val client: HttpClient) {
         private val RETRY_DELAYS_MS = longArrayOf(500, 1500)
 
         private val DEFAULT_MODELS = listOf(
-            ModelInfo("moonshotai/kimi-k2-instruct", "Kimi K2 Instruct"),
+            ModelInfo("moonshotai/kimi-k2-instruct-0905", "Kimi K2 Instruct 0905"),
             ModelInfo("llama-3.3-70b-versatile", "Llama 3.3 70B Versatile"),
             ModelInfo("llama-3.1-8b-instant", "Llama 3.1 8B Instant"),
             ModelInfo("qwen/qwen3-32b", "Qwen 3 32B"),
@@ -35,6 +35,11 @@ class GroqLLMClient(private val client: HttpClient) {
             "whisper",
             "canopylabs/orpheus",
             "meta-llama/llama-prompt-guard",
+        )
+
+        /** Exact model IDs that are deprecated and should be hidden from the list. */
+        private val EXCLUDED_MODEL_IDS = setOf(
+            "moonshotai/kimi-k2-instruct",
         )
     }
 
@@ -52,6 +57,7 @@ class GroqLLMClient(private val client: HttpClient) {
                     EXCLUDED_MODEL_PREFIXES.any { prefix -> model.id.startsWith(prefix, ignoreCase = true) }
                 }
                 .filterNot { it.id.contains("compound") }
+                .filterNot { it.id in EXCLUDED_MODEL_IDS }
                 .map { ModelInfo(id = it.id, displayName = formatModelName(it.id, it.ownedBy)) }
                 .sortedWith(
                     compareByDescending<ModelInfo> { it.id.contains("kimi-k2") }
@@ -93,6 +99,7 @@ class GroqLLMClient(private val client: HttpClient) {
             appendLine("- If you are uncertain, keep the original word or phrase.")
             appendLine("- Do not paraphrase, summarize, expand, add detail, or change tone unless clearly required by the system instructions.")
             appendLine("- Do not invent names, facts, or context that are not strongly implied by the transcript.")
+            appendLine("- NEVER censor, mask, or replace any words with asterisks or symbols. Preserve all words exactly as they appear, including profanity, slang, and explicit language. If the transcript contains asterisks from a previous transcription step, restore the original uncensored word based on context.")
             appendLine()
             appendLine("Return only the final corrected text to paste.")
         }

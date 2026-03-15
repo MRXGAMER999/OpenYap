@@ -42,7 +42,7 @@ fun AppSettingsEntity.toDomain(): AppSettings = AppSettings(
     transcriptionProvider = try {
         TranscriptionProvider.valueOf(transcriptionProvider)
     } catch (_: Exception) {
-        TranscriptionProvider.GEMINI
+        TranscriptionProvider.GROQ_WHISPER_GROQ
     },
     groqModel = groqModel,
     groqLLMModel = groqLLMModel,

@@ -167,7 +167,7 @@ fun main() {
         }
         val historyViewModel = remember { HistoryViewModel(historyRepo) }
         val onboardingViewModel =
-            remember { OnboardingViewModel(settingsRepo, permissionManager, geminiClient) }
+            remember { OnboardingViewModel(settingsRepo, permissionManager, groqLLMClient) }
         val dictionaryViewModel = remember { DictionaryViewModel(dictionaryRepo, dictionaryEngine) }
         val userProfileViewModel = remember { UserProfileViewModel(userProfileRepo) }
         val statsViewModel = remember { StatsViewModel(historyRepo) }

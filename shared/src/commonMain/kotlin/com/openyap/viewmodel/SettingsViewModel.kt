@@ -24,12 +24,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class SettingsUiState(
-    val transcriptionProvider: TranscriptionProvider = TranscriptionProvider.GEMINI,
+    val transcriptionProvider: TranscriptionProvider = TranscriptionProvider.GROQ_WHISPER_GROQ,
     val apiKey: String = "",
     val groqApiKey: String = "",
     val geminiModel: String = "gemini-3.1-flash-lite-preview",
     val groqModel: String = "whisper-large-v3",
-    val groqLLMModel: String = "moonshotai/kimi-k2-instruct",
+    val groqLLMModel: String = "moonshotai/kimi-k2-instruct-0905",
     val genZEnabled: Boolean = false,
     val phraseExpansionEnabled: Boolean = false,
     val dictionaryEnabled: Boolean = true,
