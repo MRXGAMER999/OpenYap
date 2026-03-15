@@ -20,6 +20,7 @@ fun AppSettings.toEntity(): AppSettingsEntity = AppSettingsEntity(
     geminiModel = geminiModel,
     transcriptionProvider = transcriptionProvider.name,
     groqModel = groqModel,
+    groqLLMModel = groqLLMModel,
     hotkeyConfigJson = json.encodeToString(hotkeyConfig),
     genZEnabled = genZEnabled,
     phraseExpansionEnabled = phraseExpansionEnabled,
@@ -41,9 +42,10 @@ fun AppSettingsEntity.toDomain(): AppSettings = AppSettings(
     transcriptionProvider = try {
         TranscriptionProvider.valueOf(transcriptionProvider)
     } catch (_: Exception) {
-        TranscriptionProvider.GEMINI
+        TranscriptionProvider.GROQ_WHISPER_GROQ
     },
     groqModel = groqModel,
+    groqLLMModel = groqLLMModel,
     hotkeyConfig = try {
         json.decodeFromString<HotkeyConfig>(hotkeyConfigJson)
     } catch (_: Exception) {

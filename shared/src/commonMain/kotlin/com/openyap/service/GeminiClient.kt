@@ -35,6 +35,15 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
          * pinned versions (e.g. `gemini-1.5-flash-001`).
          */
         private val VERSIONED_SUFFIX = Regex("-\\d{3}$")
+
+        /** Safety settings that disable all content filtering for all harm categories. */
+        private val ALL_DISABLED_SAFETY_SETTINGS = listOf(
+            SafetySetting(category = "HARM_CATEGORY_HARASSMENT", threshold = "BLOCK_NONE"),
+            SafetySetting(category = "HARM_CATEGORY_HATE_SPEECH", threshold = "BLOCK_NONE"),
+            SafetySetting(category = "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold = "BLOCK_NONE"),
+            SafetySetting(category = "HARM_CATEGORY_DANGEROUS_CONTENT", threshold = "BLOCK_NONE"),
+            SafetySetting(category = "HARM_CATEGORY_CIVIC_INTEGRITY", threshold = "BLOCK_NONE"),
+        )
     }
 
     override suspend fun listModels(apiKey: String): List<ModelInfo> {
@@ -105,6 +114,7 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
             appendLine("- If you are uncertain, keep the original word or phrase.")
             appendLine("- Do not paraphrase, summarize, expand, add detail, or change tone unless clearly required by the system instructions.")
             appendLine("- Do not invent names, facts, or context that are not strongly implied by the transcript.")
+            appendLine("- NEVER censor, mask, or replace any words with asterisks or symbols. Preserve all words exactly as they appear, including profanity, slang, and explicit language. If the transcript contains masked or redacted tokens (asterisks), preserve them exactly as they appear and do not attempt to reconstruct or guess the redacted words.")
             appendLine()
             appendLine("Return only the final corrected text to paste.")
             appendLine()
@@ -128,9 +138,10 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
                 )
             ),
             generationConfig = GenerationConfig(
-                temperature = 0f,
+                temperature = 0.2f,
                 responseMimeType = "text/plain",
             ),
+            safetySettings = ALL_DISABLED_SAFETY_SETTINGS,
         )
 
         val response = executeWithRetry {
@@ -155,6 +166,8 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
             ?.text
 
         if (rewrittenText.isNullOrBlank()) {
+            val blockReason = geminiResponse.promptFeedback?.blockReason
+            if (blockReason != null) throw GeminiException("Gemini blocked the request: $blockReason")
             throw GeminiException("Gemini returned an empty response.")
         }
         return rewrittenText
@@ -190,9 +203,10 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
                 )
             ),
             generationConfig = GenerationConfig(
-                temperature = 0f,
+                temperature = 0.2f,
                 responseMimeType = "text/plain",
             ),
+            safetySettings = ALL_DISABLED_SAFETY_SETTINGS,
         )
 
         val response = executeWithRetry {
@@ -218,6 +232,8 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
             ?.text
 
         if (text.isNullOrBlank()) {
+            val blockReason = geminiResponse.promptFeedback?.blockReason
+            if (blockReason != null) throw GeminiException("Gemini blocked the request: $blockReason")
             throw GeminiException("Gemini returned an empty response.")
         }
         return text
@@ -247,6 +263,7 @@ data class GeminiRequest(
     val contents: List<GeminiContent>,
     @SerialName("system_instruction") val systemInstruction: GeminiContent? = null,
     val generationConfig: GenerationConfig? = null,
+    val safetySettings: List<SafetySetting>? = null,
 )
 
 @Serializable
@@ -273,8 +290,20 @@ data class GenerationConfig(
 )
 
 @Serializable
+data class SafetySetting(
+    val category: String,
+    val threshold: String,
+)
+
+@Serializable
 data class GeminiResponse(
     val candidates: List<GeminiCandidate>? = null,
+    val promptFeedback: GeminiPromptFeedback? = null,
+)
+
+@Serializable
+data class GeminiPromptFeedback(
+    @SerialName("blockReason") val blockReason: String? = null,
 )
 
 @Serializable

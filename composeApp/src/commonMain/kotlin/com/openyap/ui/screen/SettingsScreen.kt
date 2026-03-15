@@ -235,7 +235,7 @@ fun SettingsScreen(
             ) {
                 Text("Transcription provider", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Gemini can transcribe and rewrite directly, Groq Whisper gives fast raw transcription, and the combined mode uses Groq first then Gemini for conservative context-aware correction.",
+                    "Gemini can transcribe and rewrite directly, Groq Whisper gives fast raw transcription, the combined modes use Groq Whisper first then either Gemini or a Groq LLM for context-aware correction.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -244,7 +244,7 @@ fun SettingsScreen(
                     onProviderSelected = { onEvent(SettingsEvent.SelectProvider(it)) },
                 )
 
-                if (state.transcriptionProvider != TranscriptionProvider.GROQ_WHISPER) {
+                if (state.transcriptionProvider != TranscriptionProvider.GROQ_WHISPER && state.transcriptionProvider != TranscriptionProvider.GROQ_WHISPER_GROQ) {
                     Text("Gemini API key", style = MaterialTheme.typography.titleMedium)
                     val geminiKeyFormatError = when {
                         apiKeyInput.isBlank() -> null
@@ -283,7 +283,7 @@ fun SettingsScreen(
                     )
                 }
 
-                if (state.transcriptionProvider == TranscriptionProvider.GROQ_WHISPER_GEMINI) {
+                if (state.transcriptionProvider == TranscriptionProvider.GROQ_WHISPER_GEMINI || state.transcriptionProvider == TranscriptionProvider.GROQ_WHISPER_GROQ) {
                     Spacer(Modifier.height(Spacing.sm))
                 }
 
@@ -320,7 +320,7 @@ fun SettingsScreen(
                         }
                     }
                     Text(
-                        "The key is stored locally and used only for Groq Whisper requests.",
+                        "The key is stored locally and used for Groq Whisper plus Groq LLM model listing and correction.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -404,6 +404,87 @@ fun SettingsScreen(
                         selectedModelId = state.groqModel,
                         onModelSelected = { onEvent(SettingsEvent.SelectGroqModel(it)) },
                     )
+                } else if (state.transcriptionProvider == TranscriptionProvider.GROQ_WHISPER_GROQ) {
+                    Text(
+                        "Groq transcription model",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    ModelDropdown(
+                        models = state.groqModels.map { it.id to it.displayName },
+                        selectedModelId = state.groqModel,
+                        onModelSelected = { onEvent(SettingsEvent.SelectGroqModel(it)) },
+                    )
+
+                    Spacer(Modifier.height(Spacing.sm))
+
+                    Text(
+                        "Groq correction model",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        "Select the Groq-hosted LLM that cleans up and polishes the raw Whisper transcript. Prompt caching is automatic for supported models.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    AnimatedVisibility(
+                        visible = state.isLoadingGroqLLMModels,
+                        enter = fadeIn(),
+                        exit = fadeOut()
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Text(
+                                "Loading available Groq models...",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    state.groqLLMModelsFetchError?.let { error ->
+                        Surface(color = MaterialTheme.colorScheme.errorContainer) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(Spacing.md),
+                                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = error,
+                                    modifier = Modifier.weight(1f),
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                                TextButton(onClick = { onEvent(SettingsEvent.RefreshGroqLLMModels) }) {
+                                    Text("Retry")
+                                }
+                            }
+                        }
+                    }
+
+                    AnimatedVisibility(
+                        visible = !state.isLoadingGroqLLMModels && state.groqLLMModels.isNotEmpty(),
+                        enter = fadeIn(),
+                        exit = fadeOut(),
+                    ) {
+                        ModelDropdown(
+                            models = state.groqLLMModels.map { it.id to it.displayName },
+                            selectedModelId = state.groqLLMModel,
+                            onModelSelected = { onEvent(SettingsEvent.SelectGroqLLMModel(it)) },
+                        )
+                    }
+
+                    if (!state.isLoadingGroqLLMModels && state.groqLLMModels.isEmpty() && state.groqLLMModelsFetchError == null && state.groqApiKey.isBlank()) {
+                        Text(
+                            "Save your Groq API key to load available correction models.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 } else {
                     Text(
                         "Groq transcription model",
@@ -940,6 +1021,7 @@ private fun ProviderDropdown(
         TranscriptionProvider.GEMINI to "Gemini (Transcribe + Rewrite)",
         TranscriptionProvider.GROQ_WHISPER to "Groq Whisper (Raw Transcription)",
         TranscriptionProvider.GROQ_WHISPER_GEMINI to "Groq + Gemini (Context Correction)",
+        TranscriptionProvider.GROQ_WHISPER_GROQ to "Groq Full Pipeline (Whisper + LLM)",
     )
     var expanded by remember { mutableStateOf(false) }
     val selectedLabel =

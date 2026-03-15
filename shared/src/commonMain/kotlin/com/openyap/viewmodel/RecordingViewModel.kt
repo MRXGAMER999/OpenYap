@@ -21,10 +21,12 @@ import com.openyap.repository.SettingsRepository
 import com.openyap.repository.UserProfileRepository
 import com.openyap.service.DictionaryEngine
 import com.openyap.service.GeminiClient
+import com.openyap.service.GroqLLMClient
 import com.openyap.service.PhraseExpansionEngine
 import com.openyap.service.PromptBuilder
 import com.openyap.service.TranscriptionService
 import com.openyap.service.WhisperPromptBuilder
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -88,6 +90,7 @@ class RecordingViewModel(
     private val audioRecorder: AudioRecorder,
     private val geminiClient: GeminiClient,
     private val groqWhisperClient: TranscriptionService,
+    private val groqLLMClient: GroqLLMClient,
     private val pasteAutomation: PasteAutomation,
     private val foregroundAppDetector: ForegroundAppDetector,
     private val settingsRepository: SettingsRepository,
@@ -214,6 +217,7 @@ class RecordingViewModel(
                 geminiApiKey.isNullOrBlank() -> "Please set your Gemini API key in Settings."
                 else -> null
             }
+            TranscriptionProvider.GROQ_WHISPER_GROQ -> if (groqApiKey.isNullOrBlank()) "Please set your Groq API key in Settings." else null
         }
         if (apiKeyError != null) {
             _state.update { it.copy(error = apiKeyError) }
@@ -420,12 +424,37 @@ class RecordingViewModel(
                             model = settings.geminiModel,
                         )
                     }
+
+                    TranscriptionProvider.GROQ_WHISPER_GROQ -> {
+                        val transcript = groqWhisperClient.transcribe(
+                            audioBytes = audioBytes,
+                            mimeType = audioMimeType,
+                            systemPrompt = "",
+                            apiKey = groqApiKey!!,
+                            model = settings.groqModel,
+                            whisperPrompt = whisperPrompt,
+                            language = settings.whisperLanguage,
+                        )
+                        try {
+                            groqLLMClient.rewriteText(
+                                text = transcript,
+                                systemPrompt = systemPrompt,
+                                apiKey = groqApiKey!!,
+                                model = settings.groqLLMModel,
+                            )
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            transcript
+                        }
+                    }
                 }
 
                 val modelUsed = when (settings.transcriptionProvider) {
                     TranscriptionProvider.GEMINI -> settings.geminiModel
                     TranscriptionProvider.GROQ_WHISPER -> settings.groqModel
                     TranscriptionProvider.GROQ_WHISPER_GEMINI -> "${settings.groqModel} -> ${settings.geminiModel}"
+                    TranscriptionProvider.GROQ_WHISPER_GROQ -> "${settings.groqModel} -> ${settings.groqLLMModel}"
                 }
 
                 if (generation != processingGeneration.get()) {
@@ -566,6 +595,7 @@ class RecordingViewModel(
             TranscriptionProvider.GEMINI -> !geminiApiKey.isNullOrBlank()
             TranscriptionProvider.GROQ_WHISPER -> !groqApiKey.isNullOrBlank()
             TranscriptionProvider.GROQ_WHISPER_GEMINI -> !geminiApiKey.isNullOrBlank() && !groqApiKey.isNullOrBlank()
+            TranscriptionProvider.GROQ_WHISPER_GROQ -> !groqApiKey.isNullOrBlank()
         }
     }
 

@@ -109,7 +109,7 @@ class GroqWhisperClient(private val client: HttpClient) : TranscriptionService {
             }
             add(
                 PartData.FormItem(
-                    value = "0",
+                    value = "0.2",
                     dispose = {},
                     partHeaders = Headers.build {
                         append(HttpHeaders.ContentDisposition, fieldDisposition("temperature"))

@@ -100,6 +100,7 @@ fun main() {
         val startupManager = remember { WindowsStartupManager() }
         val geminiClient = remember { HttpClientFactory.createGeminiClient() }
         val groqWhisperClient = remember { HttpClientFactory.createGroqWhisperClient() }
+        val groqLLMClient = remember { HttpClientFactory.createGroqLLMClient() }
         val dictionaryEngine = remember { DictionaryEngine(dictionaryRepo) }
         val hotkeyFormatter = remember { WindowsHotkeyDisplayFormatter() }
         val overlayController = remember { ComposeOverlayController() }
@@ -133,6 +134,7 @@ fun main() {
                 audioRecorder = audioRecorder,
                 geminiClient = geminiClient,
                 groqWhisperClient = groqWhisperClient,
+                groqLLMClient = groqLLMClient,
                 pasteAutomation = pasteAutomation,
                 foregroundAppDetector = foregroundDetector,
                 settingsRepository = settingsRepo,
@@ -155,6 +157,7 @@ fun main() {
                 settingsRepo,
                 geminiClient,
                 groqWhisperClient,
+                groqLLMClient,
                 hotkeyManager,
                 hotkeyFormatter,
                 audioRecorder,
@@ -164,7 +167,7 @@ fun main() {
         }
         val historyViewModel = remember { HistoryViewModel(historyRepo) }
         val onboardingViewModel =
-            remember { OnboardingViewModel(settingsRepo, permissionManager, geminiClient) }
+            remember { OnboardingViewModel(settingsRepo, permissionManager, groqLLMClient) }
         val dictionaryViewModel = remember { DictionaryViewModel(dictionaryRepo, dictionaryEngine) }
         val userProfileViewModel = remember { UserProfileViewModel(userProfileRepo) }
         val statsViewModel = remember { StatsViewModel(historyRepo) }

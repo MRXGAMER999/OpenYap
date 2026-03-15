@@ -7,6 +7,7 @@ enum class TranscriptionProvider {
     GEMINI,
     GROQ_WHISPER,
     GROQ_WHISPER_GEMINI,
+    GROQ_WHISPER_GROQ,
 }
 
 @Serializable
@@ -20,8 +21,9 @@ enum class PrimaryUseCase {
 @Serializable
 data class AppSettings(
     val geminiModel: String = "gemini-3.1-flash-lite-preview",
-    val transcriptionProvider: TranscriptionProvider = TranscriptionProvider.GEMINI,
+    val transcriptionProvider: TranscriptionProvider = TranscriptionProvider.GROQ_WHISPER_GROQ,
     val groqModel: String = "whisper-large-v3",
+    val groqLLMModel: String = "moonshotai/kimi-k2-instruct-0905",
     val hotkeyConfig: HotkeyConfig = HotkeyConfig(),
     val genZEnabled: Boolean = false,
     val phraseExpansionEnabled: Boolean = false,

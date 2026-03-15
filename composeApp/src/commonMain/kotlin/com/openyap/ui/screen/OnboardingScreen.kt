@@ -71,6 +71,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,8 +91,9 @@ import com.openyap.model.PrimaryUseCase
 import com.openyap.ui.theme.Spacing
 import com.openyap.viewmodel.OnboardingEvent
 import com.openyap.viewmodel.OnboardingUiState
+import kotlinx.coroutines.launch
 
-private const val RECOMMENDED_MODEL_PREFIX = "gemini-3.1-flash-lite"
+private const val RECOMMENDED_MODEL_PREFIX = "moonshotai/kimi-k2"
 
 enum class StepState { LOCKED, ACTIVE, COMPLETE }
 
@@ -103,6 +105,22 @@ fun OnboardingScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val uriHandler = LocalUriHandler.current
+    val scope = rememberCoroutineScope()
+
+    val openExternalUrl: (String) -> Unit = remember(uriHandler, snackbarHostState, scope) {
+        { url ->
+            runCatching {
+                uriHandler.openUri(url)
+            }.onFailure {
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "Couldn't open your browser automatically. Open this link manually: $url",
+                        duration = SnackbarDuration.Long,
+                    )
+                }
+            }
+        }
+    }
 
     LaunchedEffect(state.modelsFetchErrorId) {
         val errorMsg = state.modelsFetchError ?: return@LaunchedEffect
@@ -187,7 +205,7 @@ fun OnboardingScreen(
                             style = MaterialTheme.typography.displaySmallEmphasized,
                         )
                         Text(
-                            text = "Give OpenYap microphone access, add your Gemini key, pick a model, and tell us what you talk about. After that, every recording becomes a polished paste.",
+                            text = "Give OpenYap microphone access, add your Groq key, pick a model, and tell us what you talk about. After that, every recording becomes a polished paste.",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -298,7 +316,7 @@ fun OnboardingScreen(
 
                         StepSection(
                             stepNumber = 2,
-                            title = "Gemini API Key",
+                            title = "Groq API Key",
                             subtitle = "Connect the voice pipeline to your model backend.",
                             stepState = step2State,
                             delayMs = 80,
@@ -312,7 +330,7 @@ fun OnboardingScreen(
                                 exit = fadeOut() + shrinkVertically(),
                             ) {
                                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                                    Text("Paste your Gemini API key. OpenYap stores it locally and uses it for transcription and rewriting.")
+                                    Text("Paste your Groq API key. OpenYap stores it locally and uses it for transcription and rewriting.")
 
                                     // Inline "Get a free key" link — more discoverable
                                     Row(
@@ -325,11 +343,11 @@ fun OnboardingScreen(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                         TextButton(
-                                            onClick = { uriHandler.openUri("https://aistudio.google.com/app/apikey") },
+                                            onClick = { openExternalUrl("https://console.groq.com/keys") },
                                             contentPadding = PaddingValues(horizontal = Spacing.sm, vertical = 0.dp),
                                         ) {
                                             Text(
-                                                "Get a free key \u2197",
+                                                "Free key: how to get one \u2197",
                                                 style = MaterialTheme.typography.bodySmall.copy(
                                                     fontWeight = FontWeight.SemiBold,
                                                     textDecoration = TextDecoration.Underline,
@@ -350,7 +368,7 @@ fun OnboardingScreen(
                                         onValueChange = { apiKeyInput = it },
                                         modifier = Modifier.fillMaxWidth().focusRequester(apiFocusRequester),
                                         singleLine = true,
-                                        placeholder = { Text("Gemini API key") },
+                                        placeholder = { Text("Groq API key") },
                                         visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
                                         trailingIcon = {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -696,9 +714,10 @@ private fun OnboardingModelDropdown(
 }
 
 private fun buildModelHint(id: String): String = when {
-    "flash-lite" in id -> "$id · Faster + cheaper"
-    "flash" in id -> "$id · Balanced speed & quality"
-    "pro" in id -> "$id · Higher quality, slower"
+    "kimi-k2" in id -> "$id · Best quality, recommended"
+    "gpt-oss-120b" in id -> "$id · Large, high quality"
+    "70b" in id -> "$id · Balanced speed & quality"
+    "32b" in id || "8b" in id -> "$id · Faster, lighter"
     else -> id
 }
 
