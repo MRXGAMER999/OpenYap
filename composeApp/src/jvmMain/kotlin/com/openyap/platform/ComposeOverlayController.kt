@@ -28,6 +28,7 @@ class ComposeOverlayController : OverlayController, Closeable {
     val uiState: StateFlow<OverlayUiState> = _uiState.asStateFlow()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    @Volatile
     private var lastFlashJob: Job? = null
 
     override fun show() {

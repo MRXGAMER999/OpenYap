@@ -1,6 +1,7 @@
 package com.openyap.platform
 
 import com.openyap.model.AudioDevice
+import com.openyap.platform.NativeAudioBridge.readLastError
 import com.sun.jna.CallbackThreadInitializer
 import com.sun.jna.Native
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -232,7 +233,7 @@ class NativeAudioRecorder(
     }
 
     private fun nativeError(prefix: String, code: Int): String {
-        val detail = native.openyap_last_error()?.takeUnless { it.isBlank() }
+        val detail = native.readLastError()?.takeUnless { it.isBlank() }
         return if (detail != null) "$prefix: $detail" else "$prefix (code $code)."
     }
 

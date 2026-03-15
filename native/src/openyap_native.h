@@ -103,4 +103,6 @@ OPENYAP_API int OPENYAP_CALL openyap_paste_text(
 );
 #endif
 
+/// Returns the last error message as a malloc'd string the caller must free
+/// with openyap_free_string(). Returns nullptr if no error is set.
 OPENYAP_API const char *OPENYAP_CALL openyap_last_error(void);

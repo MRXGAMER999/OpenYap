@@ -36,6 +36,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.roundToInt
 import kotlin.time.Clock
 import kotlin.time.TimeMark
@@ -118,9 +121,11 @@ class RecordingViewModel(
     private val _effects = MutableSharedFlow<RecordingEffect>(extraBufferCapacity = 8)
     val effects: SharedFlow<RecordingEffect> = _effects.asSharedFlow()
 
+    private val processingGeneration = AtomicInteger(0)
+    private val recordingMutex = Mutex()
     @Volatile
-    private var processingGeneration = 0
     private var durationJob: Job? = null
+    @Volatile
     private var currentRecordingPath: String? = null
 
     @Volatile
@@ -182,7 +187,7 @@ class RecordingViewModel(
         }
     }
 
-    private suspend fun startRecording() {
+    private suspend fun startRecording() = recordingMutex.withLock {
         val currentState = _state.value.recordingState
 
         if (currentState is RecordingState.Processing) {
@@ -312,9 +317,6 @@ class RecordingViewModel(
         }
 
         val settings = settingsRepository.loadSettings()
-        if (settings.audioFeedbackEnabled) {
-            audioFeedbackPlayer.playStop()
-        }
 
         val duration = elapsedSeconds.roundToInt().coerceAtLeast(1)
         val path = try {
@@ -336,9 +338,14 @@ class RecordingViewModel(
             _effects.emit(RecordingEffect.ShowError(e.message ?: "Recording failed"))
             return
         }
+
+        if (settings.audioFeedbackEnabled) {
+            audioFeedbackPlayer.playStop()
+        }
+
         currentRecordingPath = null
         currentProcessingPath = path
-        val generation = ++processingGeneration
+        val generation = processingGeneration.incrementAndGet()
         val recorderWarning = (audioRecorder as? AudioRecorderDiagnostics)?.consumeWarning()
 
         _state.update { it.copy(recordingState = RecordingState.Processing) }
@@ -417,7 +424,7 @@ class RecordingViewModel(
                     TranscriptionProvider.GROQ_WHISPER_GEMINI -> "${settings.groqModel} -> ${settings.geminiModel}"
                 }
 
-                if (generation != processingGeneration) {
+                if (generation != processingGeneration.get()) {
                     deleteFile(path)
                     return@launch
                 }
@@ -435,14 +442,14 @@ class RecordingViewModel(
                     enabled = settings.phraseExpansionEnabled,
                 )
 
-                if (generation != processingGeneration) {
+                if (generation != processingGeneration.get()) {
                     deleteFile(path)
                     return@launch
                 }
 
                 pasteAutomation.pasteText(expandedResponse, restoreClipboard = false)
 
-                if (generation != processingGeneration) {
+                if (generation != processingGeneration.get()) {
                     deleteFile(path)
                     return@launch
                 }
@@ -492,7 +499,7 @@ class RecordingViewModel(
                 deleteFile(path)
             } catch (e: Exception) {
                 currentProcessingPath = null
-                if (generation == processingGeneration) {
+                if (generation == processingGeneration.get()) {
                     _state.update {
                         it.copy(
                             recordingState = RecordingState.Error(e.message ?: "Processing failed"),
@@ -524,7 +531,7 @@ class RecordingViewModel(
             }
 
             is RecordingState.Processing -> {
-                processingGeneration++
+                processingGeneration.incrementAndGet()
                 currentProcessingPath?.let { deleteFile(it) }
                 currentProcessingPath = null
                 overlayController.dismiss()

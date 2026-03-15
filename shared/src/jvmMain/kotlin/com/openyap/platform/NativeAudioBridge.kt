@@ -48,7 +48,7 @@ object NativeAudioBridge {
                     return LoadResult(library = library, error = null)
                 }
 
-                val reason = library.openyap_last_error()
+                val reason = library.readLastError()
                     ?.takeUnless { it.isBlank() }
                     ?: "openyap_init failed with code $initResult"
                 lastError =
@@ -118,6 +118,15 @@ object NativeAudioBridge {
         return if (candidate == "openyap_native") "system library path" else candidate
     }
 
+    fun OpenYapNative.readLastError(): String? {
+        val ptr = openyap_last_error() ?: return null
+        return try {
+            ptr.getString(0)
+        } finally {
+            openyap_free_string(ptr)
+        }
+    }
+
     interface OpenYapNative : StdCallLibrary {
         fun openyap_init(): Int
         fun openyap_shutdown()
@@ -185,7 +194,7 @@ object NativeAudioBridge {
             restoreClipboard: Int,
         ): Int
 
-        fun openyap_last_error(): String?
+        fun openyap_last_error(): Pointer?
 
         fun interface AudioCallback : StdCallLibrary.StdCallCallback {
             fun invoke(pcmData: Pointer, sampleCount: Int, userData: Pointer?)
