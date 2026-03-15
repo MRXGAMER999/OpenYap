@@ -20,9 +20,6 @@ on:
 permissions:
   contents: write
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -44,19 +41,15 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
 
-      - name: Set up MSVC
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-
-      - name: Configure CMake
-        run: cmake -S native -B native/build -G Ninja -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build native DLL
-        run: cmake --build native/build
-
-      - name: Install native DLL to prebuilt path
-        run: cmake --install native/build --config Release
+      - name: Configure and build native DLL
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VS_INSTALL_PATH=%%i"
+          if not defined VS_INSTALL_PATH exit /b 1
+          call "%VS_INSTALL_PATH%\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
+          cmake -S native -B native/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build native/build
+          cmake --install native/build --config Release
 
       - name: Build Windows MSI
         run: .\gradlew.bat :composeApp:packageMsi
