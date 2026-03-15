@@ -187,7 +187,8 @@ class RecordingViewModel(
         }
     }
 
-    private suspend fun startRecording() = recordingMutex.withLock {
+    private suspend fun startRecording() {
+        recordingMutex.withLock {
         val currentState = _state.value.recordingState
 
         if (currentState is RecordingState.Processing) {
@@ -278,6 +279,7 @@ class RecordingViewModel(
                 }
                 overlayController.updateDuration(seconds)
             }
+        }
         }
     }
 

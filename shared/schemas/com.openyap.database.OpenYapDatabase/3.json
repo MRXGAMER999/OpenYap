@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 3,
-    "identityHash": "ec01dc77d026dcf82b3295dd0b71f4e7",
+    "identityHash": "9b88de5789b5f75573e2075433e7b1f8",
     "entities": [
       {
         "tableName": "app_settings",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `geminiModel` TEXT NOT NULL, `transcriptionProvider` TEXT NOT NULL, `groqModel` TEXT NOT NULL, `hotkeyConfigJson` TEXT NOT NULL, `genZEnabled` INTEGER NOT NULL, `phraseExpansionEnabled` INTEGER NOT NULL, `dictionaryEnabled` INTEGER NOT NULL, `dismissedUpdateVersion` TEXT, `onboardingCompleted` INTEGER NOT NULL, `audioFeedbackEnabled` INTEGER NOT NULL, `soundFeedbackVolume` REAL NOT NULL, `startMinimized` INTEGER NOT NULL, `launchOnStartup` INTEGER NOT NULL, `audioDeviceId` TEXT, `primaryUseCase` TEXT NOT NULL, `useCaseContext` TEXT NOT NULL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `geminiModel` TEXT NOT NULL, `transcriptionProvider` TEXT NOT NULL, `groqModel` TEXT NOT NULL, `hotkeyConfigJson` TEXT NOT NULL, `genZEnabled` INTEGER NOT NULL, `phraseExpansionEnabled` INTEGER NOT NULL, `dictionaryEnabled` INTEGER NOT NULL, `dismissedUpdateVersion` TEXT, `onboardingCompleted` INTEGER NOT NULL, `audioFeedbackEnabled` INTEGER NOT NULL, `soundFeedbackVolume` REAL NOT NULL, `startMinimized` INTEGER NOT NULL, `launchOnStartup` INTEGER NOT NULL, `audioDeviceId` TEXT, `primaryUseCase` TEXT NOT NULL, `useCaseContext` TEXT NOT NULL, `whisperLanguage` TEXT NOT NULL, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -105,6 +105,12 @@
           {
             "fieldPath": "useCaseContext",
             "columnName": "useCaseContext",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "whisperLanguage",
+            "columnName": "whisperLanguage",
             "affinity": "TEXT",
             "notNull": true
           }
@@ -317,7 +323,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'ec01dc77d026dcf82b3295dd0b71f4e7')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '9b88de5789b5f75573e2075433e7b1f8')"
     ]
   }
 }
