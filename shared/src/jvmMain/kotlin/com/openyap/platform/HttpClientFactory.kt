@@ -1,6 +1,7 @@
 package com.openyap.platform
 
 import com.openyap.service.GeminiClient
+import com.openyap.service.GroqLLMClient
 import com.openyap.service.GroqWhisperClient
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -28,5 +29,9 @@ object HttpClientFactory {
 
     fun createGroqWhisperClient(): GroqWhisperClient {
         return GroqWhisperClient(createHttpClient())
+    }
+
+    fun createGroqLLMClient(): GroqLLMClient {
+        return GroqLLMClient(createHttpClient())
     }
 }

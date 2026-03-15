@@ -14,6 +14,7 @@ import com.openyap.platform.NoOpStartupManager
 import com.openyap.platform.StartupManager
 import com.openyap.repository.SettingsRepository
 import com.openyap.service.GeminiClient
+import com.openyap.service.GroqLLMClient
 import com.openyap.service.GroqWhisperClient
 import com.openyap.service.ModelInfo
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +29,7 @@ data class SettingsUiState(
     val groqApiKey: String = "",
     val geminiModel: String = "gemini-3.1-flash-lite-preview",
     val groqModel: String = "whisper-large-v3",
+    val groqLLMModel: String = "moonshotai/kimi-k2-instruct",
     val genZEnabled: Boolean = false,
     val phraseExpansionEnabled: Boolean = false,
     val dictionaryEnabled: Boolean = true,
@@ -44,8 +46,11 @@ data class SettingsUiState(
         ModelInfo("whisper-large-v3", "Whisper Large V3"),
         ModelInfo("whisper-large-v3-turbo", "Whisper Large V3 Turbo"),
     ),
+    val groqLLMModels: List<ModelInfo> = emptyList(),
     val isLoadingModels: Boolean = false,
+    val isLoadingGroqLLMModels: Boolean = false,
     val modelsFetchError: String? = null,
+    val groqLLMModelsFetchError: String? = null,
     val hotkeyLabel: String = "Ctrl+Shift+R",
     val isCapturingHotkey: Boolean = false,
     val hotkeyError: String? = null,
@@ -65,6 +70,7 @@ sealed interface SettingsEvent {
     data class SaveGroqApiKey(val key: String) : SettingsEvent
     data class SelectModel(val modelId: String) : SettingsEvent
     data class SelectGroqModel(val modelId: String) : SettingsEvent
+    data class SelectGroqLLMModel(val modelId: String) : SettingsEvent
     data class ToggleGenZ(val enabled: Boolean) : SettingsEvent
     data class TogglePhraseExpansion(val enabled: Boolean) : SettingsEvent
     data class ToggleDictionary(val enabled: Boolean) : SettingsEvent
@@ -74,6 +80,7 @@ sealed interface SettingsEvent {
     data class ToggleLaunchOnStartup(val enabled: Boolean) : SettingsEvent
     data object ResetAppData : SettingsEvent
     data object RefreshModels : SettingsEvent
+    data object RefreshGroqLLMModels : SettingsEvent
     data class SelectAudioDevice(val deviceId: String?) : SettingsEvent
     data object RefreshDevices : SettingsEvent
     data object CaptureHotkey : SettingsEvent
@@ -88,6 +95,7 @@ class SettingsViewModel(
     private val settingsRepository: SettingsRepository,
     private val geminiClient: GeminiClient,
     private val groqWhisperClient: GroqWhisperClient,
+    private val groqLLMClient: GroqLLMClient,
     private val hotkeyManager: HotkeyManager,
     private val hotkeyDisplayFormatter: HotkeyDisplayFormatter,
     private val audioRecorder: AudioRecorder,
@@ -127,6 +135,7 @@ class SettingsViewModel(
                     groqApiKey = groqApiKey,
                     geminiModel = settings.geminiModel,
                     groqModel = settings.groqModel,
+                    groqLLMModel = settings.groqLLMModel,
                     genZEnabled = settings.genZEnabled,
                     phraseExpansionEnabled = settings.phraseExpansionEnabled,
                     dictionaryEnabled = settings.dictionaryEnabled,
@@ -144,6 +153,7 @@ class SettingsViewModel(
                 )
             }
             if (apiKey.isNotBlank()) fetchModels(apiKey)
+            if (groqApiKey.isNotBlank()) fetchGroqLLMModels(groqApiKey)
             fetchDevices()
         }
     }
@@ -155,6 +165,7 @@ class SettingsViewModel(
             is SettingsEvent.SaveGroqApiKey -> saveGroqApiKey(event.key)
             is SettingsEvent.SelectModel -> selectModel(event.modelId)
             is SettingsEvent.SelectGroqModel -> selectGroqModel(event.modelId)
+            is SettingsEvent.SelectGroqLLMModel -> selectGroqLLMModel(event.modelId)
             is SettingsEvent.ToggleGenZ -> toggleGenZ(event.enabled)
             is SettingsEvent.TogglePhraseExpansion -> togglePhraseExpansion(event.enabled)
             is SettingsEvent.ToggleDictionary -> toggleDictionary(event.enabled)
@@ -164,6 +175,7 @@ class SettingsViewModel(
             is SettingsEvent.ToggleLaunchOnStartup -> toggleLaunchOnStartup(event.enabled)
             is SettingsEvent.ResetAppData -> resetAppData()
             is SettingsEvent.RefreshModels -> refreshModels()
+            is SettingsEvent.RefreshGroqLLMModels -> refreshGroqLLMModels()
             is SettingsEvent.CaptureHotkey -> captureHotkey()
             is SettingsEvent.ClearHotkeyMessage -> _state.update { it.copy(hotkeyError = null) }
             is SettingsEvent.DismissSaveMessage -> _state.update { it.copy(saveMessage = null) }
@@ -248,8 +260,11 @@ class SettingsViewModel(
         viewModelScope.launch {
             settingsRepository.updateSettings { it.copy(transcriptionProvider = provider) }
             _state.update { it.copy(transcriptionProvider = provider) }
-            if (provider != TranscriptionProvider.GROQ_WHISPER && _state.value.apiKey.isNotBlank() && _state.value.availableModels.isEmpty()) {
+            if (provider != TranscriptionProvider.GROQ_WHISPER && provider != TranscriptionProvider.GROQ_WHISPER_GROQ && _state.value.apiKey.isNotBlank() && _state.value.availableModels.isEmpty()) {
                 fetchModels(_state.value.apiKey)
+            }
+            if (provider == TranscriptionProvider.GROQ_WHISPER_GROQ && _state.value.groqApiKey.isNotBlank() && _state.value.groqLLMModels.isEmpty()) {
+                fetchGroqLLMModels(_state.value.groqApiKey)
             }
         }
     }
@@ -259,6 +274,14 @@ class SettingsViewModel(
             val trimmed = key.trim()
             settingsRepository.saveGroqApiKey(trimmed)
             _state.update { it.copy(groqApiKey = trimmed, saveMessage = "Groq API key saved") }
+
+            if (trimmed.isNotBlank()) {
+                fetchGroqLLMModels(trimmed)
+            } else {
+                _state.update {
+                    it.copy(groqLLMModels = emptyList(), groqLLMModelsFetchError = null)
+                }
+            }
         }
     }
 
@@ -266,6 +289,39 @@ class SettingsViewModel(
         viewModelScope.launch {
             settingsRepository.updateSettings { it.copy(groqModel = modelId) }
             _state.update { it.copy(groqModel = modelId) }
+        }
+    }
+
+    private fun selectGroqLLMModel(modelId: String) {
+        viewModelScope.launch {
+            settingsRepository.updateSettings { it.copy(groqLLMModel = modelId) }
+            _state.update { it.copy(groqLLMModel = modelId) }
+        }
+    }
+
+    private fun refreshGroqLLMModels() {
+        val groqApiKey = _state.value.groqApiKey
+        if (groqApiKey.isNotBlank()) {
+            viewModelScope.launch { fetchGroqLLMModels(groqApiKey) }
+        }
+    }
+
+    private suspend fun fetchGroqLLMModels(apiKey: String) {
+        _state.update { it.copy(isLoadingGroqLLMModels = true, groqLLMModelsFetchError = null) }
+        try {
+            val models = groqLLMClient.listModels(apiKey)
+            _state.update { it.copy(groqLLMModels = models, isLoadingGroqLLMModels = false) }
+
+            if (models.isNotEmpty() && models.none { it.id == _state.value.groqLLMModel }) {
+                selectGroqLLMModel(models.first().id)
+            }
+        } catch (e: Exception) {
+            _state.update {
+                it.copy(
+                    isLoadingGroqLLMModels = false,
+                    groqLLMModelsFetchError = e.message ?: "Failed to fetch Groq LLM models",
+                )
+            }
         }
     }
 
@@ -384,6 +440,7 @@ class SettingsViewModel(
                         groqApiKey = "",
                         geminiModel = defaults.geminiModel,
                         groqModel = defaults.groqModel,
+                        groqLLMModel = defaults.groqLLMModel,
                         genZEnabled = defaults.genZEnabled,
                         phraseExpansionEnabled = defaults.phraseExpansionEnabled,
                         dictionaryEnabled = defaults.dictionaryEnabled,
@@ -395,8 +452,11 @@ class SettingsViewModel(
                         useCaseContext = defaults.useCaseContext,
                         whisperLanguage = defaults.whisperLanguage,
                         availableModels = emptyList(),
+                        groqLLMModels = emptyList(),
                         isLoadingModels = false,
+                        isLoadingGroqLLMModels = false,
                         modelsFetchError = null,
+                        groqLLMModelsFetchError = null,
                         hotkeyLabel = formatHotkey(defaults.hotkeyConfig.startHotkey),
                         isResettingData = false,
                         saveMessage = "App data reset. OpenYap will walk you through onboarding again.",

@@ -9,6 +9,7 @@ data class AppSettingsEntity(
     val geminiModel: String = "gemini-3.1-flash-lite-preview",
     val transcriptionProvider: String = "GEMINI",
     val groqModel: String = "whisper-large-v3",
+    val groqLLMModel: String = "moonshotai/kimi-k2-instruct",
     val hotkeyConfigJson: String = "{}",
     val genZEnabled: Boolean = false,
     val phraseExpansionEnabled: Boolean = false,
