@@ -22,7 +22,6 @@ kotlin {
             implementation(libs.sqlite.bundled)
             implementation(project.dependencies.platform(libs.koin.bom))
             implementation(libs.koin.core)
-            implementation(libs.koin.annotations)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -32,6 +31,7 @@ kotlin {
             implementation(libs.ktor.client.cio)
             implementation(libs.jna)
             implementation(libs.jna.platform)
+            implementation(libs.koin.annotations)
         }
     }
 }

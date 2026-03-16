@@ -19,6 +19,7 @@ import androidx.compose.ui.window.rememberTrayState
 import androidx.compose.ui.window.rememberWindowState
 import com.openyap.database.createOpenYapDatabase
 import com.openyap.platform.AudioFeedbackService
+import com.openyap.platform.AudioPipelineConfig
 import com.openyap.platform.AudioRecorder
 import com.openyap.platform.ComposeOverlayController
 import com.openyap.platform.ComposeOverlayWindow
@@ -402,8 +403,3 @@ fun main() {
     }
 }
 
-private data class AudioPipelineConfig(
-    val audioRecorder: AudioRecorder,
-    val audioMimeType: String,
-    val audioFileExtension: String,
-)
