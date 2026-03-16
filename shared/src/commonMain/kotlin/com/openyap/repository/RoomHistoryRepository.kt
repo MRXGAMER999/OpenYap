@@ -13,6 +13,12 @@ class RoomHistoryRepository(
         return database.recordingEntryDao().getAll().map { it.toDomain() }
     }
 
+    override suspend fun loadRecentEntriesForApp(targetApp: String, limit: Int): List<RecordingEntry> {
+        return database.recordingEntryDao()
+            .getRecentEntriesForApp(targetApp = targetApp, limit = limit)
+            .map { it.toDomain() }
+    }
+
     override suspend fun addEntry(entry: RecordingEntry) {
         database.recordingEntryDao().insert(entry.toEntity())
     }

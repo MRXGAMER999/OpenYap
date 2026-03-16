@@ -103,6 +103,7 @@ fun RecordingEntry.toEntity(): RecordingEntryEntity = RecordingEntryEntity(
     response = response,
     targetApp = targetApp,
     model = model,
+    isFallback = isFallback,
 )
 
 fun RecordingEntryEntity.toDomain(): RecordingEntry = RecordingEntry(
@@ -112,6 +113,7 @@ fun RecordingEntryEntity.toDomain(): RecordingEntry = RecordingEntry(
     response = response,
     targetApp = targetApp,
     model = model,
+    isFallback = isFallback,
 )
 
 // ── UserProfile ─────────────────────────────────────────────────────────────

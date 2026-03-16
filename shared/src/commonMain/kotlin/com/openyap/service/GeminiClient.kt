@@ -9,6 +9,7 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -94,40 +95,50 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
         model: String,
         whisperPrompt: String,
         language: String,
-    ): String = processAudio(audioBytes, mimeType, systemPrompt, apiKey, model)
+    ): String = processAudio(
+        audioBytes = audioBytes,
+        mimeType = mimeType,
+        systemPrompt = systemPrompt,
+        apiKey = apiKey,
+        model = model,
+        temperature = 0.3f,
+    )
+
+    @OptIn(ExperimentalEncodingApi::class)
+    suspend fun transcribe(
+        audioBytes: ByteArray,
+        mimeType: String,
+        systemPrompt: String,
+        apiKey: String,
+        model: String,
+        temperature: Float,
+    ): String = processAudio(
+        audioBytes = audioBytes,
+        mimeType = mimeType,
+        systemPrompt = systemPrompt,
+        apiKey = apiKey,
+        model = model,
+        temperature = temperature,
+    )
 
     suspend fun rewriteText(
         text: String,
         systemPrompt: String,
         apiKey: String,
         model: String,
+        temperature: Float,
     ): String {
-        val correctionPrompt = buildString {
-            appendLine("You are doing a second-pass correction of a speech transcript that was already transcribed by a speech-to-text model.")
-            appendLine("Your job is to preserve the user's intended message while making only conservative, context-aware corrections.")
-            appendLine()
-            appendLine("CORRECTION RULES:")
-            appendLine("- Preserve the original meaning, wording, language, and intent as closely as possible.")
-            appendLine("- Fix obvious punctuation, capitalization, spacing, and minor grammar issues.")
-            appendLine("- Correct likely misheard or accent-related words ONLY when the surrounding context makes the intended word highly likely.")
-            appendLine("- Keep domain-specific, product, company, and technical terms unless you are highly confident they were misrecognized.")
-            appendLine("- If you are uncertain, keep the original word or phrase.")
-            appendLine("- Do not paraphrase, summarize, expand, add detail, or change tone unless clearly required by the system instructions.")
-            appendLine("- Do not invent names, facts, or context that are not strongly implied by the transcript.")
-            appendLine("- NEVER censor, mask, or replace any words with asterisks or symbols. Preserve all words exactly as they appear, including profanity, slang, and explicit language. If the transcript contains masked or redacted tokens (asterisks), preserve them exactly as they appear and do not attempt to reconstruct or guess the redacted words.")
-            appendLine()
-            appendLine("Return only the final corrected text to paste.")
-            appendLine()
-            append("Transcript:\n")
-            append(text)
+        val thinkingConfig = if (supportsThinking(model)) {
+            ThinkingConfig(thinkingBudget = 512)
+        } else {
+            null
         }
-
         val requestBody = GeminiRequest(
             contents = listOf(
                 GeminiContent(
                     parts = listOf(
                         GeminiPart(
-                            text = correctionPrompt
+                            text = "Transcript:\n$text"
                         ),
                     )
                 )
@@ -138,8 +149,9 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
                 )
             ),
             generationConfig = GenerationConfig(
-                temperature = 0.2f,
+                temperature = temperature,
                 responseMimeType = "text/plain",
+                thinkingConfig = thinkingConfig,
             ),
             safetySettings = ALL_DISABLED_SAFETY_SETTINGS,
         )
@@ -180,6 +192,7 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
         systemPrompt: String,
         apiKey: String,
         model: String,
+        temperature: Float,
     ): String {
         val base64Audio = Base64.encode(audioBytes)
 
@@ -203,7 +216,7 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
                 )
             ),
             generationConfig = GenerationConfig(
-                temperature = 0.2f,
+                temperature = temperature,
                 responseMimeType = "text/plain",
             ),
             safetySettings = ALL_DISABLED_SAFETY_SETTINGS,
@@ -244,6 +257,8 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
         for (attempt in 0..MAX_RETRIES) {
             try {
                 return block()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 lastException = e
                 // Don't retry on the last attempt
@@ -253,6 +268,13 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
             }
         }
         throw lastException ?: GeminiException("Request failed after retries.")
+    }
+
+    private fun supportsThinking(model: String): Boolean {
+        if (!model.startsWith("gemini-2.5", ignoreCase = true)) return false
+
+        val normalizedModel = model.lowercase()
+        return "audio" !in normalizedModel
     }
 }
 
@@ -287,6 +309,12 @@ data class InlineData(
 data class GenerationConfig(
     val temperature: Float? = null,
     @SerialName("response_mime_type") val responseMimeType: String? = null,
+    @SerialName("thinkingConfig") val thinkingConfig: ThinkingConfig? = null,
+)
+
+@Serializable
+data class ThinkingConfig(
+    @SerialName("thinkingBudget") val thinkingBudget: Int? = null,
 )
 
 @Serializable

@@ -11,4 +11,5 @@ data class RecordingEntry(
     val response: String,
     val targetApp: String = "",
     val model: String = "",
+    val isFallback: Boolean = false,
 )
