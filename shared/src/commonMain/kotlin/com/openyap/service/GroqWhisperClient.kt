@@ -2,6 +2,9 @@ package com.openyap.service
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.network.sockets.ConnectTimeoutException
+import io.ktor.client.network.sockets.SocketTimeoutException
+import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -16,6 +19,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.io.IOException
 
 class GroqWhisperClient(private val client: HttpClient) : TranscriptionService {
 
@@ -167,6 +171,26 @@ class GroqWhisperClient(private val client: HttpClient) : TranscriptionService {
                 return block()
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: HttpRequestTimeoutException) {
+                lastException = e
+                if (attempt < MAX_RETRIES) {
+                    delay(RETRY_DELAYS_MS[attempt])
+                }
+            } catch (e: ConnectTimeoutException) {
+                lastException = e
+                if (attempt < MAX_RETRIES) {
+                    delay(RETRY_DELAYS_MS[attempt])
+                }
+            } catch (e: SocketTimeoutException) {
+                lastException = e
+                if (attempt < MAX_RETRIES) {
+                    delay(RETRY_DELAYS_MS[attempt])
+                }
+            } catch (e: IOException) {
+                lastException = e
+                if (attempt < MAX_RETRIES) {
+                    delay(RETRY_DELAYS_MS[attempt])
+                }
             } catch (e: TemporaryGroqWhisperException) {
                 lastException = e
                 if (attempt < MAX_RETRIES) {

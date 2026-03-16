@@ -125,6 +125,10 @@ class RecordingViewModel(
         private const val MIN_DURATION_SECONDS = 0.5
         private const val MAX_SESSION_CONTEXT_ENTRIES = 5
         private const val RECENT_APP_HISTORY_LIMIT = 5
+        private const val MAX_CONTEXT_ITEMS_FOR_PROMPT = 5
+        private const val MAX_CONTEXT_ITEM_CHARS = 400
+        private const val MAX_TOTAL_CONTEXT_CHARS = 1800
+        private const val MAX_WARNING_DETAIL_CHARS = 160
         private val SESSION_CONTEXT_IDLE_TIMEOUT = 30.minutes
     }
 
@@ -397,8 +401,10 @@ class RecordingViewModel(
                 val recentAppHistory = targetApp
                     ?.takeIf { it.isNotBlank() }
                     ?.let { appName ->
-                        historyRepository.loadRecentEntriesForApp(appName, RECENT_APP_HISTORY_LIMIT)
-                            .map(RecordingEntry::response)
+                        boundedContextForPrompt(
+                            historyRepository.loadRecentEntriesForApp(appName, RECENT_APP_HISTORY_LIMIT)
+                                .map(RecordingEntry::response)
+                        )
                     }
                     ?: emptyList()
                 val recentSessionOutputs = if (
@@ -410,6 +416,7 @@ class RecordingViewModel(
                         .filter { entry -> entry.matchesTargetApp(targetApp) }
                         .map(SessionContextEntry::text)
                         .toList()
+                        .let(::boundedContextForPrompt)
                 } else {
                     emptyList()
                 }
@@ -576,7 +583,8 @@ class RecordingViewModel(
                         durationSeconds = duration,
                         response = expandedResponse,
                         targetApp = targetApp ?: "",
-                        model = if (correctionApplied) modelUsed else "$modelUsed [raw-fallback]",
+                        model = modelUsed,
+                        isFallback = !correctionApplied,
                     )
                 )
 
@@ -704,31 +712,15 @@ class RecordingViewModel(
         model: String,
         temperature: Float,
     ): CorrectionOutcome {
-        return try {
-            val rewritten = geminiClient.rewriteText(
-                text = transcript,
-                systemPrompt = systemPrompt,
-                apiKey = apiKey,
-                model = model,
-                temperature = temperature,
-            )
-            validateCorrectionRewrite(
-                original = transcript,
-                rewritten = rewritten,
-            )?.let { reason ->
-                CorrectionOutcome.FallbackRaw(
-                    rawTranscript = transcript,
-                    reason = reason,
-                )
-            } ?: CorrectionOutcome.Applied(rewritten)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            CorrectionOutcome.FallbackRaw(
-                rawTranscript = transcript,
-                reason = e.message ?: "Gemini correction failed",
-            )
-        }
+        return rewriteWithFallback(
+            transcript = transcript,
+            systemPrompt = systemPrompt,
+            apiKey = apiKey,
+            model = model,
+            temperature = temperature,
+            defaultErrorMessage = "Gemini correction failed",
+            rewrite = geminiClient::rewriteText,
+        )
     }
 
     private suspend fun rewriteWithGroqFallback(
@@ -738,13 +730,33 @@ class RecordingViewModel(
         model: String,
         temperature: Float,
     ): CorrectionOutcome {
+        return rewriteWithFallback(
+            transcript = transcript,
+            systemPrompt = systemPrompt,
+            apiKey = apiKey,
+            model = model,
+            temperature = temperature,
+            defaultErrorMessage = "Groq correction failed",
+            rewrite = groqLLMClient::rewriteText,
+        )
+    }
+
+    private suspend fun rewriteWithFallback(
+        transcript: String,
+        systemPrompt: String,
+        apiKey: String,
+        model: String,
+        temperature: Float,
+        defaultErrorMessage: String,
+        rewrite: suspend (String, String, String, String, Float) -> String,
+    ): CorrectionOutcome {
         return try {
-            val rewritten = groqLLMClient.rewriteText(
-                text = transcript,
-                systemPrompt = systemPrompt,
-                apiKey = apiKey,
-                model = model,
-                temperature = temperature,
+            val rewritten = rewrite(
+                transcript,
+                systemPrompt,
+                apiKey,
+                model,
+                temperature,
             )
             validateCorrectionRewrite(
                 original = transcript,
@@ -760,13 +772,13 @@ class RecordingViewModel(
         } catch (e: Exception) {
             CorrectionOutcome.FallbackRaw(
                 rawTranscript = transcript,
-                reason = e.message ?: "Groq correction failed",
+                reason = e.message ?: defaultErrorMessage,
             )
         }
     }
 
     private fun showCorrectionSkippedWarning(reason: String) {
-        val detail = reason.trim().ifBlank { "correction failed" }
+        val detail = sanitizeWarningDetail(reason)
         overlayController.flashMessage("Correction skipped, using raw transcript: $detail")
     }
 
@@ -821,7 +833,49 @@ class RecordingViewModel(
     }
 
     private fun normalizeTargetApp(targetApp: String?): String? {
-        return targetApp?.trim()?.takeIf(String::isNotEmpty)
+        return targetApp?.trim()?.lowercase()?.takeIf(String::isNotEmpty)
+    }
+
+    private fun boundedContextForPrompt(values: List<String>): List<String> {
+        val bounded = values
+            .asSequence()
+            .map(::normalizeContextSnippet)
+            .filter(String::isNotEmpty)
+            .toList()
+            .takeLast(MAX_CONTEXT_ITEMS_FOR_PROMPT)
+            .toMutableList()
+
+        while (bounded.sumOf { it.length } > MAX_TOTAL_CONTEXT_CHARS && bounded.size > 1) {
+            bounded.removeAt(0)
+        }
+
+        if (bounded.size == 1 && bounded[0].length > MAX_TOTAL_CONTEXT_CHARS) {
+            bounded[0] = bounded[0].takeLast(MAX_TOTAL_CONTEXT_CHARS)
+        }
+
+        return bounded
+    }
+
+    private fun normalizeContextSnippet(value: String): String {
+        return value
+            .replace("\r\n", "\n")
+            .replace('\r', '\n')
+            .replace("\n", " ")
+            .trim()
+            .take(MAX_CONTEXT_ITEM_CHARS)
+    }
+
+    private fun sanitizeWarningDetail(reason: String): String {
+        val collapsed = reason
+            .replace("\\s+".toRegex(), " ")
+            .trim()
+            .ifBlank { "correction failed" }
+
+        return if (collapsed.length <= MAX_WARNING_DETAIL_CHARS) {
+            collapsed
+        } else {
+            collapsed.take(MAX_WARNING_DETAIL_CHARS - 1).trimEnd() + "..."
+        }
     }
 
     private fun readFileBytes(path: String): ByteArray = fileOperations.readFile(path)

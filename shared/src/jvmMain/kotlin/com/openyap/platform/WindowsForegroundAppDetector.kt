@@ -23,7 +23,7 @@ class WindowsForegroundAppDetector : ForegroundAppDetector {
                 false,
                 pid,
             ) ?: return ForegroundWindowContext(
-                appName = windowTitle,
+                appName = null,
                 windowTitle = windowTitle,
             )
 
@@ -37,7 +37,7 @@ class WindowsForegroundAppDetector : ForegroundAppDetector {
                     val fullPath = String(buffer, 0, size.value)
                     fullPath.substringAfterLast("\\").removeSuffix(".exe")
                 } else {
-                    windowTitle
+                    null
                 }
                 ForegroundWindowContext(
                     appName = appName,

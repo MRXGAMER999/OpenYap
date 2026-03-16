@@ -15,7 +15,7 @@ import androidx.sqlite.execSQL
         AppToneEntity::class,
         AppPromptEntity::class,
     ],
-    version = 5,
+    version = 6,
 )
 abstract class OpenYapDatabase : RoomDatabase() {
     abstract fun appSettingsDao(): AppSettingsDao
@@ -57,5 +57,11 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
 val MIGRATION_4_5 = object : Migration(4, 5) {
     override suspend fun migrate(connection: SQLiteConnection) {
         connection.execSQL("ALTER TABLE app_settings ADD COLUMN groqLLMModel TEXT NOT NULL DEFAULT 'moonshotai/kimi-k2-instruct-0905'")
+    }
+}
+
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override suspend fun migrate(connection: SQLiteConnection) {
+        connection.execSQL("ALTER TABLE recording_entries ADD COLUMN isFallback INTEGER NOT NULL DEFAULT 0")
     }
 }
