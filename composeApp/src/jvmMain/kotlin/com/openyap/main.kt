@@ -25,6 +25,7 @@ import com.openyap.platform.ComposeOverlayController
 import com.openyap.platform.ComposeOverlayWindow
 import com.openyap.platform.HttpClientFactory
 import com.openyap.platform.JvmAppDataResetter
+import com.openyap.platform.JvmFileOperations
 import com.openyap.platform.JvmAudioRecorder
 import com.openyap.platform.NativeAudioBridge
 import com.openyap.platform.NativeAudioRecorder
@@ -148,9 +149,7 @@ fun main() {
                 audioFeedbackPlayer = audioFeedbackPlayer,
                 audioMimeType = audioPipeline.audioMimeType,
                 audioFileExtension = audioPipeline.audioFileExtension,
-                tempDirProvider = { PlatformInit.tempDir.toString() },
-                fileReader = { path -> java.io.File(path).readBytes() },
-                fileDeleter = { path -> java.io.File(path).delete() },
+                fileOperations = JvmFileOperations(),
             )
         }
         val settingsViewModel = remember {
@@ -163,7 +162,7 @@ fun main() {
                 hotkeyFormatter,
                 audioRecorder,
                 startupManager,
-                resetAppDataAction = { appDataResetter.reset() },
+                appDataResetter = appDataResetter,
             )
         }
         val historyViewModel = remember { HistoryViewModel(historyRepo) }

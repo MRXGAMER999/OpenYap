@@ -10,6 +10,7 @@ import com.openyap.model.RecordingState
 import com.openyap.model.TranscriptionProvider
 import com.openyap.platform.AudioRecorder
 import com.openyap.platform.AudioRecorderDiagnostics
+import com.openyap.platform.FileOperations
 import com.openyap.platform.ForegroundAppDetector
 import com.openyap.platform.HotkeyManager
 import com.openyap.platform.OverlayController
@@ -103,9 +104,7 @@ class RecordingViewModel(
     private val audioFeedbackPlayer: AudioFeedbackPlayer = NoOpAudioFeedbackPlayer(),
     private val audioMimeType: String,
     audioFileExtension: String,
-    private val tempDirProvider: () -> String,
-    private val fileReader: (String) -> ByteArray,
-    private val fileDeleter: (String) -> Unit,
+    private val fileOperations: FileOperations,
 ) : ViewModel() {
 
     companion object {
@@ -239,7 +238,7 @@ class RecordingViewModel(
         }
 
         val timestamp = Clock.System.now().toEpochMilliseconds()
-        val path = "${tempDirProvider()}/openyap_$timestamp$audioFileExtension"
+        val path = "${fileOperations.tempDir()}/openyap_$timestamp$audioFileExtension"
         currentRecordingPath = path
         recordingStartedAt = TimeSource.Monotonic.markNow()
 
@@ -599,11 +598,11 @@ class RecordingViewModel(
         }
     }
 
-    private fun readFileBytes(path: String): ByteArray = fileReader(path)
+    private fun readFileBytes(path: String): ByteArray = fileOperations.readFile(path)
 
     private fun deleteFile(path: String) {
         try {
-            fileDeleter(path)
+            fileOperations.deleteFile(path)
         } catch (_: Exception) {
         }
     }

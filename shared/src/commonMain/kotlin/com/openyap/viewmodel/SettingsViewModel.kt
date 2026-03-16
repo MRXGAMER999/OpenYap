@@ -7,8 +7,10 @@ import com.openyap.model.AudioDevice
 import com.openyap.model.HotkeyBinding
 import com.openyap.model.PrimaryUseCase
 import com.openyap.model.TranscriptionProvider
+import com.openyap.platform.AppDataResetter
 import com.openyap.platform.AudioRecorder
 import com.openyap.platform.HotkeyDisplayFormatter
+import com.openyap.platform.NoOpAppDataResetter
 import com.openyap.platform.HotkeyManager
 import com.openyap.platform.NoOpStartupManager
 import com.openyap.platform.StartupManager
@@ -100,7 +102,7 @@ class SettingsViewModel(
     private val hotkeyDisplayFormatter: HotkeyDisplayFormatter,
     private val audioRecorder: AudioRecorder,
     private val startupManager: StartupManager = NoOpStartupManager(),
-    private val resetAppDataAction: suspend () -> Unit = {},
+    private val appDataResetter: AppDataResetter = NoOpAppDataResetter(),
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SettingsUiState())
@@ -439,7 +441,7 @@ class SettingsViewModel(
             val defaults = AppSettings()
             _state.update { it.copy(isResettingData = true, saveMessage = null) }
             try {
-                resetAppDataAction.invoke()
+                appDataResetter.reset()
                 runCatching { startupManager.setEnabled(false) }
                 hotkeyManager.setConfig(defaults.hotkeyConfig)
                 _state.update {
