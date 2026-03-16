@@ -59,6 +59,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -82,45 +83,38 @@ import com.openyap.ui.screen.SettingsScreen
 import com.openyap.ui.screen.StatsScreen
 import com.openyap.ui.screen.UserInfoScreen
 import com.openyap.ui.theme.Spacing
-import com.openyap.viewmodel.DictionaryEvent
-import com.openyap.viewmodel.DictionaryUiState
-import com.openyap.viewmodel.HistoryEvent
-import com.openyap.viewmodel.HistoryUiState
+import com.openyap.viewmodel.AppCustomizationEvent
+import com.openyap.viewmodel.AppCustomizationViewModel
+import com.openyap.viewmodel.DictionaryViewModel
+import com.openyap.viewmodel.HistoryViewModel
 import com.openyap.viewmodel.OnboardingEvent
-import com.openyap.viewmodel.OnboardingUiState
+import com.openyap.viewmodel.OnboardingViewModel
 import com.openyap.viewmodel.RecordingEvent
 import com.openyap.viewmodel.RecordingUiState
+import com.openyap.viewmodel.RecordingViewModel
 import com.openyap.viewmodel.SettingsEvent
 import com.openyap.viewmodel.SettingsUiState
-import com.openyap.viewmodel.StatsUiState
-import com.openyap.viewmodel.UserProfileEvent
-import com.openyap.viewmodel.UserProfileUiState
+import com.openyap.viewmodel.SettingsViewModel
+import com.openyap.viewmodel.StatsViewModel
+import com.openyap.viewmodel.UserProfileViewModel
+import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun AppShell(
     backStack: MutableList<Route>,
-    recordingState: RecordingUiState,
-    settingsState: SettingsUiState,
-    historyState: HistoryUiState,
-    onboardingState: OnboardingUiState,
-    dictionaryState: DictionaryUiState,
-    userProfileState: UserProfileUiState,
-    statsState: StatsUiState,
-    appTones: Map<String, String>,
-    appPrompts: Map<String, String>,
+    recordingViewModel: RecordingViewModel,
+    settingsViewModel: SettingsViewModel,
     onRecordingEvent: (RecordingEvent) -> Unit,
     onSettingsEvent: (SettingsEvent) -> Unit,
-    onHistoryEvent: (HistoryEvent) -> Unit,
     onOnboardingEvent: (OnboardingEvent) -> Unit,
-    onDictionaryEvent: (DictionaryEvent) -> Unit,
-    onUserProfileEvent: (UserProfileEvent) -> Unit,
-    onSaveTone: (String, String) -> Unit,
-    onSavePrompt: (String, String) -> Unit,
-    onRemoveApp: (String) -> Unit,
-    onStatsRefresh: () -> Unit,
     onCopyToClipboard: (String) -> Unit,
 ) {
+    val recordingState by recordingViewModel.state.collectAsState()
+    val settingsState by settingsViewModel.state.collectAsState()
+    val onboardingViewModel = koinInject<OnboardingViewModel>()
+    val onboardingState by onboardingViewModel.state.collectAsState()
+
     if (!onboardingState.isLoaded) {
         Box(
             modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
@@ -171,7 +165,6 @@ fun AppShell(
             .padding(start = Spacing.md, end = Spacing.md, bottom = Spacing.md, top = Spacing.sm),
         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        // Slimmed-down navigation rail (92dp instead of 132dp)
         Surface(
             modifier = Modifier.fillMaxHeight().width(92.dp),
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
@@ -230,7 +223,6 @@ fun AppShell(
                     Text("OpenYap", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(Spacing.sm))
 
-                    // Navigation items with selected/unselected icons
                     railRoutes.forEach { dest ->
                         NavigationRailItem(
                             selected = currentRoute == dest.route,
@@ -259,7 +251,6 @@ fun AppShell(
             }
         }
 
-        // Content area with Snackbar support
         val snackbarHostState = remember { SnackbarHostState() }
 
         Box(modifier = Modifier.fillMaxSize()) {
@@ -291,28 +282,38 @@ fun AppShell(
                                 )
                             }
                             entry<Route.History> {
-                                HistoryScreen(historyState, onHistoryEvent, onCopyToClipboard)
+                                val vm = koinInject<HistoryViewModel>()
+                                val state by vm.state.collectAsState()
+                                HistoryScreen(state, vm::onEvent, onCopyToClipboard)
                             }
                             entry<Route.Dictionary> {
+                                val vm = koinInject<DictionaryViewModel>()
+                                val state by vm.state.collectAsState()
                                 DictionaryScreen(
-                                    state = dictionaryState,
+                                    state = state,
                                     isDictionaryEnabled = settingsState.dictionaryEnabled,
-                                    onEvent = onDictionaryEvent,
+                                    onEvent = vm::onEvent,
                                 )
                             }
                             entry<Route.UserInfo> {
-                                UserInfoScreen(userProfileState, onUserProfileEvent)
+                                val vm = koinInject<UserProfileViewModel>()
+                                val state by vm.state.collectAsState()
+                                UserInfoScreen(state, vm::onEvent)
                             }
                             entry<Route.Stats> {
-                                StatsScreen(statsState, onRefresh = onStatsRefresh)
+                                val vm = koinInject<StatsViewModel>()
+                                val state by vm.state.collectAsState()
+                                StatsScreen(state, onRefresh = vm::refresh)
                             }
                             entry<Route.Customization> {
+                                val vm = koinInject<AppCustomizationViewModel>()
+                                val state by vm.state.collectAsState()
                                 CustomizationScreen(
-                                    appTones,
-                                    appPrompts,
-                                    onSaveTone,
-                                    onSavePrompt,
-                                    onRemoveApp
+                                    state.appTones,
+                                    state.appPrompts,
+                                    onSaveTone = { app, tone -> vm.onEvent(AppCustomizationEvent.SaveTone(app, tone)) },
+                                    onSavePrompt = { app, prompt -> vm.onEvent(AppCustomizationEvent.SavePrompt(app, prompt)) },
+                                    onRemoveApp = { app -> vm.onEvent(AppCustomizationEvent.RemoveApp(app)) },
                                 )
                             }
                             entry<Route.Settings> {
@@ -386,7 +387,6 @@ private fun HomeContent(
         }
     }
 
-    // Snackbar for errors instead of inline error banner
     LaunchedEffect(errorMessage) {
         errorMessage?.let {
             snackbarHostState.showSnackbar(
@@ -519,7 +519,6 @@ private fun HomeContent(
                         verticalArrangement = Arrangement.spacedBy(Spacing.sm),
                     ) {
                         if (state.hasMicPermission && state.hasApiKey) {
-                            // All systems go
                             AssistChip(
                                 onClick = {},
                                 enabled = false,
@@ -563,7 +562,6 @@ private fun HomeContent(
                                 label = { Text(if (state.hasApiKey) "Gemini linked" else "API key needed") },
                             )
                         }
-                        // Hotkey chip (relocated from nav rail)
                         AssistChip(
                             onClick = {},
                             enabled = false,
@@ -579,7 +577,6 @@ private fun HomeContent(
                     }
                 }
 
-                // Prominent FAB-style record button with pulse animation
                 val infiniteTransition = rememberInfiniteTransition(label = "recordPulse")
                 val pulseScale by infiniteTransition.animateFloat(
                     initialValue = 1f,
@@ -593,7 +590,6 @@ private fun HomeContent(
                     contentAlignment = Alignment.Center,
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        // Outer pulse ring (visible only during recording)
                         if (isRecording) {
                             Box(
                                 modifier = Modifier
@@ -606,7 +602,6 @@ private fun HomeContent(
                                     ),
                             )
                         }
-                        // Main record button
                         Surface(
                             onClick = { onEvent(RecordingEvent.ToggleRecording) },
                             enabled = isRecording || canStart,
@@ -636,7 +631,6 @@ private fun HomeContent(
                     }
                 }
 
-                // Latest result
                 AnimatedVisibility(
                     visible = latestResultText != null,
                     enter = fadeIn() + scaleIn(),

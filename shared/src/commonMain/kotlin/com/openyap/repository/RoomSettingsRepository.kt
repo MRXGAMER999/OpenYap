@@ -67,6 +67,11 @@ class RoomSettingsRepository(
         return database.appPromptDao().getAll().associate { it.appName to it.prompt }
     }
 
+    override suspend fun clearAppCustomizations() {
+        database.appToneDao().deleteAll()
+        database.appPromptDao().deleteAll()
+    }
+
     override suspend fun removeAppCustomization(appName: String) {
         database.appToneDao().deleteByAppName(appName)
         database.appPromptDao().deleteByAppName(appName)
