@@ -1,9 +1,7 @@
 package com.openyap.di
 
-import com.openyap.platform.FileOperations
 import com.openyap.service.DictionaryEngine
 import com.openyap.service.GeminiClient
-import com.openyap.service.GroqLLMClient
 import com.openyap.service.GroqWhisperClient
 import com.openyap.viewmodel.AppCustomizationViewModel
 import com.openyap.viewmodel.DictionaryViewModel
@@ -19,7 +17,17 @@ import org.koin.dsl.module
 
 val sharedModule = module {
     singleOf(::DictionaryEngine)
+    singleOf(::SettingsViewModel)
+    singleOf(::HistoryViewModel)
+    singleOf(::OnboardingViewModel)
+    singleOf(::DictionaryViewModel)
+    singleOf(::UserProfileViewModel)
+    singleOf(::StatsViewModel)
+    singleOf(::AppCustomizationViewModel)
 
+    // RecordingViewModel needs explicit wiring: two String params require named
+    // qualifiers, and groqWhisperClient must resolve to GroqWhisperClient (not
+    // the ambiguous TranscriptionService interface).
     single {
         RecordingViewModel(
             hotkeyManager = get(),
@@ -40,34 +48,6 @@ val sharedModule = module {
             audioMimeType = get(named("audioMimeType")),
             audioFileExtension = get(named("audioFileExtension")),
             fileOperations = get(),
-        )
-    }
-
-    single {
-        SettingsViewModel(
-            settingsRepository = get(),
-            geminiClient = get(),
-            groqWhisperClient = get(),
-            groqLLMClient = get(),
-            hotkeyManager = get(),
-            hotkeyDisplayFormatter = get(),
-            audioRecorder = get(),
-            startupManager = get(),
-            appDataResetter = get(),
-        )
-    }
-
-    singleOf(::HistoryViewModel)
-    singleOf(::DictionaryViewModel)
-    singleOf(::UserProfileViewModel)
-    singleOf(::StatsViewModel)
-    singleOf(::AppCustomizationViewModel)
-
-    single {
-        OnboardingViewModel(
-            settingsRepository = get(),
-            permissionManager = get(),
-            groqLLMClient = get(),
         )
     }
 }
