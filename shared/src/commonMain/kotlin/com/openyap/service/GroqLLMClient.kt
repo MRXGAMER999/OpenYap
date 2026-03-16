@@ -91,37 +91,19 @@ class GroqLLMClient(private val client: HttpClient) {
         systemPrompt: String,
         apiKey: String,
         model: String,
+        temperature: Float,
     ): String {
-        val correctionPrompt = buildString {
-            appendLine("You are doing a second-pass correction of a speech transcript that was already transcribed by a speech-to-text model.")
-            appendLine("Your job is to preserve the user's intended message while making only conservative, context-aware corrections.")
-            appendLine()
-            appendLine("CORRECTION RULES:")
-            appendLine("- Preserve the original meaning, wording, language, and intent as closely as possible.")
-            appendLine("- Fix obvious punctuation, capitalization, spacing, and minor grammar issues.")
-            appendLine("- Correct likely misheard or accent-related words ONLY when the surrounding context makes the intended word highly likely.")
-            appendLine("- Keep domain-specific, product, company, and technical terms unless you are highly confident they were misrecognized.")
-            appendLine("- If you are uncertain, keep the original word or phrase.")
-            appendLine("- Do not paraphrase, summarize, expand, add detail, or change tone unless clearly required by the system instructions.")
-            appendLine("- Do not invent names, facts, or context that are not strongly implied by the transcript.")
-            appendLine("- NEVER censor, mask, or replace any words with asterisks or symbols. Preserve all words exactly as they appear, including profanity, slang, and explicit language. If the transcript contains masked or redacted tokens (asterisks), preserve them exactly as they appear and do not attempt to reconstruct or guess the redacted words.")
-            appendLine()
-            appendLine("Return only the final corrected text to paste.")
-        }
-
-        val fullSystemPrompt = if (systemPrompt.isNotBlank()) {
-            "$systemPrompt\n\n$correctionPrompt"
-        } else {
-            correctionPrompt
-        }
-
+        val reasoningConfig = buildReasoningConfig(model)
         val requestBody = GroqChatRequest(
             model = model,
             messages = listOf(
-                GroqChatMessage(role = "system", content = fullSystemPrompt),
+                GroqChatMessage(role = "system", content = systemPrompt),
                 GroqChatMessage(role = "user", content = "Transcript:\n$text"),
             ),
-            temperature = 0.2f,
+            temperature = temperature,
+            reasoningEffort = reasoningConfig?.reasoningEffort,
+            includeReasoning = reasoningConfig?.includeReasoning,
+            reasoningFormat = reasoningConfig?.reasoningFormat,
         )
 
         val response = executeWithRetry {
@@ -153,6 +135,22 @@ class GroqLLMClient(private val client: HttpClient) {
             throw GroqLLMException("Groq LLM returned an empty response.")
         }
         return rewrittenText.trim()
+    }
+
+    private fun buildReasoningConfig(model: String): GroqReasoningConfig? = when (model) {
+        "openai/gpt-oss-120b", "openai/gpt-oss-20b" -> GroqReasoningConfig(
+            reasoningEffort = "medium",
+            includeReasoning = false,
+            reasoningFormat = null,
+        )
+
+        "qwen/qwen3-32b" -> GroqReasoningConfig(
+            reasoningEffort = "default",
+            includeReasoning = null,
+            reasoningFormat = "hidden",
+        )
+
+        else -> null
     }
 
     private suspend fun <T> executeWithRetry(block: suspend () -> T): T {
@@ -200,6 +198,16 @@ data class GroqChatRequest(
     val model: String,
     val messages: List<GroqChatMessage>,
     val temperature: Float = 0.2f,
+    @SerialName("reasoning_effort") val reasoningEffort: String? = null,
+    @SerialName("include_reasoning") val includeReasoning: Boolean? = null,
+    @SerialName("reasoning_format") val reasoningFormat: String? = null,
+)
+
+@Serializable
+internal data class GroqReasoningConfig(
+    val reasoningEffort: String?,
+    val includeReasoning: Boolean?,
+    val reasoningFormat: String?,
 )
 
 @Serializable

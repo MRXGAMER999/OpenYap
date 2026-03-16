@@ -12,6 +12,8 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.PartData
 import io.ktor.utils.io.ByteReadChannel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -19,6 +21,8 @@ class GroqWhisperClient(private val client: HttpClient) : TranscriptionService {
 
     companion object {
         private const val BASE_URL = "https://api.groq.com/openai/v1"
+        private const val MAX_RETRIES = 2
+        private val RETRY_DELAYS_MS = longArrayOf(500, 1500)
 
         private val AVAILABLE_MODELS = listOf(
             ModelInfo("whisper-large-v3", "Whisper Large V3"),
@@ -109,7 +113,7 @@ class GroqWhisperClient(private val client: HttpClient) : TranscriptionService {
             }
             add(
                 PartData.FormItem(
-                    value = "0.2",
+                    value = "0.0",
                     dispose = {},
                     partHeaders = Headers.build {
                         append(HttpHeaders.ContentDisposition, fieldDisposition("temperature"))
@@ -129,9 +133,17 @@ class GroqWhisperClient(private val client: HttpClient) : TranscriptionService {
             }
         }
 
-        val response = client.post("$BASE_URL/audio/transcriptions") {
-            header(HttpHeaders.Authorization, "Bearer $apiKey")
-            setBody(MultiPartFormDataContent(parts))
+        val response = executeWithRetry {
+            val response = client.post("$BASE_URL/audio/transcriptions") {
+                header(HttpHeaders.Authorization, "Bearer $apiKey")
+                setBody(MultiPartFormDataContent(parts))
+            }
+
+            if (response.status == HttpStatusCode.TooManyRequests || response.status.value >= 500) {
+                throw TemporaryGroqWhisperException("Temporary Groq Whisper API error (${response.status.value}).")
+            }
+
+            response
         }
 
         if (response.status != HttpStatusCode.OK) {
@@ -147,9 +159,28 @@ class GroqWhisperClient(private val client: HttpClient) : TranscriptionService {
     }
 
     override suspend fun listModels(apiKey: String): List<ModelInfo> = AVAILABLE_MODELS
+
+    private suspend fun <T> executeWithRetry(block: suspend () -> T): T {
+        var lastException: Exception? = null
+        for (attempt in 0..MAX_RETRIES) {
+            try {
+                return block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: TemporaryGroqWhisperException) {
+                lastException = e
+                if (attempt < MAX_RETRIES) {
+                    delay(RETRY_DELAYS_MS[attempt])
+                }
+            }
+        }
+        throw lastException ?: GroqWhisperException("Request failed after retries.")
+    }
 }
 
 class GroqWhisperException(message: String) : Exception(message)
+
+private class TemporaryGroqWhisperException(message: String) : Exception(message)
 
 @Serializable
 internal data class GroqTranscriptionResponse(

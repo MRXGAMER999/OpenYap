@@ -10,6 +10,9 @@ interface RecordingEntryDao {
     @Query("SELECT * FROM recording_entries ORDER BY recordedAtMillis DESC")
     suspend fun getAll(): List<RecordingEntryEntity>
 
+    @Query("SELECT * FROM recording_entries WHERE targetApp = :targetApp AND model NOT LIKE '%[raw-fallback]%' ORDER BY recordedAtMillis DESC LIMIT :limit")
+    suspend fun getRecentEntriesForApp(targetApp: String, limit: Int): List<RecordingEntryEntity>
+
     @Insert
     suspend fun insert(entry: RecordingEntryEntity)
 

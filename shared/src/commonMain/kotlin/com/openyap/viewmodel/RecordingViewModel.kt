@@ -2,6 +2,7 @@ package com.openyap.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.openyap.model.AppSettings
 import com.openyap.model.HotkeyEvent
 import com.openyap.model.OverlayState
 import com.openyap.model.PermissionStatus
@@ -44,6 +45,8 @@ import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.roundToInt
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Instant
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 
@@ -67,6 +70,17 @@ sealed interface RecordingEvent {
     data object DismissError : RecordingEvent
     data object RefreshState : RecordingEvent
 }
+
+private sealed interface CorrectionOutcome {
+    data class Applied(val text: String) : CorrectionOutcome
+    data class FallbackRaw(val rawTranscript: String, val reason: String) : CorrectionOutcome
+}
+
+private data class SessionContextEntry(
+    val text: String,
+    val capturedAt: Instant,
+    val targetApp: String?,
+)
 
 /**
  * Callback interface for audio feedback — defined in commonMain so RecordingViewModel
@@ -109,6 +123,9 @@ class RecordingViewModel(
 
     companion object {
         private const val MIN_DURATION_SECONDS = 0.5
+        private const val MAX_SESSION_CONTEXT_ENTRIES = 5
+        private const val RECENT_APP_HISTORY_LIMIT = 5
+        private val SESSION_CONTEXT_IDLE_TIMEOUT = 30.minutes
     }
 
     private val audioFileExtension = if (audioFileExtension.startsWith(".")) {
@@ -133,6 +150,8 @@ class RecordingViewModel(
     @Volatile
     private var currentProcessingPath: String? = null
     private var recordingStartedAt: TimeMark? = null
+    private val sessionContextEntries = ArrayDeque<SessionContextEntry>()
+    private var lastSuccessfulPasteAt: Instant? = null
 
     init {
         viewModelScope.launch {
@@ -359,7 +378,9 @@ class RecordingViewModel(
 
         viewModelScope.launch {
             try {
-                val targetApp = foregroundAppDetector.getForegroundAppName()
+                val foregroundWindowContext = foregroundAppDetector.getForegroundWindowContext()
+                val targetApp = foregroundWindowContext.appName
+                val windowTitle = foregroundWindowContext.windowTitle
                 val geminiApiKey = settingsRepository.loadApiKey()
                 val groqApiKey = settingsRepository.loadGroqApiKey()
                 val audioBytes = readFileBytes(path)
@@ -371,38 +392,85 @@ class RecordingViewModel(
                 val appKey = targetApp ?: "Default"
                 val tone = settingsRepository.loadAppTone(appKey) ?: "normal"
                 val customPrompt = settingsRepository.loadAppPrompt(appKey)
-                val systemPrompt = PromptBuilder.build(
-                    tone = tone,
-                    targetApp = targetApp,
-                    customPrompt = customPrompt,
-                    genZ = settings.genZEnabled,
-                    useCaseContext = settings.useCaseContext,
-                )
+                val now = Clock.System.now()
+                pruneExpiredSessionContext(now)
+                val recentAppHistory = targetApp
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { appName ->
+                        historyRepository.loadRecentEntriesForApp(appName, RECENT_APP_HISTORY_LIMIT)
+                            .map(RecordingEntry::response)
+                    }
+                    ?: emptyList()
+                val recentSessionOutputs = if (
+                    settings.transcriptionProvider == TranscriptionProvider.GROQ_WHISPER_GEMINI ||
+                    settings.transcriptionProvider == TranscriptionProvider.GROQ_WHISPER_GROQ
+                ) {
+                    sessionContextEntries
+                        .asSequence()
+                        .filter { entry -> entry.matchesTargetApp(targetApp) }
+                        .map(SessionContextEntry::text)
+                        .toList()
+                } else {
+                    emptyList()
+                }
+                val transcriptionSystemPrompt = if (settings.transcriptionProvider == TranscriptionProvider.GEMINI) {
+                    PromptBuilder.build(
+                        tone = tone,
+                        targetApp = targetApp,
+                        customPrompt = customPrompt,
+                        genZ = settings.genZEnabled,
+                        useCaseContext = settings.useCaseContext,
+                    )
+                } else {
+                    ""
+                }
+                val correctionSystemPrompt = when (settings.transcriptionProvider) {
+                    TranscriptionProvider.GROQ_WHISPER_GEMINI,
+                    TranscriptionProvider.GROQ_WHISPER_GROQ -> PromptBuilder.buildCorrectionSystemPrompt(
+                        tone = tone,
+                        targetApp = targetApp,
+                        windowTitle = windowTitle,
+                        customPrompt = customPrompt,
+                        genZ = settings.genZEnabled,
+                        useCaseContext = settings.useCaseContext,
+                        whisperModelId = settings.groqModel,
+                        recentSessionOutputs = recentSessionOutputs,
+                        recentAppHistory = recentAppHistory,
+                    )
+                    else -> ""
+                }
                 val whisperPrompt = WhisperPromptBuilder.build(
                     useCase = settings.primaryUseCase,
                     context = settings.useCaseContext,
                 )
+                val correctionTemperature = buildCorrectionTemperature(settings)
+                val directAudioTemperature = buildDirectAudioTemperature(settings)
 
-                val response = when (settings.transcriptionProvider) {
+                val correctionOutcome = when (settings.transcriptionProvider) {
                     TranscriptionProvider.GEMINI -> {
-                        geminiClient.transcribe(
-                            audioBytes = audioBytes,
-                            mimeType = audioMimeType,
-                            systemPrompt = systemPrompt,
-                            apiKey = geminiApiKey!!,
-                            model = settings.geminiModel,
+                        CorrectionOutcome.Applied(
+                            geminiClient.transcribe(
+                                audioBytes = audioBytes,
+                                mimeType = audioMimeType,
+                                systemPrompt = transcriptionSystemPrompt,
+                                apiKey = geminiApiKey!!,
+                                model = settings.geminiModel,
+                                temperature = directAudioTemperature,
+                            )
                         )
                     }
 
                     TranscriptionProvider.GROQ_WHISPER -> {
-                        groqWhisperClient.transcribe(
-                            audioBytes = audioBytes,
-                            mimeType = audioMimeType,
-                            systemPrompt = "",
-                            apiKey = groqApiKey!!,
-                            model = settings.groqModel,
-                            whisperPrompt = whisperPrompt,
-                            language = settings.whisperLanguage,
+                        CorrectionOutcome.Applied(
+                            groqWhisperClient.transcribe(
+                                audioBytes = audioBytes,
+                                mimeType = audioMimeType,
+                                systemPrompt = "",
+                                apiKey = groqApiKey!!,
+                                model = settings.groqModel,
+                                whisperPrompt = whisperPrompt,
+                                language = settings.whisperLanguage,
+                            )
                         )
                     }
 
@@ -416,11 +484,12 @@ class RecordingViewModel(
                             whisperPrompt = whisperPrompt,
                             language = settings.whisperLanguage,
                         )
-                        geminiClient.rewriteText(
-                            text = transcript,
-                            systemPrompt = systemPrompt,
+                        rewriteWithGeminiFallback(
+                            transcript = transcript,
+                            systemPrompt = correctionSystemPrompt,
                             apiKey = geminiApiKey!!,
                             model = settings.geminiModel,
+                            temperature = correctionTemperature,
                         )
                     }
 
@@ -434,18 +503,13 @@ class RecordingViewModel(
                             whisperPrompt = whisperPrompt,
                             language = settings.whisperLanguage,
                         )
-                        try {
-                            groqLLMClient.rewriteText(
-                                text = transcript,
-                                systemPrompt = systemPrompt,
-                                apiKey = groqApiKey!!,
-                                model = settings.groqLLMModel,
-                            )
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (_: Exception) {
-                            transcript
-                        }
+                        rewriteWithGroqFallback(
+                            transcript = transcript,
+                            systemPrompt = correctionSystemPrompt,
+                            apiKey = groqApiKey,
+                            model = settings.groqLLMModel,
+                            temperature = correctionTemperature,
+                        )
                     }
                 }
 
@@ -460,6 +524,15 @@ class RecordingViewModel(
                     deleteFile(path)
                     return@launch
                 }
+
+                val response = when (correctionOutcome) {
+                    is CorrectionOutcome.Applied -> correctionOutcome.text
+                    is CorrectionOutcome.FallbackRaw -> {
+                        showCorrectionSkippedWarning(correctionOutcome.reason)
+                        correctionOutcome.rawTranscript
+                    }
+                }
+                val correctionApplied = correctionOutcome is CorrectionOutcome.Applied
 
                 val profile = userProfileRepository.loadProfile()
                 val dictEntries = if (settings.dictionaryEnabled) {
@@ -486,14 +559,24 @@ class RecordingViewModel(
                     return@launch
                 }
 
+                val successfulPasteAt = Clock.System.now()
+                if (correctionApplied) {
+                    rememberSessionContext(
+                        text = expandedResponse,
+                        capturedAt = successfulPasteAt,
+                        targetApp = targetApp,
+                    )
+                }
+                lastSuccessfulPasteAt = successfulPasteAt
+
                 historyRepository.addEntry(
                     RecordingEntry(
-                        id = Clock.System.now().toEpochMilliseconds().toString(),
-                        recordedAt = Clock.System.now(),
+                        id = successfulPasteAt.toEpochMilliseconds().toString(),
+                        recordedAt = successfulPasteAt,
                         durationSeconds = duration,
                         response = expandedResponse,
                         targetApp = targetApp ?: "",
-                        model = modelUsed,
+                        model = if (correctionApplied) modelUsed else "$modelUsed [raw-fallback]",
                     )
                 )
 
@@ -596,6 +679,149 @@ class RecordingViewModel(
             TranscriptionProvider.GROQ_WHISPER_GEMINI -> !geminiApiKey.isNullOrBlank() && !groqApiKey.isNullOrBlank()
             TranscriptionProvider.GROQ_WHISPER_GROQ -> !groqApiKey.isNullOrBlank()
         }
+    }
+
+    override fun onCleared() {
+        clearSessionContext()
+        super.onCleared()
+    }
+
+    private fun buildCorrectionTemperature(settings: AppSettings): Float = when (settings.transcriptionProvider) {
+        TranscriptionProvider.GROQ_WHISPER_GEMINI -> if (settings.genZEnabled) 0.5f else 0.2f
+        TranscriptionProvider.GROQ_WHISPER_GROQ -> 0.2f
+        else -> 0.2f
+    }
+
+    private fun buildDirectAudioTemperature(settings: AppSettings): Float = when (settings.transcriptionProvider) {
+        TranscriptionProvider.GEMINI -> if (settings.genZEnabled) 0.5f else 0.3f
+        else -> 0.3f
+    }
+
+    private suspend fun rewriteWithGeminiFallback(
+        transcript: String,
+        systemPrompt: String,
+        apiKey: String,
+        model: String,
+        temperature: Float,
+    ): CorrectionOutcome {
+        return try {
+            val rewritten = geminiClient.rewriteText(
+                text = transcript,
+                systemPrompt = systemPrompt,
+                apiKey = apiKey,
+                model = model,
+                temperature = temperature,
+            )
+            validateCorrectionRewrite(
+                original = transcript,
+                rewritten = rewritten,
+            )?.let { reason ->
+                CorrectionOutcome.FallbackRaw(
+                    rawTranscript = transcript,
+                    reason = reason,
+                )
+            } ?: CorrectionOutcome.Applied(rewritten)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            CorrectionOutcome.FallbackRaw(
+                rawTranscript = transcript,
+                reason = e.message ?: "Gemini correction failed",
+            )
+        }
+    }
+
+    private suspend fun rewriteWithGroqFallback(
+        transcript: String,
+        systemPrompt: String,
+        apiKey: String,
+        model: String,
+        temperature: Float,
+    ): CorrectionOutcome {
+        return try {
+            val rewritten = groqLLMClient.rewriteText(
+                text = transcript,
+                systemPrompt = systemPrompt,
+                apiKey = apiKey,
+                model = model,
+                temperature = temperature,
+            )
+            validateCorrectionRewrite(
+                original = transcript,
+                rewritten = rewritten,
+            )?.let { reason ->
+                CorrectionOutcome.FallbackRaw(
+                    rawTranscript = transcript,
+                    reason = reason,
+                )
+            } ?: CorrectionOutcome.Applied(rewritten)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            CorrectionOutcome.FallbackRaw(
+                rawTranscript = transcript,
+                reason = e.message ?: "Groq correction failed",
+            )
+        }
+    }
+
+    private fun showCorrectionSkippedWarning(reason: String) {
+        val detail = reason.trim().ifBlank { "correction failed" }
+        overlayController.flashMessage("Correction skipped, using raw transcript: $detail")
+    }
+
+    private fun validateCorrectionRewrite(original: String, rewritten: String): String? {
+        val normalizedOriginal = original.trim()
+        val normalizedRewritten = rewritten.trim()
+        if (normalizedRewritten.isEmpty()) {
+            return "correction returned blank output"
+        }
+        if (normalizedOriginal.isEmpty()) {
+            return null
+        }
+
+        val ratio = normalizedRewritten.length.toDouble() / normalizedOriginal.length.toDouble()
+        return if (ratio in 0.4..2.5) {
+            null
+        } else {
+            "correction rewrite length looked unsafe"
+        }
+    }
+
+    private fun pruneExpiredSessionContext(now: Instant) {
+        val lastPasteAt = lastSuccessfulPasteAt ?: return
+        if (now - lastPasteAt > SESSION_CONTEXT_IDLE_TIMEOUT) {
+            clearSessionContext()
+        }
+    }
+
+    private fun rememberSessionContext(text: String, capturedAt: Instant, targetApp: String?) {
+        val normalizedText = text.trim()
+        if (normalizedText.isEmpty()) return
+
+        sessionContextEntries.addLast(
+            SessionContextEntry(
+                text = normalizedText,
+                capturedAt = capturedAt,
+                targetApp = targetApp,
+            )
+        )
+        while (sessionContextEntries.size > MAX_SESSION_CONTEXT_ENTRIES) {
+            sessionContextEntries.removeFirst()
+        }
+    }
+
+    private fun clearSessionContext() {
+        sessionContextEntries.clear()
+        lastSuccessfulPasteAt = null
+    }
+
+    private fun SessionContextEntry.matchesTargetApp(targetApp: String?): Boolean {
+        return normalizeTargetApp(this.targetApp) == normalizeTargetApp(targetApp)
+    }
+
+    private fun normalizeTargetApp(targetApp: String?): String? {
+        return targetApp?.trim()?.takeIf(String::isNotEmpty)
     }
 
     private fun readFileBytes(path: String): ByteArray = fileOperations.readFile(path)

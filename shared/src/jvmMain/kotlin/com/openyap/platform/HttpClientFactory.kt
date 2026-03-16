@@ -14,7 +14,12 @@ object HttpClientFactory {
 
     private fun createHttpClient(): HttpClient = HttpClient(CIO) {
         install(ContentNegotiation) {
-            json(Json { ignoreUnknownKeys = true })
+            json(
+                Json {
+                    ignoreUnknownKeys = true
+                    explicitNulls = false
+                }
+            )
         }
         install(HttpTimeout) {
             connectTimeoutMillis = 15_000
