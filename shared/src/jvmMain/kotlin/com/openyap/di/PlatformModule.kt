@@ -45,9 +45,14 @@ import org.koin.core.annotation.Module
 import org.koin.core.annotation.Named
 import org.koin.core.annotation.Single
 import java.nio.file.Path
+import java.util.logging.Logger
 
 @Module
 class PlatformModule {
+
+    companion object {
+        private val logger = Logger.getLogger(PlatformModule::class.java.name)
+    }
 
     @Single
     fun provideSecureStorage(): SecureStorage = WindowsCredentialStorage()
@@ -81,14 +86,14 @@ class PlatformModule {
     fun provideAudioPipelineConfig(): AudioPipelineConfig {
         val nativeAudio = NativeAudioBridge.instance
         return if (nativeAudio != null) {
-            System.err.println("Native audio pipeline available")
+            logger.info("Native audio pipeline available; NativeAudioBridge.instance present, using NativeAudioRecorder")
             AudioPipelineConfig(
                 audioRecorder = NativeAudioRecorder(nativeAudio),
                 audioMimeType = "audio/mp4",
                 audioFileExtension = ".m4a",
             )
         } else {
-            System.err.println("Native audio pipeline unavailable, using fallback")
+            logger.info("Native audio pipeline unavailable; NativeAudioBridge.instance absent, using JvmAudioRecorder fallback")
             AudioPipelineConfig(
                 audioRecorder = JvmAudioRecorder(),
                 audioMimeType = "audio/wav",

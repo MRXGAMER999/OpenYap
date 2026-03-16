@@ -19,8 +19,11 @@ import com.openyap.service.GeminiClient
 import com.openyap.service.GroqLLMClient
 import com.openyap.service.GroqWhisperClient
 import com.openyap.service.ModelInfo
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -66,6 +69,10 @@ data class SettingsUiState(
     val whisperLanguage: String = "en",
 )
 
+sealed interface SettingsEffect {
+    data object ResetAppDataSucceeded : SettingsEffect
+}
+
 sealed interface SettingsEvent {
     data class SelectProvider(val provider: TranscriptionProvider) : SettingsEvent
     data class SaveApiKey(val key: String) : SettingsEvent
@@ -107,6 +114,9 @@ class SettingsViewModel(
 
     private val _state = MutableStateFlow(SettingsUiState())
     val state: StateFlow<SettingsUiState> = _state.asStateFlow()
+
+    private val _effects = MutableSharedFlow<SettingsEffect>(extraBufferCapacity = 1)
+    val effects: SharedFlow<SettingsEffect> = _effects.asSharedFlow()
 
     init {
         refresh()
@@ -474,6 +484,7 @@ class SettingsViewModel(
                         selectedAudioDeviceId = null,
                     )
                 }
+                _effects.emit(SettingsEffect.ResetAppDataSucceeded)
             } catch (e: Exception) {
                 _state.update {
                     it.copy(

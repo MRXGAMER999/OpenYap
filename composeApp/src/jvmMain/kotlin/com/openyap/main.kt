@@ -39,6 +39,7 @@ import com.openyap.viewmodel.RecordingEffect
 import com.openyap.viewmodel.RecordingEvent
 import com.openyap.viewmodel.RecordingViewModel
 import com.openyap.viewmodel.SettingsEvent
+import com.openyap.viewmodel.SettingsEffect
 import com.openyap.viewmodel.SettingsViewModel
 import com.openyap.viewmodel.StatsViewModel
 import com.openyap.viewmodel.UserProfileViewModel
@@ -199,20 +200,21 @@ fun main() {
                         }
                     }
 
-                    LaunchedEffect(Unit) {
-                        var wasResetting = false
-                        settingsViewModel.state.collect { state ->
-                            if (state.isResettingData) {
-                                wasResetting = true
-                            } else if (wasResetting) {
-                                wasResetting = false
-                                recordingViewModel.onEvent(RecordingEvent.RefreshState)
-                                historyViewModel.refresh()
-                                onboardingViewModel.refresh()
-                                dictionaryViewModel.refresh()
-                                userProfileViewModel.refresh()
-                                statsViewModel.refresh()
-                                appCustomizationViewModel.refresh()
+                    LaunchedEffect(settingsViewModel) {
+                        settingsViewModel.effects.collect { effect ->
+                            when (effect) {
+                                SettingsEffect.ResetAppDataSucceeded -> {
+                                    recordingViewModel.onEvent(RecordingEvent.RefreshState)
+                                    historyViewModel.refresh()
+                                    onboardingViewModel.resetState()
+                                    onboardingViewModel.refresh()
+                                    dictionaryViewModel.refresh()
+                                    userProfileViewModel.refresh()
+                                    statsViewModel.refresh()
+                                    appCustomizationViewModel.refresh()
+                                    backStack.clear()
+                                    backStack += Route.Home
+                                }
                             }
                         }
                     }
@@ -227,12 +229,6 @@ fun main() {
                                 settingsViewModel.onEvent(event)
                                 if (event is SettingsEvent.SaveApiKey || event is SettingsEvent.SaveGroqApiKey || event is SettingsEvent.SelectProvider) {
                                     recordingViewModel.onEvent(RecordingEvent.RefreshState)
-                                }
-                                if (event is SettingsEvent.ResetAppData) {
-                                    onboardingViewModel.resetState()
-                                    appCustomizationViewModel.reset()
-                                    backStack.clear()
-                                    backStack += Route.Home
                                 }
                             },
                             onOnboardingEvent = { event ->

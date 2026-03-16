@@ -32,3 +32,5 @@ node_modules/
 .cursor
 .specify
 .worktrees/
+.gitnexus
+.gitnexus/
