@@ -10,6 +10,65 @@ object PromptBuilder {
     private const val MAX_SESSION_CONTEXT_CHARS = 2600
     private const val MAX_APP_HISTORY_CHARS = 2600
     private const val MAX_WINDOW_TITLE_CHARS = 200
+    private val COMMAND_PREAMBLE_PREFIXES = listOf(
+        "here is the transformed text:",
+        "here's the transformed text:",
+        "here is the rewritten text:",
+        "here's the rewritten text:",
+        "here is the revised text:",
+        "here's the revised text:",
+        "transformed text:",
+        "rewritten text:",
+        "revised text:",
+    )
+    private val COMMAND_WRAPPER_LINE_PREFIXES = listOf(
+        "sure",
+        "certainly",
+        "absolutely",
+        "of course",
+        "here is",
+        "here's",
+        "the transformed text",
+        "the rewritten text",
+        "the revised text",
+        "the updated text",
+        "the replacement text",
+        "transformed text",
+        "rewritten text",
+        "revised text",
+        "updated text",
+        "replacement text",
+        "final text",
+        "final output",
+        "output",
+        "result",
+    )
+    private val MEANINGLESS_COMMAND_TOKENS = setOf(
+        "a",
+        "ah",
+        "alright",
+        "er",
+        "hmm",
+        "hm",
+        "just",
+        "kindof",
+        "kinda",
+        "like",
+        "mm",
+        "okay",
+        "ok",
+        "please",
+        "so",
+        "thanks",
+        "thank",
+        "uh",
+        "um",
+        "well",
+        "yeah",
+        "yep",
+        "yo",
+        "you",
+    )
 
     private val toneInstructions = mapOf(
         "casual" to "Use a relaxed, conversational tone — natural, loose, and friendly.",
@@ -210,6 +269,92 @@ Return ONLY the final corrected text to paste. No preamble, no markdown, no comm
 """.trimIndent()
     }
 
+    fun buildCommandInstructionTranscriptionPrompt(): String {
+        return """
+Return only the spoken editing instruction from this audio.
+Do not rewrite the instruction.
+Do not add explanations, labels, or markdown.
+If the user did not say a clear editing instruction, return an empty string.
+""".trimIndent()
+    }
+
+    fun buildCommandTransformationPrompt(
+        targetApp: String? = null,
+        windowTitle: String? = null,
+    ): String {
+        val appContextSection = formatAppContext(targetApp)
+        val windowTitleSection = formatWindowTitleContext(windowTitle)
+        return """
+You are transforming a user's currently selected text using their spoken editing instruction.
+
+RULES:
+- The selected text is the source material to transform.
+- The spoken instruction describes how to change the selected text.
+- Return ONLY the final replacement text.
+- No preamble, no explanation, no quotes, no markdown fences unless the instruction explicitly asks for them.
+- Preserve the original language unless the instruction clearly asks for a translation or language change.
+- Do not mention the instruction or describe what you changed.
+$appContextSection$windowTitleSection
+""".trimIndent()
+    }
+
+    fun buildCommandTransformationInput(
+        selectedText: String,
+        spokenInstruction: String,
+    ): String {
+        return """
+Spoken instruction:
+$spokenInstruction
+
+Selected text:
+$selectedText
+""".trimIndent()
+    }
+
+    fun sanitizeCommandOutput(rawOutput: String, spokenInstruction: String? = null): String {
+        var sanitized = rawOutput
+            .replace("\r\n", "\n")
+            .replace('\r', '\n')
+            .trim()
+        if (sanitized.isEmpty()) return ""
+
+        val preserveFencedOutput = shouldPreserveFencedOutput(spokenInstruction)
+        sanitized = stripCommandWrapperText(sanitized)
+        sanitized = stripInlineCommandWrapper(sanitized)
+        sanitized = unwrapSingleFencedBlockIfSafe(sanitized, preserveFencedOutput)
+
+        val inlinePrefixMatch = COMMAND_PREAMBLE_PREFIXES.firstOrNull { prefix ->
+            sanitized.length > prefix.length && sanitized.lowercase().startsWith(prefix)
+        }
+        if (inlinePrefixMatch != null) {
+            sanitized = sanitized.drop(inlinePrefixMatch.length).trimStart('\n', ' ', ':', '-')
+        }
+
+        return sanitized.trim()
+    }
+
+    fun isMeaningfulCommandInstruction(rawInstruction: String): Boolean {
+        val normalized = rawInstruction
+            .replace("\r\n", "\n")
+            .replace('\r', '\n')
+            .trim()
+        if (normalized.isEmpty()) return false
+
+        val tokens = Regex("[\\p{L}\\p{N}']+")
+            .findAll(normalized.lowercase())
+            .map { match -> match.value.replace("'", "") }
+            .filter(String::isNotBlank)
+            .toList()
+        if (tokens.isEmpty()) return false
+
+        val meaningfulTokens = tokens.filterNot(MEANINGLESS_COMMAND_TOKENS::contains)
+        if (meaningfulTokens.isEmpty()) return false
+
+        return meaningfulTokens.any { token ->
+            token.length > 2 || token.any(Char::isDigit)
+        }
+    }
+
     private fun buildGenZPrompt(targetApp: String?, customPrompt: String?): String {
         val appHint = if (!targetApp.isNullOrBlank()) {
             " The user is pasting into \"$targetApp\"—adapt format if needed (e.g., email, notes)."
@@ -324,5 +469,108 @@ GEN Z OVERRIDE (this overrides all other tone settings):
 
     private fun formatUntrustedContextExample(index: Int, text: String): String {
         return "$index. Example: <<$text>>"
+    }
+
+    private fun shouldPreserveFencedOutput(spokenInstruction: String?): Boolean {
+        val normalizedInstruction = spokenInstruction
+            ?.trim()
+            ?.lowercase()
+            ?: return false
+        if (normalizedInstruction.isEmpty()) return false
+
+        return listOf(
+            "code block",
+            "fenced",
+            "triple backtick",
+            "triple-backtick",
+            "markdown",
+            "backticks",
+            "```",
+        ).any(normalizedInstruction::contains)
+    }
+
+    private fun stripCommandWrapperText(text: String): String {
+        var sanitized = text.trim()
+        var changed = true
+
+        while (changed) {
+            changed = false
+
+            val lines = sanitized.lines()
+            if (lines.size > 1 && isCommandWrapperLine(lines.first())) {
+                sanitized = lines.drop(1).joinToString("\n").trimStart()
+                changed = true
+            }
+
+            val updatedLines = sanitized.lines()
+            if (updatedLines.size > 1 && isCommandWrapperLine(updatedLines.last())) {
+                sanitized = updatedLines.dropLast(1).joinToString("\n").trimEnd()
+                changed = true
+            }
+        }
+
+        return sanitized.trim()
+    }
+
+    private fun stripInlineCommandWrapper(text: String): String {
+        var sanitized = text.trim()
+        var changed = true
+
+        while (changed) {
+            changed = false
+            val lowered = sanitized.lowercase()
+            val prefixes = listOf(
+                "sure, here's the ",
+                "sure, here is the ",
+                "sure - here's the ",
+                "sure - here is the ",
+                "certainly, here's the ",
+                "certainly, here is the ",
+                "here's the ",
+                "here is the ",
+            )
+            val prefix = prefixes.firstOrNull(lowered::startsWith)
+            if (prefix != null) {
+                val separatorIndex = sanitized.indexOf(':')
+                if (separatorIndex in (prefix.length - 1) until sanitized.lastIndex) {
+                    sanitized = sanitized.substring(separatorIndex + 1).trimStart()
+                    changed = true
+                }
+            }
+        }
+
+        return sanitized
+    }
+
+    private fun isCommandWrapperLine(line: String): Boolean {
+        val normalized = line
+            .trim()
+            .trimStart('-', '*', '#', '>', '`', '"', '\'')
+            .trim()
+            .trimEnd(':', '-', '!', '.', '`', '"', '\'')
+            .lowercase()
+        if (normalized.isEmpty()) return false
+
+        return COMMAND_WRAPPER_LINE_PREFIXES.any { prefix ->
+            normalized == prefix || normalized.startsWith("$prefix ")
+        }
+    }
+
+    private fun unwrapSingleFencedBlockIfSafe(text: String, preserveFencedOutput: Boolean): String {
+        val trimmed = text.trim()
+        if (!trimmed.startsWith("```")) return trimmed
+
+        val closingFenceStart = trimmed.lastIndexOf("\n```")
+        if (closingFenceStart <= 0) return trimmed
+        if (closingFenceStart + 4 != trimmed.length) return trimmed
+
+        val firstNewline = trimmed.indexOf('\n')
+        if (firstNewline < 0) return trimmed
+
+        return if (preserveFencedOutput) {
+            trimmed
+        } else {
+            trimmed.substring(firstNewline + 1, closingFenceStart).trim()
+        }
     }
 }

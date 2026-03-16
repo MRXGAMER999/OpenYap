@@ -10,5 +10,6 @@ interface HotkeyManager {
     fun startListening()
     fun stopListening()
     suspend fun captureNextHotkey(): HotkeyCapture
+    // Dictation and command hold lifecycles are emitted separately.
     val hotkeyEvents: SharedFlow<HotkeyEvent>
 }

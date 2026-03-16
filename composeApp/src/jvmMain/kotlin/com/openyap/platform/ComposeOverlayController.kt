@@ -19,6 +19,7 @@ data class OverlayUiState(
     val state: OverlayState = OverlayState.RECORDING,
     val level: Float = 0f,
     val durationSeconds: Int = 0,
+    val processingMessage: String = "Refining...",
     val flashMessage: String? = null,
 )
 
@@ -38,6 +39,7 @@ class ComposeOverlayController : OverlayController, Closeable {
                 state = OverlayState.RECORDING,
                 level = 0f,
                 durationSeconds = 0,
+                processingMessage = "Refining...",
             )
         }
     }
@@ -48,6 +50,12 @@ class ComposeOverlayController : OverlayController, Closeable {
                 state = state,
                 visible = state != OverlayState.ERROR || it.visible,
             )
+        }
+    }
+
+    override fun updateProcessingMessage(message: String?) {
+        _uiState.update {
+            it.copy(processingMessage = message ?: "Refining...")
         }
     }
 

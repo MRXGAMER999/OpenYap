@@ -6,6 +6,7 @@ import com.openyap.model.EntrySource
 import com.openyap.model.HotkeyConfig
 import com.openyap.model.PrimaryUseCase
 import com.openyap.model.RecordingEntry
+import com.openyap.model.RecordingWorkflowType
 import com.openyap.model.TranscriptionProvider
 import com.openyap.model.UserProfile
 import kotlinx.serialization.json.Json
@@ -22,6 +23,7 @@ fun AppSettings.toEntity(): AppSettingsEntity = AppSettingsEntity(
     groqModel = groqModel,
     groqLLMModel = groqLLMModel,
     hotkeyConfigJson = json.encodeToString(hotkeyConfig),
+    whisperModeEnabled = whisperModeEnabled,
     genZEnabled = genZEnabled,
     phraseExpansionEnabled = phraseExpansionEnabled,
     dictionaryEnabled = dictionaryEnabled,
@@ -51,6 +53,7 @@ fun AppSettingsEntity.toDomain(): AppSettings = AppSettings(
     } catch (_: Exception) {
         HotkeyConfig()
     },
+    whisperModeEnabled = whisperModeEnabled,
     genZEnabled = genZEnabled,
     phraseExpansionEnabled = phraseExpansionEnabled,
     dictionaryEnabled = dictionaryEnabled,
@@ -104,6 +107,7 @@ fun RecordingEntry.toEntity(): RecordingEntryEntity = RecordingEntryEntity(
     targetApp = targetApp,
     model = model,
     isFallback = isFallback,
+    workflowType = workflowType.name,
 )
 
 fun RecordingEntryEntity.toDomain(): RecordingEntry = RecordingEntry(
@@ -114,6 +118,11 @@ fun RecordingEntryEntity.toDomain(): RecordingEntry = RecordingEntry(
     targetApp = targetApp,
     model = model,
     isFallback = isFallback,
+    workflowType = try {
+        RecordingWorkflowType.valueOf(workflowType)
+    } catch (_: Exception) {
+        RecordingWorkflowType.DICTATION
+    },
 )
 
 // ── UserProfile ─────────────────────────────────────────────────────────────

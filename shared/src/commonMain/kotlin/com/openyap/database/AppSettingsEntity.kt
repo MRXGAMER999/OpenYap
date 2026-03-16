@@ -11,6 +11,7 @@ data class AppSettingsEntity(
     val groqModel: String = "whisper-large-v3",
     val groqLLMModel: String = "moonshotai/kimi-k2-instruct-0905",
     val hotkeyConfigJson: String = "{}",
+    val whisperModeEnabled: Boolean = false,
     val genZEnabled: Boolean = false,
     val phraseExpansionEnabled: Boolean = false,
     val dictionaryEnabled: Boolean = true,

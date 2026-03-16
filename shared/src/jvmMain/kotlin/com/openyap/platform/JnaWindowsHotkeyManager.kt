@@ -39,7 +39,46 @@ private const val VK_ESCAPE = 0x1B
 private const val CAPTURE_TIMEOUT_MS = 10_000L
 private const val LLKHF_INJECTED = 0x10
 
+private val LETTER_SCAN_CODE_MAP = mapOf(
+    0x1E to 0x41, // A
+    0x30 to 0x42, // B
+    0x2E to 0x43, // C
+    0x20 to 0x44, // D
+    0x12 to 0x45, // E
+    0x21 to 0x46, // F
+    0x22 to 0x47, // G
+    0x23 to 0x48, // H
+    0x17 to 0x49, // I
+    0x24 to 0x4A, // J
+    0x25 to 0x4B, // K
+    0x26 to 0x4C, // L
+    0x32 to 0x4D, // M
+    0x31 to 0x4E, // N
+    0x18 to 0x4F, // O
+    0x19 to 0x50, // P
+    0x10 to 0x51, // Q
+    0x13 to 0x52, // R
+    0x1F to 0x53, // S
+    0x14 to 0x54, // T
+    0x16 to 0x55, // U
+    0x2F to 0x56, // V
+    0x11 to 0x57, // W
+    0x2D to 0x58, // X
+    0x15 to 0x59, // Y
+    0x2C to 0x5A, // Z
+)
+
 internal class JnaWindowsHotkeyManager : HotkeyManager, Closeable {
+
+    private enum class HoldKind {
+        DICTATION,
+        COMMAND,
+    }
+
+    private data class MatchedBinding(
+        val kind: HoldKind,
+        val binding: HotkeyBinding,
+    )
 
     companion object {
         private val MODIFIER_VK_CODES = setOf(
@@ -74,11 +113,17 @@ internal class JnaWindowsHotkeyManager : HotkeyManager, Closeable {
     private var keyboardHook: WinUser.HHOOK? = null
 
     @Volatile
-    private var isHoldDown = false
+    private var activeHold: HoldKind? = null
+
+    @Volatile
+    private var pressedModifiers: Set<HotkeyModifier> = emptySet()
+
+    @Volatile
+    private var captureModifiers: Set<HotkeyModifier> = emptySet()
 
     private val keyboardProc = WinUser.LowLevelKeyboardProc { nCode, wParam, info ->
         if (nCode >= 0) {
-            val vkCode = info.vkCode
+            val vkCode = normalizeKeyCode(info.vkCode, info.scanCode, info.flags)
             val msgType = wParam.toInt()
             val isInjected = (info.flags and LLKHF_INJECTED) != 0
 
@@ -89,9 +134,12 @@ internal class JnaWindowsHotkeyManager : HotkeyManager, Closeable {
                 )
             }
 
+            updatePressedModifiers(vkCode, msgType)
+
             val capture = pendingCapture
             if (capture != null) {
                 handleCaptureKeyEvent(vkCode, msgType, capture)
+                return@LowLevelKeyboardProc WinDef.LRESULT(1)
             } else {
                 val consumed = handleHotkeyEvent(vkCode, msgType)
                 if (consumed) {
@@ -106,49 +154,98 @@ internal class JnaWindowsHotkeyManager : HotkeyManager, Closeable {
     }
 
     private fun handleHotkeyEvent(vkCode: Int, msgType: Int): Boolean {
-        val currentModifiers = detectCurrentModifiers()
-        val binding = config.startHotkey ?: return false
-        if (!binding.enabled) return false
+        val currentModifiers = pressedModifiers
+        val matchedBinding = matchedBindingFor(vkCode, currentModifiers) ?: run {
+            if (handleHoldRelease(vkCode, msgType)) {
+                return true
+            }
+            if (vkCode == VK_ESCAPE && activeHold != null && (msgType == WM_KEYDOWN || msgType == WM_SYSKEYDOWN)) {
+                activeHold = null
+                _hotkeyEvents.tryEmit(HotkeyEvent.CancelRecording)
+                return true
+            }
+            return false
+        }
+
+        val binding = matchedBinding.binding
         val modifierOnlyBinding = bindingUsesOnlyModifiers(binding)
 
-        if (matchesConfiguredHotkey(vkCode, currentModifiers, binding)) {
-            when (msgType) {
-                WM_KEYDOWN, WM_SYSKEYDOWN -> {
-                    if (!isHoldDown) {
-                        isHoldDown = true
-                        _hotkeyEvents.tryEmit(HotkeyEvent.HoldDown)
-                    }
-                }
-
-                WM_KEYUP, WM_SYSKEYUP -> {
-                    isHoldDown = false
-                    _hotkeyEvents.tryEmit(HotkeyEvent.HoldUp)
+        when (msgType) {
+            WM_KEYDOWN, WM_SYSKEYDOWN -> {
+                if (activeHold != matchedBinding.kind) {
+                    activeHold = matchedBinding.kind
+                    emitHoldDown(matchedBinding.kind)
                 }
             }
-            return !modifierOnlyBinding
-        }
 
-        if (isHoldDown && (msgType == WM_KEYUP || msgType == WM_SYSKEYUP)) {
-            val isMainKey = if (modifierOnlyBinding) {
-                isModifierPartOfBinding(vkCode, binding)
-            } else {
-                vkCode == binding.platformKeyCode
-            }
-            val isRequiredModifier = isModifierForBinding(vkCode, binding.modifiers)
-            if (isMainKey || isRequiredModifier) {
-                isHoldDown = false
-                _hotkeyEvents.tryEmit(HotkeyEvent.HoldUp)
-                return !modifierOnlyBinding && !isModifierKey(vkCode)
+            WM_KEYUP, WM_SYSKEYUP -> {
+                if (activeHold == matchedBinding.kind) {
+                    activeHold = null
+                    emitHoldUp(matchedBinding.kind)
+                }
             }
         }
 
-        if (vkCode == VK_ESCAPE && isHoldDown && (msgType == WM_KEYDOWN || msgType == WM_SYSKEYDOWN)) {
-            isHoldDown = false
-            _hotkeyEvents.tryEmit(HotkeyEvent.CancelRecording)
-            return true
-        }
+        return true
+    }
 
-        return false
+    private fun matchedBindingFor(
+        vkCode: Int,
+        currentModifiers: Set<HotkeyModifier>,
+    ): MatchedBinding? {
+        val dictationBinding = config.startHotkey
+            ?.takeIf { it.enabled && matchesConfiguredHotkey(vkCode, currentModifiers, it) }
+            ?.let { MatchedBinding(HoldKind.DICTATION, it) }
+        if (dictationBinding != null) return dictationBinding
+
+        val commandBinding = config.commandHotkey
+            ?.takeIf { config.commandHotkeyEnabled && it.enabled && matchesConfiguredHotkey(vkCode, currentModifiers, it) }
+            ?.let { MatchedBinding(HoldKind.COMMAND, it) }
+        return commandBinding
+    }
+
+    private fun handleHoldRelease(vkCode: Int, msgType: Int): Boolean {
+        if (activeHold == null || (msgType != WM_KEYUP && msgType != WM_SYSKEYUP)) return false
+        val binding = activeBinding() ?: return false
+        val modifierOnlyBinding = bindingUsesOnlyModifiers(binding)
+        val isMainKey = if (modifierOnlyBinding) {
+            isModifierPartOfBinding(vkCode, binding)
+        } else {
+            vkCode == binding.platformKeyCode
+        }
+        val isRequiredModifier = isModifierForBinding(vkCode, binding.modifiers)
+        if (!isMainKey && !isRequiredModifier) return false
+
+        val releasedKind = activeHold ?: return false
+        activeHold = null
+        emitHoldUp(releasedKind)
+        return true
+    }
+
+    private fun activeBinding(): HotkeyBinding? {
+        return when (activeHold) {
+            HoldKind.DICTATION -> config.startHotkey
+            HoldKind.COMMAND -> config.commandHotkey?.takeIf { config.commandHotkeyEnabled }
+            null -> null
+        }
+    }
+
+    private fun emitHoldDown(kind: HoldKind) {
+        _hotkeyEvents.tryEmit(
+            when (kind) {
+                HoldKind.DICTATION -> HotkeyEvent.DictationHoldDown
+                HoldKind.COMMAND -> HotkeyEvent.CommandHoldDown
+            }
+        )
+    }
+
+    private fun emitHoldUp(kind: HoldKind) {
+        _hotkeyEvents.tryEmit(
+            when (kind) {
+                HoldKind.DICTATION -> HotkeyEvent.DictationHoldUp
+                HoldKind.COMMAND -> HotkeyEvent.CommandHoldUp
+            }
+        )
     }
 
     private fun isModifierForBinding(vkCode: Int, requiredModifiers: Set<HotkeyModifier>): Boolean {
@@ -166,10 +263,33 @@ internal class JnaWindowsHotkeyManager : HotkeyManager, Closeable {
         msgType: Int,
         capture: CompletableDeferred<HotkeyCapture>,
     ) {
+        val modifier = modifierForKey(vkCode)
+        if (modifier != null) {
+            val modifiersBeforeEvent = captureModifiers
+            captureModifiers = when (msgType) {
+                WM_KEYDOWN, WM_SYSKEYDOWN -> captureModifiers + modifier
+                WM_KEYUP, WM_SYSKEYUP -> captureModifiers - modifier
+                else -> captureModifiers
+            }
+            if ((msgType == WM_KEYUP || msgType == WM_SYSKEYUP) && modifiersBeforeEvent.size >= 2) {
+                val binding = HotkeyBinding(
+                    platformKeyCode = vkCode,
+                    modifiers = modifiersBeforeEvent - modifier,
+                )
+                capture.complete(
+                    HotkeyCapture(
+                        platformKeyCode = binding.platformKeyCode,
+                        modifiers = binding.modifiers,
+                        displayLabel = formatter.format(binding),
+                    )
+                )
+            }
+            return
+        }
+
         if (msgType != WM_KEYDOWN && msgType != WM_SYSKEYDOWN) return
 
-        val modifiers = effectiveModifiersForKey(vkCode, detectCurrentModifiers())
-        if (vkCode in MODIFIER_VK_CODES && modifiers.isEmpty()) return
+        val modifiers = captureModifiers
         val binding = HotkeyBinding(vkCode, modifiers)
         capture.complete(
             HotkeyCapture(
@@ -268,12 +388,14 @@ internal class JnaWindowsHotkeyManager : HotkeyManager, Closeable {
         withTimeout(CAPTURE_TIMEOUT_MS) {
             if (listenerJob?.isActive == true) {
                 val deferred = CompletableDeferred<HotkeyCapture>()
+                captureModifiers = emptySet()
                 pendingCapture = deferred
                 try {
                     deferred.await()
                 } finally {
                     deferred.cancel()
                     pendingCapture = null
+                    captureModifiers = emptySet()
                 }
             } else {
                 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -282,6 +404,7 @@ internal class JnaWindowsHotkeyManager : HotkeyManager, Closeable {
                     installHook()
                     try {
                         val deferred = CompletableDeferred<HotkeyCapture>()
+                        captureModifiers = emptySet()
                         pendingCapture = deferred
                         try {
                             val msg = MSG()
@@ -292,6 +415,7 @@ internal class JnaWindowsHotkeyManager : HotkeyManager, Closeable {
                             deferred.await()
                         } finally {
                             pendingCapture = null
+                            captureModifiers = emptySet()
                         }
                     } finally {
                         uninstallHook()
@@ -321,7 +445,9 @@ internal class JnaWindowsHotkeyManager : HotkeyManager, Closeable {
             User32.INSTANCE.UnhookWindowsHookEx(hook)
         }
         keyboardHook = null
-        isHoldDown = false
+        activeHold = null
+        pressedModifiers = emptySet()
+        captureModifiers = emptySet()
     }
 
     private fun ensureMessageQueue() {
@@ -329,16 +455,19 @@ internal class JnaWindowsHotkeyManager : HotkeyManager, Closeable {
         User32.INSTANCE.PeekMessage(msg, null, 0, 0, 0)
     }
 
-    private fun detectCurrentModifiers(): Set<HotkeyModifier> {
-        val user32 = User32.INSTANCE
-        return buildSet {
-            if (user32.GetAsyncKeyState(0x11).toInt() and 0x8000 != 0) add(HotkeyModifier.CTRL)
-            if (user32.GetAsyncKeyState(0x10).toInt() and 0x8000 != 0) add(HotkeyModifier.SHIFT)
-            if (user32.GetAsyncKeyState(0x12).toInt() and 0x8000 != 0) add(HotkeyModifier.ALT)
-            if (user32.GetAsyncKeyState(0x5B).toInt() and 0x8000 != 0 ||
-                user32.GetAsyncKeyState(0x5C).toInt() and 0x8000 != 0
-            ) add(HotkeyModifier.META)
+    private fun updatePressedModifiers(vkCode: Int, msgType: Int) {
+        val modifier = modifierForKey(vkCode) ?: return
+        pressedModifiers = when (msgType) {
+            WM_KEYDOWN, WM_SYSKEYDOWN -> pressedModifiers + modifier
+            WM_KEYUP, WM_SYSKEYUP -> pressedModifiers - modifier
+            else -> pressedModifiers
         }
+    }
+
+    private fun normalizeKeyCode(vkCode: Int, scanCode: Int, flags: Int): Int {
+        if (vkCode in 0x41..0x5A) return vkCode
+        if (flags and LLKHF_INJECTED != 0) return vkCode
+        return LETTER_SCAN_CODE_MAP[scanCode] ?: vkCode
     }
 
     override fun close() {

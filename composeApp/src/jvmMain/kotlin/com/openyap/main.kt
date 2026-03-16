@@ -19,6 +19,7 @@ import androidx.compose.ui.window.rememberWindowState
 import com.openyap.di.ComposeAppModule
 import com.openyap.di.PlatformModule
 import com.openyap.di.sharedModule
+import com.openyap.model.effectiveHotkeyConfig
 import com.openyap.platform.AudioFeedbackService
 import com.openyap.platform.AudioRecorder
 import com.openyap.platform.ComposeOverlayController
@@ -85,7 +86,7 @@ fun main() {
 
             LaunchedEffect(Unit) {
                 val settings = settingsRepo.loadSettings()
-                hotkeyManager.setConfig(settings.hotkeyConfig)
+                hotkeyManager.setConfig(settings.effectiveHotkeyConfig())
                 hotkeyManager.startListening()
                 appCustomizationViewModel.refresh()
 
