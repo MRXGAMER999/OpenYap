@@ -32,6 +32,7 @@ kotlin {
             implementation(libs.jna)
             implementation(libs.jna.platform)
             implementation(libs.koin.annotations)
+            implementation(libs.koin.core.viewmodel)
         }
     }
 }
