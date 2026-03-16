@@ -44,7 +44,6 @@ import com.openyap.viewmodel.StatsViewModel
 import com.openyap.viewmodel.UserProfileViewModel
 import org.koin.compose.KoinApplication
 import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
 import org.koin.ksp.generated.module
 import openyap.composeapp.generated.resources.Res
 import openyap.composeapp.generated.resources.ic_app_logo
@@ -67,14 +66,14 @@ fun main() {
             val audioFeedbackService = koinInject<AudioFeedbackService>()
             val overlayController = koinInject<OverlayController>()
 
-            val recordingViewModel = koinViewModel<RecordingViewModel>()
-            val settingsViewModel = koinViewModel<SettingsViewModel>()
-            val historyViewModel = koinViewModel<HistoryViewModel>()
-            val onboardingViewModel = koinViewModel<OnboardingViewModel>()
-            val dictionaryViewModel = koinViewModel<DictionaryViewModel>()
-            val userProfileViewModel = koinViewModel<UserProfileViewModel>()
-            val statsViewModel = koinViewModel<StatsViewModel>()
-            val appCustomizationViewModel = koinViewModel<AppCustomizationViewModel>()
+            val recordingViewModel = koinInject<RecordingViewModel>()
+            val settingsViewModel = koinInject<SettingsViewModel>()
+            val historyViewModel = koinInject<HistoryViewModel>()
+            val onboardingViewModel = koinInject<OnboardingViewModel>()
+            val dictionaryViewModel = koinInject<DictionaryViewModel>()
+            val userProfileViewModel = koinInject<UserProfileViewModel>()
+            val statsViewModel = koinInject<StatsViewModel>()
+            val appCustomizationViewModel = koinInject<AppCustomizationViewModel>()
 
             val settingsStateForVolume by settingsViewModel.state.collectAsState()
             LaunchedEffect(settingsStateForVolume.soundFeedbackVolume) {

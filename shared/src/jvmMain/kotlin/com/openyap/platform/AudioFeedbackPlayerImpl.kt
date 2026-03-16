@@ -1,9 +1,7 @@
 package com.openyap.platform
 
 import com.openyap.viewmodel.AudioFeedbackPlayer
-import org.koin.core.annotation.Single
 
-@Single(binds = [AudioFeedbackPlayer::class])
 class AudioFeedbackPlayerImpl(
     private val audioFeedbackService: AudioFeedbackService,
 ) : AudioFeedbackPlayer {

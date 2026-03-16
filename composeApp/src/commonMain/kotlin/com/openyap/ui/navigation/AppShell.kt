@@ -88,7 +88,6 @@ import com.openyap.viewmodel.AppCustomizationViewModel
 import com.openyap.viewmodel.DictionaryViewModel
 import com.openyap.viewmodel.HistoryViewModel
 import com.openyap.viewmodel.OnboardingEvent
-import com.openyap.viewmodel.OnboardingUiState
 import com.openyap.viewmodel.OnboardingViewModel
 import com.openyap.viewmodel.RecordingEvent
 import com.openyap.viewmodel.RecordingUiState
@@ -98,7 +97,7 @@ import com.openyap.viewmodel.SettingsUiState
 import com.openyap.viewmodel.SettingsViewModel
 import com.openyap.viewmodel.StatsViewModel
 import com.openyap.viewmodel.UserProfileViewModel
-import org.koin.compose.viewmodel.koinViewModel
+import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -113,7 +112,7 @@ fun AppShell(
 ) {
     val recordingState by recordingViewModel.state.collectAsState()
     val settingsState by settingsViewModel.state.collectAsState()
-    val onboardingViewModel = koinViewModel<OnboardingViewModel>()
+    val onboardingViewModel = koinInject<OnboardingViewModel>()
     val onboardingState by onboardingViewModel.state.collectAsState()
 
     if (!onboardingState.isLoaded) {
@@ -283,12 +282,12 @@ fun AppShell(
                                 )
                             }
                             entry<Route.History> {
-                                val vm = koinViewModel<HistoryViewModel>()
+                                val vm = koinInject<HistoryViewModel>()
                                 val state by vm.state.collectAsState()
                                 HistoryScreen(state, vm::onEvent, onCopyToClipboard)
                             }
                             entry<Route.Dictionary> {
-                                val vm = koinViewModel<DictionaryViewModel>()
+                                val vm = koinInject<DictionaryViewModel>()
                                 val state by vm.state.collectAsState()
                                 DictionaryScreen(
                                     state = state,
@@ -297,17 +296,17 @@ fun AppShell(
                                 )
                             }
                             entry<Route.UserInfo> {
-                                val vm = koinViewModel<UserProfileViewModel>()
+                                val vm = koinInject<UserProfileViewModel>()
                                 val state by vm.state.collectAsState()
                                 UserInfoScreen(state, vm::onEvent)
                             }
                             entry<Route.Stats> {
-                                val vm = koinViewModel<StatsViewModel>()
+                                val vm = koinInject<StatsViewModel>()
                                 val state by vm.state.collectAsState()
                                 StatsScreen(state, onRefresh = vm::refresh)
                             }
                             entry<Route.Customization> {
-                                val vm = koinViewModel<AppCustomizationViewModel>()
+                                val vm = koinInject<AppCustomizationViewModel>()
                                 val state by vm.state.collectAsState()
                                 CustomizationScreen(
                                     state.appTones,

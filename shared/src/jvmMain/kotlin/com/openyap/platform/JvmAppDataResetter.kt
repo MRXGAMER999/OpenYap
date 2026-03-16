@@ -1,8 +1,6 @@
 package com.openyap.platform
 
 import com.openyap.database.OpenYapDatabase
-import org.koin.core.annotation.Named
-import org.koin.core.annotation.Single
 import java.nio.file.Path
 import kotlin.io.path.ExperimentalPathApi
 import kotlin.io.path.createDirectories
@@ -10,12 +8,11 @@ import kotlin.io.path.deleteRecursively
 import kotlin.io.path.exists
 
 @OptIn(ExperimentalPathApi::class)
-@Single(binds = [AppDataResetter::class])
 class JvmAppDataResetter(
     private val secureStorage: SecureStorage,
     private val database: OpenYapDatabase,
-    @Named("dataDir") private val dataDir: Path,
-    @Named("tempDir") private val tempDir: Path,
+    private val dataDir: Path,
+    private val tempDir: Path,
 ) : AppDataResetter {
     override suspend fun reset() {
         secureStorage.clear()

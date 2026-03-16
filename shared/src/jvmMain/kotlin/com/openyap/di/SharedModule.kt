@@ -1,25 +1,11 @@
 package com.openyap.di
 
-import com.openyap.platform.AudioRecorder
 import com.openyap.platform.FileOperations
-import com.openyap.platform.ForegroundAppDetector
-import com.openyap.platform.HotkeyDisplayFormatter
-import com.openyap.platform.HotkeyManager
-import com.openyap.platform.OverlayController
-import com.openyap.platform.PasteAutomation
-import com.openyap.platform.PermissionManager
-import com.openyap.platform.AppDataResetter
-import com.openyap.platform.StartupManager
-import com.openyap.repository.DictionaryRepository
-import com.openyap.repository.HistoryRepository
-import com.openyap.repository.SettingsRepository
-import com.openyap.repository.UserProfileRepository
 import com.openyap.service.DictionaryEngine
 import com.openyap.service.GeminiClient
 import com.openyap.service.GroqLLMClient
 import com.openyap.service.GroqWhisperClient
 import com.openyap.viewmodel.AppCustomizationViewModel
-import com.openyap.viewmodel.AudioFeedbackPlayer
 import com.openyap.viewmodel.DictionaryViewModel
 import com.openyap.viewmodel.HistoryViewModel
 import com.openyap.viewmodel.OnboardingViewModel
@@ -28,15 +14,13 @@ import com.openyap.viewmodel.SettingsViewModel
 import com.openyap.viewmodel.StatsViewModel
 import com.openyap.viewmodel.UserProfileViewModel
 import org.koin.core.module.dsl.singleOf
-import org.koin.core.module.dsl.viewModel
-import org.koin.core.module.dsl.viewModelOf
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 val sharedModule = module {
     singleOf(::DictionaryEngine)
 
-    viewModel {
+    single {
         RecordingViewModel(
             hotkeyManager = get(),
             audioRecorder = get(),
@@ -59,7 +43,7 @@ val sharedModule = module {
         )
     }
 
-    viewModel {
+    single {
         SettingsViewModel(
             settingsRepository = get(),
             geminiClient = get(),
@@ -73,13 +57,13 @@ val sharedModule = module {
         )
     }
 
-    viewModelOf(::HistoryViewModel)
-    viewModelOf(::DictionaryViewModel)
-    viewModelOf(::UserProfileViewModel)
-    viewModelOf(::StatsViewModel)
-    viewModelOf(::AppCustomizationViewModel)
+    singleOf(::HistoryViewModel)
+    singleOf(::DictionaryViewModel)
+    singleOf(::UserProfileViewModel)
+    singleOf(::StatsViewModel)
+    singleOf(::AppCustomizationViewModel)
 
-    viewModel {
+    single {
         OnboardingViewModel(
             settingsRepository = get(),
             permissionManager = get(),

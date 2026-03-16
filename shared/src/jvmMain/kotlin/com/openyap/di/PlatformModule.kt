@@ -2,14 +2,19 @@ package com.openyap.di
 
 import com.openyap.database.OpenYapDatabase
 import com.openyap.database.createOpenYapDatabase
+import com.openyap.platform.AppDataResetter
+import com.openyap.platform.AudioFeedbackPlayerImpl
 import com.openyap.platform.AudioFeedbackService
 import com.openyap.platform.AudioPipelineConfig
 import com.openyap.platform.AudioRecorder
 import com.openyap.platform.ForegroundAppDetector
 import com.openyap.platform.HotkeyDisplayFormatter
 import com.openyap.platform.HotkeyManager
+import com.openyap.platform.FileOperations
 import com.openyap.platform.HttpClientFactory
+import com.openyap.platform.JvmAppDataResetter
 import com.openyap.platform.JvmAudioRecorder
+import com.openyap.platform.JvmFileOperations
 import com.openyap.platform.NativeAudioBridge
 import com.openyap.platform.NativeAudioRecorder
 import com.openyap.platform.PasteAutomation
@@ -35,7 +40,7 @@ import com.openyap.repository.UserProfileRepository
 import com.openyap.service.GeminiClient
 import com.openyap.service.GroqLLMClient
 import com.openyap.service.GroqWhisperClient
-import com.openyap.service.TranscriptionService
+import com.openyap.viewmodel.AudioFeedbackPlayer
 import org.koin.core.annotation.Module
 import org.koin.core.annotation.Named
 import org.koin.core.annotation.Single
@@ -137,4 +142,19 @@ class PlatformModule {
     @Single
     @Named("tempDir")
     fun provideTempDir(): Path = PlatformInit.tempDir
+
+    @Single
+    fun provideFileOperations(): FileOperations = JvmFileOperations()
+
+    @Single
+    fun provideAudioFeedbackPlayer(service: AudioFeedbackService): AudioFeedbackPlayer =
+        AudioFeedbackPlayerImpl(service)
+
+    @Single
+    fun provideAppDataResetter(
+        ss: SecureStorage,
+        db: OpenYapDatabase,
+        @Named("dataDir") dataDir: Path,
+        @Named("tempDir") tempDir: Path,
+    ): AppDataResetter = JvmAppDataResetter(ss, db, dataDir, tempDir)
 }
