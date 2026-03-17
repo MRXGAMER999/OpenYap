@@ -41,9 +41,9 @@ data class AppShellLayout(
 }
 
 object AppShellBreakpoints {
-    val wideRailMinWidth = 1200.dp
-    val compactRailPreferredMinWidth = 900.dp
-    val protectedContentMinWidth = 720.dp
+    val wideRailMinWidth = 1000.dp
+    val compactRailPreferredMinWidth = 750.dp
+    val protectedContentMinWidth = 600.dp
     val shellHorizontalPadding = 32.dp
     val railContentGap = 16.dp
     val compactRailOccupiedWidth = 120.dp

@@ -2,7 +2,6 @@ package com.openyap.ui.navigation
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.fadeIn
@@ -35,16 +34,22 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.MediumExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallExtendedFloatingActionButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.WideNavigationRailValue
+import androidx.compose.material3.rememberWideNavigationRailState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -53,6 +58,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -97,6 +103,7 @@ import com.openyap.viewmodel.SettingsViewModel
 import com.openyap.viewmodel.StatsViewModel
 import com.openyap.viewmodel.UserProfileViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
@@ -176,10 +183,8 @@ fun AppShell(
     val timeLabel = rememberSystemTimeLabel()
 
     fun navigateTo(route: Route) {
-        if (currentRoute != route) {
-            backStack.clear()
-            backStack.add(route)
-        }
+        backStack.clear()
+        backStack.add(route)
         menuExpanded = false
     }
 
@@ -199,6 +204,13 @@ fun AppShell(
     ) {
         val shellLayout = remember(maxWidth) { resolveAppShellLayout(maxWidth) }
         val motionScheme = MaterialTheme.motionScheme
+        val railState = rememberWideNavigationRailState(
+            if (shellLayout.isWideRail) WideNavigationRailValue.Expanded
+            else WideNavigationRailValue.Collapsed,
+        )
+        LaunchedEffect(shellLayout.isWideRail) {
+            if (shellLayout.isWideRail) railState.expand() else railState.collapse()
+        }
 
         AnimatedContent(
             targetState = shellLayout,
@@ -225,9 +237,7 @@ fun AppShell(
                     ShellRailPane(
                         currentRoute = currentRoute,
                         layout = activeLayout,
-                        timeLabel = timeLabel,
-                        menuExpanded = menuExpanded,
-                        onMenuExpandedChange = { menuExpanded = it },
+                        railState = railState,
                         onRouteSelected = ::navigateTo,
                         onPrimaryAction = { onRecordingEvent(RecordingEvent.ToggleRecording) },
                         primaryActionEnabled = isPrimaryActionEnabled,
@@ -323,9 +333,7 @@ fun AppShell(
 private fun ShellRailPane(
     currentRoute: Route,
     layout: AppShellLayout,
-    timeLabel: String,
-    menuExpanded: Boolean,
-    onMenuExpandedChange: (Boolean) -> Unit,
+    railState: androidx.compose.material3.WideNavigationRailState,
     onRouteSelected: (Route) -> Unit,
     onPrimaryAction: () -> Unit,
     primaryActionEnabled: Boolean,
@@ -335,187 +343,69 @@ private fun ShellRailPane(
     destinationsFocusRequester: FocusRequester,
     contentFocusRequester: FocusRequester,
 ) {
-    val treatment = layout.railTreatment ?: return
-    val reducedMotion = reducedMotionEnabled()
-    val motionScheme = MaterialTheme.motionScheme
-    val railWidth by animateDpAsState(
-        targetValue = treatment.containerWidth,
-        animationSpec = if (reducedMotion) snap() else motionScheme.fastSpatialSpec(),
-        label = "shellRailWidth",
-    )
+    if (layout.railTreatment == null) return
+    val scope = rememberCoroutineScope()
+    val isExpanded = railState.targetValue == WideNavigationRailValue.Expanded
 
-    Column(
+    AppRail(
+        destinations = primaryRailRoutes,
+        currentRoute = currentRoute,
+        onRouteSelected = onRouteSelected,
+        railState = railState,
         modifier = Modifier
             .fillMaxHeight()
-            .width(railWidth)
-            .padding(vertical = Spacing.md),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Spacing.md),
-    ) {
-        ShellRailHeader(
-            treatment = treatment,
-            timeLabel = timeLabel,
-            menuExpanded = menuExpanded,
-            onMenuExpandedChange = onMenuExpandedChange,
-            currentRoute = currentRoute,
-            onRouteSelected = onRouteSelected,
-            onPrimaryAction = onPrimaryAction,
-            primaryActionEnabled = primaryActionEnabled,
-            primaryActionStopsRecording = primaryActionStopsRecording,
-            menuFocusRequester = menuFocusRequester,
-            primaryActionFocusRequester = primaryActionFocusRequester,
-            nextFocusRequester = destinationsFocusRequester,
-        )
-
-        AppRail(
-            destinations = primaryRailRoutes,
-            currentRoute = currentRoute,
-            onRouteSelected = onRouteSelected,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .focusRequester(destinationsFocusRequester)
-                .focusProperties {
-                    previous = primaryActionFocusRequester
-                    next = contentFocusRequester
-                }
-                .semantics { traversalIndex = 2f },
-            treatment = treatment,
-            title = "",
-        )
-    }
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun ShellRailHeader(
-    treatment: AppRailTreatment,
-    timeLabel: String,
-    menuExpanded: Boolean,
-    onMenuExpandedChange: (Boolean) -> Unit,
-    currentRoute: Route,
-    onRouteSelected: (Route) -> Unit,
-    onPrimaryAction: () -> Unit,
-    primaryActionEnabled: Boolean,
-    primaryActionStopsRecording: Boolean,
-    menuFocusRequester: FocusRequester,
-    primaryActionFocusRequester: FocusRequester,
-    nextFocusRequester: FocusRequester,
-) {
-    val isWide = treatment == AppRailTreatment.Wide
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Spacing.sm),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
-    ) {
-        if (treatment == AppRailTreatment.CompactFallback) {
-            Box {
-                IconButton(
-                    onClick = { onMenuExpandedChange(!menuExpanded) },
+            .focusRequester(destinationsFocusRequester)
+            .focusProperties {
+                previous = primaryActionFocusRequester
+                next = contentFocusRequester
+            }
+            .semantics { traversalIndex = 2f },
+        header = {
+            Column(
+                horizontalAlignment = if (isExpanded) Alignment.Start else Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                modifier = Modifier.padding(
+                    start = if (isExpanded) Spacing.md else 16.dp,
+                    end = if (isExpanded) 0.dp else 16.dp,
+                )
+            ) {
+                RailToggleButton(
+                    isExpanded = isExpanded,
+                    onToggle = {
+                        scope.launch {
+                            if (isExpanded) railState.collapse() else railState.expand()
+                        }
+                    },
                     modifier = Modifier
                         .focusRequester(menuFocusRequester)
                         .focusProperties { next = primaryActionFocusRequester }
                         .semantics {
                             role = Role.Button
-                            contentDescription = if (menuExpanded) {
-                                "Close navigation menu"
-                            } else {
-                                "Open navigation menu"
-                            }
+                            contentDescription = if (isExpanded) "Collapse navigation" else "Expand navigation"
                             traversalIndex = 0f
                         },
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Menu,
-                        contentDescription = null,
-                    )
-                }
-
-                ShellRouteMenu(
-                    expanded = menuExpanded,
-                    currentRoute = currentRoute,
-                    onDismiss = { onMenuExpandedChange(false) },
-                    onRouteSelected = onRouteSelected,
-                )
-            }
-
-            Text(
-                text = timeLabel,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = timeLabel,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
-                Box {
-                    IconButton(
-                        onClick = { onMenuExpandedChange(!menuExpanded) },
-                        modifier = Modifier
-                            .focusRequester(menuFocusRequester)
-                            .focusProperties { next = primaryActionFocusRequester }
-                            .semantics {
-                                role = Role.Button
-                                contentDescription = if (menuExpanded) {
-                                    "Close navigation menu"
-                                } else {
-                                    "Open navigation menu"
-                                }
-                                traversalIndex = 0f
-                            },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Menu,
-                            contentDescription = null,
-                        )
-                    }
-
-                    ShellRouteMenu(
-                        expanded = menuExpanded,
-                        currentRoute = currentRoute,
-                        onDismiss = { onMenuExpandedChange(false) },
-                        onRouteSelected = onRouteSelected,
-                    )
-                }
+                PrimaryShellAction(
+                    expanded = isExpanded,
+                    enabled = primaryActionEnabled,
+                    stopsRecording = primaryActionStopsRecording,
+                    onClick = onPrimaryAction,
+                    modifier = Modifier
+                        .focusRequester(primaryActionFocusRequester)
+                        .focusProperties {
+                            previous = menuFocusRequester
+                            next = destinationsFocusRequester
+                        }
+                        .semantics {
+                            role = Role.Button
+                            contentDescription = primaryActionContentDescription(primaryActionStopsRecording)
+                            traversalIndex = 1f
+                        },
+                )
             }
-        }
-
-        PrimaryShellAction(
-            expanded = isWide,
-            enabled = primaryActionEnabled,
-            stopsRecording = primaryActionStopsRecording,
-            onClick = onPrimaryAction,
-            modifier = Modifier
-                .focusRequester(primaryActionFocusRequester)
-                .focusProperties {
-                    previous = menuFocusRequester
-                    next = nextFocusRequester
-                }
-                .semantics {
-                    role = Role.Button
-                    contentDescription = primaryActionContentDescription(primaryActionStopsRecording)
-                    traversalIndex = 1f
-                },
-        )
-
-        if (isWide) {
-            Text(
-                text = "OpenYap",
-                style = MaterialTheme.typography.titleLargeEmphasized,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-        }
-    }
+        },
+    )
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -664,47 +554,16 @@ private fun PrimaryShellAction(
     val actionLabel = if (stopsRecording) "Stop recording" else "Record thought"
     val actionIcon = if (stopsRecording) Icons.Default.Stop else Icons.Default.Mic
 
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier,
-        color = MaterialTheme.colorScheme.primaryContainer,
+    SmallExtendedFloatingActionButton(
+        text = { Text(actionLabel, style = MaterialTheme.typography.labelLargeEmphasized) },
+        icon = { Icon(actionIcon, contentDescription = null, modifier = Modifier.size(24.dp)) },
+        shape = FloatingActionButtonDefaults.mediumExtendedFabShape,
+        onClick = { if (enabled) onClick() },
+        expanded = expanded,
+        modifier = modifier.then(if (!enabled) Modifier.alpha(0.38f) else Modifier),
+        containerColor = MaterialTheme.colorScheme.primaryContainer,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        shape = if (expanded) MaterialTheme.shapes.large else MaterialTheme.shapes.extraLarge,
-        tonalElevation = 4.dp,
-        shadowElevation = 4.dp,
-    ) {
-        if (expanded) {
-            Row(
-                modifier = Modifier
-                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                    .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-            ) {
-                Icon(
-                    imageVector = actionIcon,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Text(
-                    text = actionLabel,
-                    style = MaterialTheme.typography.labelLargeEmphasized,
-                )
-            }
-        } else {
-            Box(
-                modifier = Modifier.size(48.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = actionIcon,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        }
-    }
+    )
 }
 
 private fun primaryActionContentDescription(stopsRecording: Boolean): String =
@@ -753,7 +612,6 @@ private fun ShellContentPane(
                 .focusProperties { previous = previousFocusRequester },
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             tonalElevation = 3.dp,
-            shadowElevation = 10.dp,
             shape = MaterialTheme.shapes.extraLarge,
         ) {
             Scaffold(
