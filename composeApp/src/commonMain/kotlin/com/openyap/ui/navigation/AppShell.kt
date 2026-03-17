@@ -2,7 +2,6 @@ package com.openyap.ui.navigation
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.fadeIn
@@ -43,8 +42,11 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.WideNavigationRailValue
+import androidx.compose.material3.rememberWideNavigationRailState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -97,6 +99,7 @@ import com.openyap.viewmodel.SettingsViewModel
 import com.openyap.viewmodel.StatsViewModel
 import com.openyap.viewmodel.UserProfileViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
@@ -199,8 +202,13 @@ fun AppShell(
     ) {
         val shellLayout = remember(maxWidth) { resolveAppShellLayout(maxWidth) }
         val motionScheme = MaterialTheme.motionScheme
-        var isRailExpanded by remember { mutableStateOf(false) }
-        LaunchedEffect(shellLayout.isWideRail) { isRailExpanded = shellLayout.isWideRail }
+        val railState = rememberWideNavigationRailState(
+            if (shellLayout.isWideRail) WideNavigationRailValue.Expanded
+            else WideNavigationRailValue.Collapsed,
+        )
+        LaunchedEffect(shellLayout.isWideRail) {
+            if (shellLayout.isWideRail) railState.expand() else railState.collapse()
+        }
 
         AnimatedContent(
             targetState = shellLayout,
@@ -227,9 +235,7 @@ fun AppShell(
                     ShellRailPane(
                         currentRoute = currentRoute,
                         layout = activeLayout,
-                        isRailExpanded = isRailExpanded,
-                        onToggleRailExpanded = { isRailExpanded = !isRailExpanded },
-                        timeLabel = timeLabel,
+                        railState = railState,
                         onRouteSelected = ::navigateTo,
                         onPrimaryAction = { onRecordingEvent(RecordingEvent.ToggleRecording) },
                         primaryActionEnabled = isPrimaryActionEnabled,
@@ -325,9 +331,7 @@ fun AppShell(
 private fun ShellRailPane(
     currentRoute: Route,
     layout: AppShellLayout,
-    isRailExpanded: Boolean,
-    onToggleRailExpanded: () -> Unit,
-    timeLabel: String,
+    railState: androidx.compose.material3.WideNavigationRailState,
     onRouteSelected: (Route) -> Unit,
     onPrimaryAction: () -> Unit,
     primaryActionEnabled: Boolean,
@@ -338,122 +342,64 @@ private fun ShellRailPane(
     contentFocusRequester: FocusRequester,
 ) {
     if (layout.railTreatment == null) return
-    val reducedMotion = reducedMotionEnabled()
-    val motionScheme = MaterialTheme.motionScheme
-    val railWidth by animateDpAsState(
-        targetValue = if (isRailExpanded) 240.dp else 80.dp,
-        animationSpec = if (reducedMotion) snap() else motionScheme.defaultSpatialSpec(),
-        label = "shellRailWidth",
-    )
+    val scope = rememberCoroutineScope()
+    val isExpanded = railState.targetValue == WideNavigationRailValue.Expanded
 
-    Column(
+    AppRail(
+        destinations = primaryRailRoutes,
+        currentRoute = currentRoute,
+        onRouteSelected = onRouteSelected,
+        railState = railState,
         modifier = Modifier
             .fillMaxHeight()
-            .width(railWidth)
-            .padding(vertical = Spacing.md),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
-    ) {
-        ShellRailHeader(
-            isRailExpanded = isRailExpanded,
-            onToggleRailExpanded = onToggleRailExpanded,
-            timeLabel = timeLabel,
-            onPrimaryAction = onPrimaryAction,
-            primaryActionEnabled = primaryActionEnabled,
-            primaryActionStopsRecording = primaryActionStopsRecording,
-            menuFocusRequester = menuFocusRequester,
-            primaryActionFocusRequester = primaryActionFocusRequester,
-            nextFocusRequester = destinationsFocusRequester,
-        )
-
-        AppRail(
-            destinations = primaryRailRoutes,
-            currentRoute = currentRoute,
-            onRouteSelected = onRouteSelected,
-            isExpanded = isRailExpanded,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .focusRequester(destinationsFocusRequester)
-                .focusProperties {
-                    previous = primaryActionFocusRequester
-                    next = contentFocusRequester
-                }
-                .semantics { traversalIndex = 2f },
-        )
-    }
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun ShellRailHeader(
-    isRailExpanded: Boolean,
-    onToggleRailExpanded: () -> Unit,
-    timeLabel: String,
-    onPrimaryAction: () -> Unit,
-    primaryActionEnabled: Boolean,
-    primaryActionStopsRecording: Boolean,
-    menuFocusRequester: FocusRequester,
-    primaryActionFocusRequester: FocusRequester,
-    nextFocusRequester: FocusRequester,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Spacing.sm),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = if (isRailExpanded) Arrangement.SpaceBetween else Arrangement.Center,
-        ) {
-            RailToggleButton(
-                isExpanded = isRailExpanded,
-                onToggle = onToggleRailExpanded,
-                modifier = Modifier
-                    .focusRequester(menuFocusRequester)
-                    .focusProperties { next = primaryActionFocusRequester }
-                    .semantics {
-                        role = Role.Button
-                        contentDescription = if (isRailExpanded) "Collapse navigation" else "Expand navigation"
-                        traversalIndex = 0f
+            .focusRequester(destinationsFocusRequester)
+            .focusProperties {
+                previous = primaryActionFocusRequester
+                next = contentFocusRequester
+            }
+            .semantics { traversalIndex = 2f },
+        header = {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
+                RailToggleButton(
+                    isExpanded = isExpanded,
+                    onToggle = {
+                        scope.launch {
+                            if (isExpanded) railState.collapse() else railState.expand()
+                        }
                     },
-            )
-            if (isRailExpanded) {
-                Text(
-                    text = "OpenYap",
-                    style = MaterialTheme.typography.titleLargeEmphasized,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .focusRequester(menuFocusRequester)
+                        .focusProperties { next = primaryActionFocusRequester }
+                        .semantics {
+                            role = Role.Button
+                            contentDescription = if (isExpanded) "Collapse navigation" else "Expand navigation"
+                            traversalIndex = 0f
+                        },
+                )
+
+                PrimaryShellAction(
+                    expanded = isExpanded,
+                    enabled = primaryActionEnabled,
+                    stopsRecording = primaryActionStopsRecording,
+                    onClick = onPrimaryAction,
+                    modifier = Modifier
+                        .focusRequester(primaryActionFocusRequester)
+                        .focusProperties {
+                            previous = menuFocusRequester
+                            next = destinationsFocusRequester
+                        }
+                        .semantics {
+                            role = Role.Button
+                            contentDescription = primaryActionContentDescription(primaryActionStopsRecording)
+                            traversalIndex = 1f
+                        },
                 )
             }
-        }
-
-        Text(
-            text = timeLabel,
-            style = if (isRailExpanded) MaterialTheme.typography.labelLarge else MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        PrimaryShellAction(
-            expanded = isRailExpanded,
-            enabled = primaryActionEnabled,
-            stopsRecording = primaryActionStopsRecording,
-            onClick = onPrimaryAction,
-            modifier = Modifier
-                .focusRequester(primaryActionFocusRequester)
-                .focusProperties {
-                    previous = menuFocusRequester
-                    next = nextFocusRequester
-                }
-                .semantics {
-                    role = Role.Button
-                    contentDescription = primaryActionContentDescription(primaryActionStopsRecording)
-                    traversalIndex = 1f
-                },
-        )
-    }
+        },
+    )
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -691,7 +637,6 @@ private fun ShellContentPane(
                 .focusProperties { previous = previousFocusRequester },
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             tonalElevation = 3.dp,
-            shadowElevation = 10.dp,
             shape = MaterialTheme.shapes.extraLarge,
         ) {
             Scaffold(
