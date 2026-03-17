@@ -164,15 +164,15 @@ fun main() {
                     Item("Show", onClick = { isVisible = true })
                     Item("Quit", onClick = {
                         runCatching { (audioRecorder as? java.io.Closeable)?.close() }
-                        (overlayController as? java.io.Closeable)?.close()
-                        audioFeedbackService.close()
-                        (hotkeyManager as? java.io.Closeable)?.close()
+                        runCatching { (overlayController as? java.io.Closeable)?.close() }.onFailure { System.err.println("Failed to close overlayController: $it") }
+                        runCatching { audioFeedbackService.close() }.onFailure { System.err.println("Failed to close audioFeedbackService: $it") }
+                        runCatching { hotkeyManager.close() }.onFailure { System.err.println("Failed to close hotkeyManager: $it") }
                         exitApplication()
                     })
                 },
             )
 
-            val composeOverlayController = overlayController as ComposeOverlayController
+            val composeOverlayController = koinInject<ComposeOverlayController>()
             val overlayState by composeOverlayController.uiState.collectAsState()
             ComposeOverlayWindow(overlayState)
 

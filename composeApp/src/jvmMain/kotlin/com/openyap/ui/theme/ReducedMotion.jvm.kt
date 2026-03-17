@@ -1,6 +1,7 @@
 package com.openyap.ui.theme
 
 import java.awt.Toolkit
+import java.util.concurrent.TimeUnit
 
 actual fun platformPrefersReducedMotion(): Boolean {
     return if (isWindows()) {
@@ -26,8 +27,11 @@ private fun windowsAnimationsEnabled(): Boolean? {
             .start()
     }.getOrNull() ?: return null
 
+    if (!process.waitFor(3, TimeUnit.SECONDS) || process.exitValue() != 0) {
+        process.destroyForcibly()
+        return null
+    }
     val output = process.inputStream.bufferedReader().use { it.readText() }
-    if (process.waitFor() != 0) return null
 
     val bytes = Regex("""([0-9A-Fa-f]{2})""")
         .findAll(output.substringAfter("UserPreferencesMask", ""))

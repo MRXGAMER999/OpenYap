@@ -132,13 +132,14 @@ class SettingsViewModel(
             // Read version from manifest/resources
             val version = runCatching {
                 SettingsViewModel::class.java.getResourceAsStream("/version.properties")
-                    ?.bufferedReader()
-                    ?.readText()
-                    ?.lines()
-                    ?.firstOrNull { it.startsWith("version=") }
-                    ?.removePrefix("version=")
-                    ?.trim()
-                    ?: ""
+                    ?.use { stream ->
+                        stream.bufferedReader().readText()
+                            .lines()
+                            .firstOrNull { it.startsWith("version=") }
+                            ?.removePrefix("version=")
+                            ?.trim()
+                            ?: ""
+                    } ?: ""
             }.getOrDefault("")
             _state.update {
                 it.copy(

@@ -174,8 +174,9 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
             ?.firstOrNull()
             ?.content
             ?.parts
-            ?.firstOrNull { it.text != null }
-            ?.text
+            ?.mapNotNull { it.text }
+            ?.takeIf { it.isNotEmpty() }
+            ?.joinToString("")
 
         if (rewrittenText.isNullOrBlank()) {
             val blockReason = geminiResponse.promptFeedback?.blockReason
@@ -259,9 +260,10 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
                 return block()
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: GeminiException) {
+                throw e
             } catch (e: Exception) {
                 lastException = e
-                // Don't retry on the last attempt
                 if (attempt < MAX_RETRIES) {
                     delay(RETRY_DELAYS_MS[attempt])
                 }

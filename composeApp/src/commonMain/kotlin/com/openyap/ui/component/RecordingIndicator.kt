@@ -20,7 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -100,9 +100,8 @@ fun RecordingIndicator(
                         color = MaterialTheme.colorScheme.onErrorContainer,
                     )
 
-                    is RecordingState.Processing -> CircularProgressIndicator(
+                    is RecordingState.Processing -> @OptIn(ExperimentalMaterial3ExpressiveApi::class) CircularWavyProgressIndicator(
                         modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
 

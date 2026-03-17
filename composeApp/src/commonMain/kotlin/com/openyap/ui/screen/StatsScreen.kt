@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
@@ -54,7 +55,7 @@ fun StatsScreen(state: StatsUiState, onRefresh: () -> Unit) {
                     modifier = Modifier.widthIn(max = 540.dp),
                 )
             }
-            FilledTonalButton(onClick = onRefresh) { Text("Refresh") }
+            FilledTonalButton(onClick = onRefresh, shapes = ButtonDefaults.shapes()) { Text("Refresh") }
         }
         if (!state.isLoading && state.totalRecordings > 0) {
             Surface(
