@@ -19,6 +19,10 @@ object WindowsThemeHelper {
     private const val DWMWA_USE_IMMERSIVE_DARK_MODE_LEGACY = 19 // Older Win10 builds
     private const val DWMWA_CAPTION_COLOR = 35                  // Windows 11 Build 22000+
     private const val DWMWA_BORDER_COLOR = 34                   // Windows 11 Build 22000+
+    private const val DWMWA_SYSTEMBACKDROP_TYPE = 38            // Windows 11 Build 22621+ (22H2)
+
+    // DWM system backdrop material values for DWMWA_SYSTEMBACKDROP_TYPE
+    private const val DWMSBT_MAINWINDOW = 2                     // Mica
 
     /**
      * JNA interface to dwmapi.dll.
@@ -59,7 +63,7 @@ object WindowsThemeHelper {
             if (!osName.contains("windows")) {
                 return
             }
-            
+
             if (!window.isDisplayable) return
             val hwnd = getHwnd(window) ?: return
 
@@ -112,6 +116,22 @@ object WindowsThemeHelper {
                     "WindowsThemeHelper: border-color HRESULT=0x${
                         borderHr.toUInt().toString(16)
                     }"
+                )
+            }
+            // ── 3. Mica backdrop (Win11 22H2 Build 22621+) ────────────
+            // Applies the Mica system material behind the window frame.
+            // On Win10 or Win11 21H2 this attribute is not recognised and
+            // DWM silently returns an error — we log it only at debug level
+            // so it never surfaces as noise in production logs.
+            val micaPtr = intPointer(DWMSBT_MAINWINDOW)
+            val micaHr = Dwmapi.INSTANCE.DwmSetWindowAttribute(
+                hwnd, DWMWA_SYSTEMBACKDROP_TYPE, micaPtr, 4,
+            )
+            if (micaHr != 0) {
+                // Not an error on older Windows — attribute simply unsupported.
+                System.err.println(
+                    "WindowsThemeHelper: Mica not available on this build " +
+                        "(HRESULT=0x${micaHr.toUInt().toString(16)})"
                 )
             }
 

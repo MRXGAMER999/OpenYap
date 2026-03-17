@@ -1,8 +1,12 @@
 package com.openyap.ui.navigation
 
+import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.window.core.layout.WindowWidthSizeClass
 
 enum class AppRailTreatment(
     val containerWidth: Dp,
@@ -11,7 +15,6 @@ enum class AppRailTreatment(
 ) {
     Wide(containerWidth = 280.dp, showTitle = true, showLabels = true),
     Compact(containerWidth = 120.dp, showTitle = false, showLabels = true),
-    CompactFallback(containerWidth = 88.dp, showTitle = false, showLabels = false),
 }
 
 enum class AppShellFallback {
@@ -33,60 +36,44 @@ data class AppShellLayout(
     val isCompactRail: Boolean
         get() = railTreatment == AppRailTreatment.Compact
 
-    val isCompactFallbackRail: Boolean
-        get() = railTreatment == AppRailTreatment.CompactFallback
-
     val prefersTopBarMenuFallback: Boolean
         get() = fallback == AppShellFallback.TopBarMenu
 }
 
-object AppShellBreakpoints {
-    val wideRailMinWidth = 1000.dp
-    val compactRailPreferredMinWidth = 750.dp
-    val protectedContentMinWidth = 600.dp
-    val shellHorizontalPadding = 32.dp
-    val railContentGap = 16.dp
-    val compactRailOccupiedWidth = 120.dp
-    val compactFallbackRailOccupiedWidth = 88.dp
-}
-
-fun prefersWideRail(windowWidth: Dp): Boolean {
-    return windowWidth >= AppShellBreakpoints.wideRailMinWidth
-}
-
-fun prefersCompactRail(windowWidth: Dp): Boolean {
-    return !prefersWideRail(windowWidth) &&
-        windowWidth >= AppShellBreakpoints.compactRailPreferredMinWidth
-}
-
-fun canProtectContentWithCompactFallback(windowWidth: Dp): Boolean {
-    return windowWidth -
-        AppShellBreakpoints.shellHorizontalPadding -
-        AppShellBreakpoints.railContentGap -
-        AppShellBreakpoints.compactFallbackRailOccupiedWidth >=
-        AppShellBreakpoints.protectedContentMinWidth
-}
-
-fun resolveAppShellLayout(windowWidth: Dp): AppShellLayout {
-    return when {
-        prefersWideRail(windowWidth) -> AppShellLayout(
-            railTreatment = AppRailTreatment.Wide,
-            fallback = AppShellFallback.None,
-        )
-
-        prefersCompactRail(windowWidth) -> AppShellLayout(
-            railTreatment = AppRailTreatment.Compact,
-            fallback = AppShellFallback.None,
-        )
-
-        canProtectContentWithCompactFallback(windowWidth) -> AppShellLayout(
-            railTreatment = AppRailTreatment.CompactFallback,
-            fallback = AppShellFallback.None,
-        )
-
-        else -> AppShellLayout(
-            railTreatment = null,
-            fallback = AppShellFallback.TopBarMenu,
-        )
+/**
+ * Returns the [AppShellLayout] for the current window, derived from the
+ * Material 3 [WindowWidthSizeClass] rather than manual dp thresholds.
+ *
+ * | Window width class  | Rail treatment  | Fallback   |
+ * |---------------------|-----------------|------------|
+ * | EXPANDED (≥ 840 dp) | Wide (280 dp)   | None       |
+ * | MEDIUM (600–840 dp) | Compact (120 dp)| None       |
+ * | COMPACT (< 600 dp)  | —               | TopBarMenu |
+ *
+ * Using the official adaptive library instead of bespoke dp constants means
+ * the breakpoints stay in sync with M3 guidance automatically. This replaces
+ * the old `AppShellBreakpoints` / `resolveAppShellLayout` system and removes
+ * the four manual helper functions that were reimplementing what
+ * [WindowWidthSizeClass] already encodes.
+ */
+@Composable
+fun rememberAdaptiveShellLayout(): AppShellLayout {
+    val adaptiveInfo = currentWindowAdaptiveInfo()
+    val widthClass = adaptiveInfo.windowSizeClass.windowWidthSizeClass
+    return remember(widthClass) {
+        when (widthClass) {
+            WindowWidthSizeClass.EXPANDED -> AppShellLayout(
+                railTreatment = AppRailTreatment.Wide,
+                fallback = AppShellFallback.None,
+            )
+            WindowWidthSizeClass.MEDIUM -> AppShellLayout(
+                railTreatment = AppRailTreatment.Compact,
+                fallback = AppShellFallback.None,
+            )
+            else -> AppShellLayout(
+                railTreatment = null,
+                fallback = AppShellFallback.TopBarMenu,
+            )
+        }
     }
 }

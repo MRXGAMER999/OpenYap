@@ -13,6 +13,7 @@ object NativeAudioBridge {
 
     private data class LoadResult(
         val library: OpenYapNative?,
+        val loadedPath: String?,
         val error: String?,
     )
 
@@ -26,6 +27,19 @@ object NativeAudioBridge {
 
     val failureReason: String?
         get() = loadResult.error
+
+    /**
+     * The candidate string that was successfully passed to [Native.load] when
+     * the DLL was loaded — either an absolute path (e.g. "C:\...\openyap_native.dll")
+     * or the bare library name "openyap_native" if it was resolved from the
+     * system library path.
+     *
+     * [NativeAudioCallbackJni] uses this to call [System.load] / [System.loadLibrary]
+     * on the same binary so the JVM registers it for JNI symbol lookup without
+     * loading a second copy of the DLL into the process.
+     */
+    val loadedPath: String?
+        get() = loadResult.loadedPath
 
     private fun loadLibrary(): LoadResult {
         var lastError: String? = null
@@ -45,7 +59,7 @@ object NativeAudioBridge {
                         runCatching { library.openyap_capture_stop() }
                         runCatching { library.openyap_shutdown() }
                     })
-                    return LoadResult(library = library, error = null)
+                    return LoadResult(library = library, loadedPath = candidate, error = null)
                 }
 
                 val reason = library.readLastError()
@@ -62,7 +76,7 @@ object NativeAudioBridge {
 
         lastError?.let(System.err::println)
 
-        return LoadResult(library = null, error = lastError)
+        return LoadResult(library = null, loadedPath = null, error = lastError)
     }
 
     private fun candidateNames(): List<String> {

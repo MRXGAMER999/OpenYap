@@ -11,7 +11,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -188,7 +188,17 @@ fun AppShell(
         menuExpanded = false
     }
 
-    BoxWithConstraints(
+    val shellLayout = rememberAdaptiveShellLayout()
+    val motionScheme = MaterialTheme.motionScheme
+    val railState = rememberWideNavigationRailState(
+        if (shellLayout.isWideRail) WideNavigationRailValue.Expanded
+        else WideNavigationRailValue.Collapsed,
+    )
+    LaunchedEffect(shellLayout.isWideRail) {
+        if (shellLayout.isWideRail) railState.expand() else railState.collapse()
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(
@@ -202,15 +212,6 @@ fun AppShell(
             )
             .padding(start = Spacing.md, end = Spacing.md, bottom = Spacing.md, top = Spacing.sm),
     ) {
-        val shellLayout = remember(maxWidth) { resolveAppShellLayout(maxWidth) }
-        val motionScheme = MaterialTheme.motionScheme
-        val railState = rememberWideNavigationRailState(
-            if (shellLayout.isWideRail) WideNavigationRailValue.Expanded
-            else WideNavigationRailValue.Collapsed,
-        )
-        LaunchedEffect(shellLayout.isWideRail) {
-            if (shellLayout.isWideRail) railState.expand() else railState.collapse()
-        }
 
         AnimatedContent(
             targetState = shellLayout,

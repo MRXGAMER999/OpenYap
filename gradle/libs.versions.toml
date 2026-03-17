@@ -11,6 +11,7 @@ ktor = "3.4.1"
 jna = "5.17.0"
 material3 = "1.10.0-alpha05"
 multiplatform-nav3-ui = "1.0.0-alpha05"
+compose-multiplatform-adaptive = "1.3.0-alpha02"
 room3 = "3.0.0-alpha01"
 sqlite = "2.7.0-alpha01"
 koin-bom = "4.1.1"
@@ -38,6 +39,7 @@ ktor-serialization-json = { module = "io.ktor:ktor-serialization-kotlinx-json", 
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jna" }
 jetbrains-navigation3-ui = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", version.ref = "multiplatform-nav3-ui" }
+jetbrains-material3-adaptive = { module = "org.jetbrains.compose.material3.adaptive:adaptive", version.ref = "compose-multiplatform-adaptive" }
 room3-runtime = { module = "androidx.room3:room3-runtime", version.ref = "room3" }
 room3-compiler = { module = "androidx.room3:room3-compiler", version.ref = "room3" }
 sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.ref = "sqlite" }

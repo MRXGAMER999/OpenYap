@@ -4,6 +4,7 @@
 
 #include <Audioclient.h>
 #include <Audiopolicy.h>
+#include <avrt.h>
 #include <Mmdeviceapi.h>
 #include <wrl/client.h>
 
@@ -466,6 +467,28 @@ namespace {
         if (FAILED(com_result) && com_result != RPC_E_CHANGED_MODE) {
             set_start_failure(-2, "WASAPI thread COM initialization failed.");
             return;
+        }
+
+        // ── MMCSS: boost capture thread to "Pro Audio" scheduling class ──────────
+        // Tells the Windows Multimedia Class Scheduler to give this thread real-time
+        // priority, eliminating OS scheduler jitter in the WASAPI capture loop.
+        // This directly improves VAD accuracy and reduces audio dropouts on every
+        // recording. The RAII guard calls AvRevertMmThreadCharacteristics on all
+        // exit paths — including early returns below — without touching each one.
+        struct MmcssGuard {
+            HANDLE handle = nullptr;
+            ~MmcssGuard() {
+                if (handle) AvRevertMmThreadCharacteristics(handle);
+            }
+        };
+        DWORD mmcss_task_index = 0;
+        MmcssGuard mmcss;
+        mmcss.handle = AvSetMmThreadCharacteristicsW(L"Pro Audio", &mmcss_task_index);
+        if (!mmcss.handle) {
+            std::fprintf(stderr,
+                    "openyap_native: AvSetMmThreadCharacteristics failed (error=%lu); "
+                    "capture thread running at normal priority.\n",
+                    GetLastError());
         }
 
         // Read device_id from context (set by start() before spawning the thread)

@@ -5,6 +5,7 @@ import com.openyap.platform.NativeAudioBridge.readLastError
 import com.sun.jna.CallbackThreadInitializer
 import com.sun.jna.Native
 import kotlinx.coroutines.flow.MutableStateFlow
+
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.json.Json
@@ -47,7 +48,19 @@ class NativeAudioRecorder(
     @Volatile
     private var outputPath: String? = null
 
-    private val captureCallback =
+    // ── JNI callback (hot path) ───────────────────────────────────────────────
+    // Used when NativeAudioCallbackJni.isAvailable == true.
+    // The ShortArray arrives already allocated by the C++ bridge — no Pointer
+    // marshalling, no JNA reflection proxy, no per-chunk thread management.
+    private val jniCaptureCallback = NativeAudioCallbackJni.AudioDataCallback { pcmData, sampleCount ->
+        pcmBuffer.offer(pcmData)
+        _amplitudeFlow.value = native.openyap_amplitude(pcmData, sampleCount).coerceIn(0f, 1f)
+    }
+
+    // ── JNA callback (fallback) ───────────────────────────────────────────────
+    // Used when the DLL was built without JDK / OPENYAP_JNI_ENABLED, or when
+    // System.load failed for any other reason.
+    private val jnaCaptureCallback =
         NativeAudioBridge.OpenYapNative.AudioCallback { pcmData, sampleCount, _ ->
             val samples = pcmData.getShortArray(0, sampleCount)
             pcmBuffer.offer(samples)
@@ -55,10 +68,16 @@ class NativeAudioRecorder(
         }
 
     init {
-        Native.setCallbackThreadInitializer(
-            captureCallback,
-            CallbackThreadInitializer(true, false, "WASAPI-Audio-Callback"),
-        )
+        // CallbackThreadInitializer tells JNA to keep the WASAPI capture thread
+        // attached to the JVM between chunks (daemon=true, detach=false).
+        // Not needed for the JNI path — the C++ bridge manages thread attachment
+        // via thread-local RAII (JvmThreadGuard in jni_audio_bridge.cpp).
+        if (!NativeAudioCallbackJni.isAvailable) {
+            Native.setCallbackThreadInitializer(
+                jnaCaptureCallback,
+                CallbackThreadInitializer(true, false, "WASAPI-Audio-Callback"),
+            )
+        }
     }
 
     override suspend fun startRecording(
@@ -75,16 +94,26 @@ class NativeAudioRecorder(
             pcmBuffer.clear()
             _amplitudeFlow.value = 0f
 
-            val result = if (deviceId != null) {
-                native.openyap_capture_start_device(
-                    SampleRate,
-                    Channels,
-                    captureCallback,
-                    null,
-                    deviceId
-                )
+            val result = if (NativeAudioCallbackJni.isAvailable) {
+                // JNI path: direct CallVoidMethod from the capture thread.
+                if (deviceId != null) {
+                    NativeAudioCallbackJni.captureStartWithDeviceJni(
+                        SampleRate, Channels, jniCaptureCallback, deviceId,
+                    )
+                } else {
+                    NativeAudioCallbackJni.captureStartJni(
+                        SampleRate, Channels, jniCaptureCallback,
+                    )
+                }
             } else {
-                native.openyap_capture_start(SampleRate, Channels, captureCallback, null)
+                // JNA fallback path: reflection bridge through JNA proxy.
+                if (deviceId != null) {
+                    native.openyap_capture_start_device(
+                        SampleRate, Channels, jnaCaptureCallback, null, deviceId,
+                    )
+                } else {
+                    native.openyap_capture_start(SampleRate, Channels, jnaCaptureCallback, null)
+                }
             }
             if (result != 0) {
                 throw IllegalStateException(
@@ -103,6 +132,12 @@ class NativeAudioRecorder(
         check(isRecording.getAndSet(false)) { "No recording in progress." }
 
         val stopResult = native.openyap_capture_stop()
+        // Release the JNI GlobalRef now that the capture thread has exited its
+        // loop and will never call CallVoidMethod again.  This lets the Kotlin
+        // callback object be garbage-collected between recording sessions.
+        if (NativeAudioCallbackJni.isAvailable) {
+            runCatching { NativeAudioCallbackJni.releaseCallbackJni() }
+        }
         val disconnected = stopResult == -2
         if (disconnected) {
             pendingWarning.set("Microphone disconnected. Processing captured audio.")
@@ -156,6 +191,9 @@ class NativeAudioRecorder(
     override fun close() {
         if (isRecording.getAndSet(false)) {
             runCatching { native.openyap_capture_stop() }
+            if (NativeAudioCallbackJni.isAvailable) {
+                runCatching { NativeAudioCallbackJni.releaseCallbackJni() }
+            }
         }
         pendingWarning.set(null)
         resetState()
