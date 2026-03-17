@@ -199,6 +199,8 @@ fun AppShell(
     ) {
         val shellLayout = remember(maxWidth) { resolveAppShellLayout(maxWidth) }
         val motionScheme = MaterialTheme.motionScheme
+        var isRailExpanded by remember { mutableStateOf(false) }
+        LaunchedEffect(shellLayout.isWideRail) { isRailExpanded = shellLayout.isWideRail }
 
         AnimatedContent(
             targetState = shellLayout,
@@ -225,9 +227,9 @@ fun AppShell(
                     ShellRailPane(
                         currentRoute = currentRoute,
                         layout = activeLayout,
+                        isRailExpanded = isRailExpanded,
+                        onToggleRailExpanded = { isRailExpanded = !isRailExpanded },
                         timeLabel = timeLabel,
-                        menuExpanded = menuExpanded,
-                        onMenuExpandedChange = { menuExpanded = it },
                         onRouteSelected = ::navigateTo,
                         onPrimaryAction = { onRecordingEvent(RecordingEvent.ToggleRecording) },
                         primaryActionEnabled = isPrimaryActionEnabled,
@@ -323,9 +325,9 @@ fun AppShell(
 private fun ShellRailPane(
     currentRoute: Route,
     layout: AppShellLayout,
+    isRailExpanded: Boolean,
+    onToggleRailExpanded: () -> Unit,
     timeLabel: String,
-    menuExpanded: Boolean,
-    onMenuExpandedChange: (Boolean) -> Unit,
     onRouteSelected: (Route) -> Unit,
     onPrimaryAction: () -> Unit,
     primaryActionEnabled: Boolean,
@@ -335,12 +337,12 @@ private fun ShellRailPane(
     destinationsFocusRequester: FocusRequester,
     contentFocusRequester: FocusRequester,
 ) {
-    val treatment = layout.railTreatment ?: return
+    if (layout.railTreatment == null) return
     val reducedMotion = reducedMotionEnabled()
     val motionScheme = MaterialTheme.motionScheme
     val railWidth by animateDpAsState(
-        targetValue = treatment.containerWidth,
-        animationSpec = if (reducedMotion) snap() else motionScheme.fastSpatialSpec(),
+        targetValue = if (isRailExpanded) 240.dp else 80.dp,
+        animationSpec = if (reducedMotion) snap() else motionScheme.defaultSpatialSpec(),
         label = "shellRailWidth",
     )
 
@@ -350,15 +352,12 @@ private fun ShellRailPane(
             .width(railWidth)
             .padding(vertical = Spacing.md),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Spacing.md),
+        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
         ShellRailHeader(
-            treatment = treatment,
+            isRailExpanded = isRailExpanded,
+            onToggleRailExpanded = onToggleRailExpanded,
             timeLabel = timeLabel,
-            menuExpanded = menuExpanded,
-            onMenuExpandedChange = onMenuExpandedChange,
-            currentRoute = currentRoute,
-            onRouteSelected = onRouteSelected,
             onPrimaryAction = onPrimaryAction,
             primaryActionEnabled = primaryActionEnabled,
             primaryActionStopsRecording = primaryActionStopsRecording,
@@ -371,6 +370,7 @@ private fun ShellRailPane(
             destinations = primaryRailRoutes,
             currentRoute = currentRoute,
             onRouteSelected = onRouteSelected,
+            isExpanded = isRailExpanded,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
@@ -380,8 +380,6 @@ private fun ShellRailPane(
                     next = contentFocusRequester
                 }
                 .semantics { traversalIndex = 2f },
-            treatment = treatment,
-            title = "",
         )
     }
 }
@@ -389,12 +387,9 @@ private fun ShellRailPane(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ShellRailHeader(
-    treatment: AppRailTreatment,
+    isRailExpanded: Boolean,
+    onToggleRailExpanded: () -> Unit,
     timeLabel: String,
-    menuExpanded: Boolean,
-    onMenuExpandedChange: (Boolean) -> Unit,
-    currentRoute: Route,
-    onRouteSelected: (Route) -> Unit,
     onPrimaryAction: () -> Unit,
     primaryActionEnabled: Boolean,
     primaryActionStopsRecording: Boolean,
@@ -402,7 +397,6 @@ private fun ShellRailHeader(
     primaryActionFocusRequester: FocusRequester,
     nextFocusRequester: FocusRequester,
 ) {
-    val isWide = treatment == AppRailTreatment.Wide
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -410,88 +404,40 @@ private fun ShellRailHeader(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
-        if (treatment == AppRailTreatment.CompactFallback) {
-            Box {
-                IconButton(
-                    onClick = { onMenuExpandedChange(!menuExpanded) },
-                    modifier = Modifier
-                        .focusRequester(menuFocusRequester)
-                        .focusProperties { next = primaryActionFocusRequester }
-                        .semantics {
-                            role = Role.Button
-                            contentDescription = if (menuExpanded) {
-                                "Close navigation menu"
-                            } else {
-                                "Open navigation menu"
-                            }
-                            traversalIndex = 0f
-                        },
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Menu,
-                        contentDescription = null,
-                    )
-                }
-
-                ShellRouteMenu(
-                    expanded = menuExpanded,
-                    currentRoute = currentRoute,
-                    onDismiss = { onMenuExpandedChange(false) },
-                    onRouteSelected = onRouteSelected,
-                )
-            }
-
-            Text(
-                text = timeLabel,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (isRailExpanded) Arrangement.SpaceBetween else Arrangement.Center,
+        ) {
+            RailToggleButton(
+                isExpanded = isRailExpanded,
+                onToggle = onToggleRailExpanded,
+                modifier = Modifier
+                    .focusRequester(menuFocusRequester)
+                    .focusProperties { next = primaryActionFocusRequester }
+                    .semantics {
+                        role = Role.Button
+                        contentDescription = if (isRailExpanded) "Collapse navigation" else "Expand navigation"
+                        traversalIndex = 0f
+                    },
             )
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
+            if (isRailExpanded) {
                 Text(
-                    text = timeLabel,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = "OpenYap",
+                    style = MaterialTheme.typography.titleLargeEmphasized,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-
-                Box {
-                    IconButton(
-                        onClick = { onMenuExpandedChange(!menuExpanded) },
-                        modifier = Modifier
-                            .focusRequester(menuFocusRequester)
-                            .focusProperties { next = primaryActionFocusRequester }
-                            .semantics {
-                                role = Role.Button
-                                contentDescription = if (menuExpanded) {
-                                    "Close navigation menu"
-                                } else {
-                                    "Open navigation menu"
-                                }
-                                traversalIndex = 0f
-                            },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Menu,
-                            contentDescription = null,
-                        )
-                    }
-
-                    ShellRouteMenu(
-                        expanded = menuExpanded,
-                        currentRoute = currentRoute,
-                        onDismiss = { onMenuExpandedChange(false) },
-                        onRouteSelected = onRouteSelected,
-                    )
-                }
             }
         }
 
+        Text(
+            text = timeLabel,
+            style = if (isRailExpanded) MaterialTheme.typography.labelLarge else MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
         PrimaryShellAction(
-            expanded = isWide,
+            expanded = isRailExpanded,
             enabled = primaryActionEnabled,
             stopsRecording = primaryActionStopsRecording,
             onClick = onPrimaryAction,
@@ -507,14 +453,6 @@ private fun ShellRailHeader(
                     traversalIndex = 1f
                 },
         )
-
-        if (isWide) {
-            Text(
-                text = "OpenYap",
-                style = MaterialTheme.typography.titleLargeEmphasized,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-        }
     }
 }
 

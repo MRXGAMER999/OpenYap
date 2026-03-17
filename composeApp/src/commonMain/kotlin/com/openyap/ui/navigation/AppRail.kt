@@ -1,42 +1,54 @@
 package com.openyap.ui.navigation
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuOpen
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
-import androidx.compose.material3.NavigationRailItemDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.WideNavigationRail
-import androidx.compose.material3.WideNavigationRailDefaults
-import androidx.compose.material3.WideNavigationRailItem
-import androidx.compose.material3.WideNavigationRailItemDefaults
-import androidx.compose.material3.WideNavigationRailValue
-import androidx.compose.material3.rememberWideNavigationRailState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.openyap.ui.theme.Spacing
+import com.openyap.ui.theme.reducedMotionEnabled
+
+private val RailItemHeight = 56.dp
+private val RailItemSpacing = 4.dp
+private val RailItemSlot = RailItemHeight + RailItemSpacing
+private val ExpandedIndicatorWidth = 216.dp
+private val CollapsedIndicatorWidth = 56.dp
 
 @Immutable
 data class AppRailPrimaryAction(
@@ -47,145 +59,85 @@ data class AppRailPrimaryAction(
     val onClick: (() -> Unit)? = null,
 )
 
+/**
+ * Navigation rail with an animated sliding indicator that uses M3 Expressive
+ * spring physics. The indicator stretches asymmetrically: the leading edge
+ * springs ahead while the trailing edge follows, creating an organic morph.
+ */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun AppRail(
     destinations: List<RailDestination>,
     currentRoute: Route,
     onRouteSelected: (Route) -> Unit,
+    isExpanded: Boolean,
     modifier: Modifier = Modifier,
-    treatment: AppRailTreatment = AppRailTreatment.Compact,
-    title: String = "OpenYap",
-    primaryAction: AppRailPrimaryAction? = null,
 ) {
-    val hasHeader = title.isNotBlank() || primaryAction != null
-    when (treatment) {
-        AppRailTreatment.Wide -> WideAppRail(
-            destinations = destinations,
-            currentRoute = currentRoute,
-            onRouteSelected = onRouteSelected,
-            modifier = modifier,
-            title = title,
-            primaryAction = primaryAction,
-            hasHeader = hasHeader,
-        )
-
-        AppRailTreatment.Compact,
-        AppRailTreatment.CompactFallback,
-        -> CompactAppRail(
-            destinations = destinations,
-            currentRoute = currentRoute,
-            onRouteSelected = onRouteSelected,
-            modifier = modifier,
-            treatment = treatment,
-            title = title,
-            primaryAction = primaryAction,
-            hasHeader = hasHeader,
-        )
+    val selectedIndex = remember(currentRoute, destinations) {
+        destinations.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
     }
-}
+    val motionScheme = MaterialTheme.motionScheme
+    val reducedMotion = reducedMotionEnabled()
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun WideAppRail(
-    destinations: List<RailDestination>,
-    currentRoute: Route,
-    onRouteSelected: (Route) -> Unit,
-    modifier: Modifier,
-    title: String,
-    primaryAction: AppRailPrimaryAction?,
-    hasHeader: Boolean,
-) {
-    val colors = wideRailItemColors()
-    WideNavigationRail(
-        modifier = modifier.width(AppRailTreatment.Wide.containerWidth),
-        state = rememberWideNavigationRailState(WideNavigationRailValue.Expanded),
-        colors = WideNavigationRailDefaults.colors(
-            containerColor = Color.Transparent,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        ),
-        header = if (hasHeader) {
-            {
-                AppRailHeader(
-                    treatment = AppRailTreatment.Wide,
-                    title = title,
-                    primaryAction = primaryAction,
-                )
-            }
-        } else {
-            null
-        },
-    ) {
-        destinations.forEach { destination ->
-            WideNavigationRailItem(
-                selected = currentRoute == destination.route,
-                onClick = { onRouteSelected(destination.route) },
-                icon = {
-                    Icon(
-                        imageVector = destination.iconFor(currentRoute == destination.route),
-                        contentDescription = if (AppRailTreatment.Wide.showLabels) null else destination.label,
-                    )
-                },
-                label = { Text(destination.label) },
-                railExpanded = true,
-                colors = colors,
-            )
-        }
-    }
-}
+    var previousIndex by remember { mutableIntStateOf(selectedIndex) }
+    val movingDown = selectedIndex > previousIndex
+    SideEffect { previousIndex = selectedIndex }
 
-@Composable
-private fun CompactAppRail(
-    destinations: List<RailDestination>,
-    currentRoute: Route,
-    onRouteSelected: (Route) -> Unit,
-    modifier: Modifier,
-    treatment: AppRailTreatment,
-    title: String,
-    primaryAction: AppRailPrimaryAction?,
-    hasHeader: Boolean,
-) {
-    NavigationRail(
-        modifier = modifier
-            .fillMaxHeight()
-            .width(treatment.containerWidth),
-        containerColor = Color.Transparent,
-        header = if (hasHeader) {
-            {
-                AppRailHeader(
-                    treatment = treatment,
-                    title = title,
-                    primaryAction = primaryAction,
-                )
-            }
-        } else {
-            null
+    val targetTopDp = RailItemSlot * selectedIndex
+    val targetBottomDp = targetTopDp + RailItemHeight
+
+    val indicatorTop by animateDpAsState(
+        targetValue = targetTopDp,
+        animationSpec = when {
+            reducedMotion -> snap()
+            movingDown -> motionScheme.defaultSpatialSpec()
+            else -> motionScheme.fastSpatialSpec()
         },
+        label = "indicatorTop",
+    )
+    val indicatorBottom by animateDpAsState(
+        targetValue = targetBottomDp,
+        animationSpec = when {
+            reducedMotion -> snap()
+            movingDown -> motionScheme.fastSpatialSpec()
+            else -> motionScheme.defaultSpatialSpec()
+        },
+        label = "indicatorBottom",
+    )
+
+    val indicatorWidth by animateDpAsState(
+        targetValue = if (isExpanded) ExpandedIndicatorWidth else CollapsedIndicatorWidth,
+        animationSpec = if (reducedMotion) snap() else motionScheme.defaultSpatialSpec(),
+        label = "indicatorWidth",
+    )
+
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.TopCenter,
     ) {
-        Column(
+        val indicatorHeight = (indicatorBottom - indicatorTop).coerceAtLeast(0.dp)
+        Box(
             modifier = Modifier
-                .fillMaxHeight()
-                .verticalScroll(rememberScrollState()),
+                .offset(y = indicatorTop)
+                .width(indicatorWidth)
+                .height(indicatorHeight)
+                .clip(RoundedCornerShape(50))
+                .background(MaterialTheme.colorScheme.secondaryContainer),
+        )
+
+        Column(
+            modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(RailItemSpacing),
         ) {
-            destinations.forEach { destination ->
-                NavigationRailItem(
-                    selected = currentRoute == destination.route,
+            destinations.forEachIndexed { index, destination ->
+                RailItem(
+                    destination = destination,
+                    isSelected = index == selectedIndex,
+                    isExpanded = isExpanded,
                     onClick = { onRouteSelected(destination.route) },
-                    icon = {
-                        Icon(
-                            imageVector = destination.iconFor(currentRoute == destination.route),
-                            contentDescription = if (treatment.showLabels) null else destination.label,
-                        )
-                    },
-                    label = if (treatment.showLabels) {
-                        { Text(destination.label, style = MaterialTheme.typography.labelSmall) }
-                    } else {
-                        null
-                    },
-                    alwaysShowLabel = treatment.showLabels,
-                    colors = railItemColors(),
+                    modifier = Modifier.height(RailItemHeight).fillMaxWidth(),
+                    reducedMotion = reducedMotion,
                 )
             }
         }
@@ -194,29 +146,24 @@ private fun CompactAppRail(
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun AppRailHeader(
-    treatment: AppRailTreatment,
-    title: String,
-    primaryAction: AppRailPrimaryAction?,
+fun RailToggleButton(
+    isExpanded: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Spacing.sm, vertical = Spacing.md),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
-    ) {
-                primaryAction?.let {
-            AppRailPrimaryActionChip(action = it, treatment = treatment)
-        }
-        if (treatment.showTitle) {
-            Text(
-                text = title,
-                style = if (treatment == AppRailTreatment.Wide) {
-                    MaterialTheme.typography.titleLargeEmphasized
-                } else {
-                    MaterialTheme.typography.titleMediumEmphasized
-                },
+    val reducedMotion = reducedMotionEnabled()
+    val motionScheme = MaterialTheme.motionScheme
+
+    IconButton(onClick = onToggle, modifier = modifier) {
+        Crossfade(
+            targetState = isExpanded,
+            animationSpec = if (reducedMotion) snap() else motionScheme.defaultEffectsSpec(),
+            label = "railToggleIcon",
+        ) { expanded ->
+            Icon(
+                imageVector = if (expanded) Icons.AutoMirrored.Filled.MenuOpen else Icons.Default.Menu,
+                contentDescription = if (expanded) "Collapse navigation" else "Expand navigation",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -224,75 +171,54 @@ private fun AppRailHeader(
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun AppRailPrimaryActionChip(
-    action: AppRailPrimaryAction,
-    treatment: AppRailTreatment,
+private fun RailItem(
+    destination: RailDestination,
+    isSelected: Boolean,
+    isExpanded: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    reducedMotion: Boolean = false,
 ) {
-    Surface(
-        onClick = { action.onClick?.invoke() },
-        enabled = action.enabled && action.onClick != null,
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        shape = if (treatment == AppRailTreatment.Wide) {
-            MaterialTheme.shapes.medium
-        } else {
-            MaterialTheme.shapes.medium
-        },
+    val motionScheme = MaterialTheme.motionScheme
+    val contentColor by animateColorAsState(
+        targetValue = if (isSelected)
+            MaterialTheme.colorScheme.onSecondaryContainer
+        else
+            MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = if (reducedMotion) snap() else motionScheme.defaultEffectsSpec(),
+        label = "railItemColor",
+    )
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .clickable(role = Role.Tab, onClick = onClick)
+            .padding(horizontal = Spacing.md),
+        contentAlignment = Alignment.Center,
     ) {
-        if (treatment == AppRailTreatment.Wide) {
-            Row(
-                modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-            ) {
-                Icon(
-                    imageVector = action.icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Text(action.label, style = MaterialTheme.typography.labelLargeEmphasized)
-            }
-        } else {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(MaterialTheme.shapes.medium)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = action.icon,
-                    contentDescription = action.contentDescription,
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = if (isExpanded) Arrangement.spacedBy(Spacing.md) else Arrangement.Center,
+            modifier = if (isExpanded) Modifier.fillMaxWidth().padding(start = Spacing.xs) else Modifier,
+        ) {
+            Icon(
+                imageVector = destination.iconFor(isSelected),
+                contentDescription = if (!isExpanded) destination.label else null,
+                modifier = Modifier.size(24.dp),
+                tint = contentColor,
+            )
+            if (isExpanded) {
+                Text(
+                    text = destination.label,
+                    style = if (isSelected) MaterialTheme.typography.labelLargeEmphasized
+                    else MaterialTheme.typography.labelLarge,
+                    color = contentColor,
+                    maxLines = 1,
                 )
             }
         }
     }
 }
-
-@Composable
-private fun railItemColors() = NavigationRailItemDefaults.colors(
-    selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-    selectedTextColor = MaterialTheme.colorScheme.onSecondaryContainer,
-    indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    disabledIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
-    disabledTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
-)
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun wideRailItemColors() = WideNavigationRailItemDefaults.colors(
-    selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
-    selectedTextColor = MaterialTheme.colorScheme.onSecondaryContainer,
-    selectedIndicatorColor = MaterialTheme.colorScheme.secondaryContainer,
-    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-    disabledIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
-    disabledTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
-)
 
 private fun RailDestination.iconFor(selected: Boolean): ImageVector {
     return if (selected) selectedIcon else unselectedIcon
