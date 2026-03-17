@@ -34,6 +34,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -55,6 +56,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -548,47 +550,15 @@ private fun PrimaryShellAction(
     val actionLabel = if (stopsRecording) "Stop recording" else "Record thought"
     val actionIcon = if (stopsRecording) Icons.Default.Stop else Icons.Default.Mic
 
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier,
-        color = MaterialTheme.colorScheme.primaryContainer,
+    ExtendedFloatingActionButton(
+        text = { Text(actionLabel, style = MaterialTheme.typography.labelLargeEmphasized) },
+        icon = { Icon(actionIcon, contentDescription = null, modifier = Modifier.size(20.dp)) },
+        onClick = { if (enabled) onClick() },
+        expanded = expanded,
+        modifier = modifier.then(if (!enabled) Modifier.alpha(0.38f) else Modifier),
+        containerColor = MaterialTheme.colorScheme.primaryContainer,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        shape = if (expanded) MaterialTheme.shapes.large else MaterialTheme.shapes.extraLarge,
-        tonalElevation = 4.dp,
-        shadowElevation = 4.dp,
-    ) {
-        if (expanded) {
-            Row(
-                modifier = Modifier
-                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                    .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-            ) {
-                Icon(
-                    imageVector = actionIcon,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Text(
-                    text = actionLabel,
-                    style = MaterialTheme.typography.labelLargeEmphasized,
-                )
-            }
-        } else {
-            Box(
-                modifier = Modifier.size(48.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = actionIcon,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        }
-    }
+    )
 }
 
 private fun primaryActionContentDescription(stopsRecording: Boolean): String =
