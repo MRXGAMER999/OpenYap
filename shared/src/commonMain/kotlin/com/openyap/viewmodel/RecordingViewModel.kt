@@ -313,7 +313,7 @@ class RecordingViewModel(
         } catch (e: Exception) {
             currentRecordingPath = null
             recordingStartedAt = null
-            setActiveSession(null)
+            setActiveSession(null, session.commandClipboardSnapshotTokenOrNull())
             _state.update {
                 it.copy(
                     recordingState = RecordingState.Error(e.message ?: "Failed to start recording"),
@@ -386,7 +386,7 @@ class RecordingViewModel(
             overlayController.dismiss()
             currentRecordingPath?.let { deleteFile(it) }
             currentRecordingPath = null
-            setActiveSession(null)
+            setActiveSession(null, activeSession.commandClipboardSnapshotTokenOrNull())
             return
         }
 
@@ -399,7 +399,7 @@ class RecordingViewModel(
             currentRecordingPath?.let { deleteFile(it) }
             currentRecordingPath = null
             currentProcessingPath = null
-            setActiveSession(null)
+            setActiveSession(null, activeSession.commandClipboardSnapshotTokenOrNull())
             overlayController.dismiss()
             _state.update {
                 it.copy(
@@ -681,7 +681,7 @@ class RecordingViewModel(
                     }
                 }
 
-                setActiveSession(null)
+                setActiveSession(null, session.commandClipboardSnapshotTokenOrNull())
                 currentProcessingPath = null
                 delay(2000)
                 overlayController.dismiss()
@@ -700,7 +700,7 @@ class RecordingViewModel(
             } catch (e: Exception) {
                 currentProcessingPath = null
                 if (generation == processingGeneration.get()) {
-                    setActiveSession(null)
+                    setActiveSession(null, activeSession.commandClipboardSnapshotTokenOrNull())
                     _state.update {
                         it.copy(
                             recordingState = RecordingState.Error(e.message ?: "Processing failed"),
@@ -733,7 +733,7 @@ class RecordingViewModel(
                 currentRecordingPath = null
                 overlayController.dismiss()
                 _state.update { it.copy(recordingState = RecordingState.Idle) }
-                setActiveSession(null)
+                setActiveSession(null, activeSession.commandClipboardSnapshotTokenOrNull())
             }
 
             is RecordingState.Processing -> {
@@ -744,7 +744,7 @@ class RecordingViewModel(
                 currentProcessingPath = null
                 overlayController.dismiss()
                 _state.update { it.copy(recordingState = RecordingState.Idle) }
-                setActiveSession(null)
+                setActiveSession(null, activeSession.commandClipboardSnapshotTokenOrNull())
             }
 
             else -> {}
@@ -780,7 +780,7 @@ class RecordingViewModel(
             processingGeneration.incrementAndGet()
             processingJob?.cancel()
             processingJob = null
-            setActiveSession(null)
+            setActiveSession(null, activeSession.commandClipboardSnapshotTokenOrNull())
         }
         clearSessionContext()
         super.onCleared()
@@ -933,16 +933,28 @@ class RecordingViewModel(
 
     private suspend fun restoreCommandClipboardIfNeeded(session: RecordingSession) {
         if (session is RecordingSession.Command) {
-            pasteAutomation.restoreClipboard(session.clipboardSnapshotToken)
+            pasteAutomation.restoreClipboardIfUnchanged(session.clipboardSnapshotToken)
         }
     }
 
-    private suspend fun setActiveSession(session: RecordingSession?) {
+    private suspend fun setActiveSession(
+        session: RecordingSession?,
+        clipboardSnapshotToken: ClipboardSnapshotToken? = null,
+    ) {
         val previousSession = activeSession
         if (previousSession != null && previousSession !== session) {
-            restoreCommandClipboardIfNeeded(previousSession)
+            val tokenToRestore = clipboardSnapshotToken ?: previousSession.commandClipboardSnapshotTokenOrNull()
+            if (tokenToRestore != null &&
+                pasteAutomation.getCurrentClipboardSnapshotToken() == tokenToRestore
+            ) {
+                pasteAutomation.restoreClipboardIfUnchanged(tokenToRestore)
+            }
         }
         activeSession = session
+    }
+
+    private fun RecordingSession?.commandClipboardSnapshotTokenOrNull(): ClipboardSnapshotToken? {
+        return (this as? RecordingSession.Command)?.clipboardSnapshotToken
     }
 
     private suspend fun ensureProcessingStillActive(generation: Int) {

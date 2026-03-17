@@ -20,6 +20,7 @@ import java.awt.datatransfer.StringSelection
 import java.awt.datatransfer.Transferable
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicReference
 
 class WindowsPasteAutomation(
     private val clipboardContentWriter: (Transferable) -> Unit = {
@@ -53,12 +54,18 @@ class WindowsPasteAutomation(
         val contents: Transferable,
     )
 
+    private data class OwnedClipboard(
+        val token: ClipboardSnapshotToken,
+        val sequenceNumber: Long,
+    )
+
     private val clipboardUser32 by lazy {
         Native.load("user32", ClipboardUser32::class.java)
     }
 
     private val foregroundDetector by lazy { WindowsForegroundAppDetector() }
     private val clipboardSnapshots = ConcurrentHashMap<String, ClipboardSnapshot>()
+    private val ownedClipboard = AtomicReference<OwnedClipboard?>(null)
 
     override suspend fun captureSelectedText(activeCommandHotkey: HotkeyBinding?): SelectionCaptureResult = withContext(Dispatchers.IO) {
         val sourceWindow = foregroundDetector.getForegroundWindowContext()
@@ -83,14 +90,15 @@ class WindowsPasteAutomation(
                 restoreClipboard(snapshotToken)
                 return@withContext SelectionCaptureResult.Empty
             }
+            markClipboardOwnership(snapshotToken, sequenceAfter)
 
             val clipboardText = readClipboardText(clipboard)
             if (clipboardText == null) {
-                restoreClipboard(snapshotToken)
+                restoreClipboardIfUnchanged(snapshotToken)
                 return@withContext SelectionCaptureResult.Failure
             }
             if (clipboardText.isBlank()) {
-                restoreClipboard(snapshotToken)
+                restoreClipboardIfUnchanged(snapshotToken)
                 return@withContext SelectionCaptureResult.Empty
             }
 
@@ -100,15 +108,26 @@ class WindowsPasteAutomation(
                 sourceWindow = sourceWindow,
             )
         } catch (_: Exception) {
-            runCatching { restoreClipboard(snapshotToken) }
+            runCatching { restoreClipboardIfUnchanged(snapshotToken) }
             SelectionCaptureResult.Failure
         }
+    }
+
+    override suspend fun getCurrentClipboardSnapshotToken(): ClipboardSnapshotToken? = withContext(Dispatchers.IO) {
+        currentOwnedClipboardToken()
     }
 
     override suspend fun restoreClipboard(snapshotToken: ClipboardSnapshotToken) = withContext(Dispatchers.IO) {
         val snapshot = clipboardSnapshots[snapshotToken.id] ?: return@withContext
         writeClipboardContents(snapshot.contents)
+        clearClipboardOwnership(snapshotToken)
         clipboardSnapshots.remove(snapshotToken.id, snapshot)
+    }
+
+    override suspend fun restoreClipboardIfUnchanged(snapshotToken: ClipboardSnapshotToken) = withContext(Dispatchers.IO) {
+        if (currentOwnedClipboardToken() == snapshotToken) {
+            restoreClipboard(snapshotToken)
+        }
     }
 
     override suspend fun pasteTextToWindow(
@@ -131,6 +150,7 @@ class WindowsPasteAutomation(
 
                 writeClipboardContents(StringSelection(text))
                 delay(CLIPBOARD_WRITE_DELAY_MS)
+                snapshotToken?.let { markClipboardOwnership(it, clipboardUser32.GetClipboardSequenceNumber().toLong()) }
                 val pasteForegroundHandle = currentForegroundHandle()
                 if (pasteForegroundHandle != targetHandle) {
                     throw IllegalStateException("Paste target changed before sending paste input.")
@@ -138,7 +158,7 @@ class WindowsPasteAutomation(
                 sendCtrlV()
                 delay(PASTE_SETTLE_DELAY_MS)
             } finally {
-                snapshotToken?.let { restoreClipboard(it) }
+                snapshotToken?.let { restoreClipboardIfUnchanged(it) }
             }
         }
     }
@@ -209,8 +229,32 @@ class WindowsPasteAutomation(
         return clipboardSnapshots.containsKey(snapshotToken.id)
     }
 
+    internal fun markClipboardOwnershipForTest(snapshotToken: ClipboardSnapshotToken, sequenceNumber: Long) {
+        markClipboardOwnership(snapshotToken, sequenceNumber)
+    }
+
     private fun writeClipboardContents(contents: Transferable) {
         clipboardContentWriter(contents)
+    }
+
+    private fun markClipboardOwnership(snapshotToken: ClipboardSnapshotToken, sequenceNumber: Long) {
+        ownedClipboard.set(OwnedClipboard(snapshotToken, sequenceNumber))
+    }
+
+    private fun clearClipboardOwnership(snapshotToken: ClipboardSnapshotToken) {
+        ownedClipboard.updateAndGet { owned ->
+            if (owned?.token == snapshotToken) null else owned
+        }
+    }
+
+    private fun currentOwnedClipboardToken(): ClipboardSnapshotToken? {
+        val owned = ownedClipboard.get() ?: return null
+        val currentSequenceNumber = clipboardUser32.GetClipboardSequenceNumber().toLong()
+        if (currentSequenceNumber != owned.sequenceNumber) {
+            ownedClipboard.compareAndSet(owned, null)
+            return null
+        }
+        return owned.token
     }
 
     private fun readClipboardText(clipboard: java.awt.datatransfer.Clipboard): String? {

@@ -4,7 +4,9 @@ import com.openyap.model.HotkeyBinding
 
 interface PasteAutomation {
     suspend fun captureSelectedText(activeCommandHotkey: HotkeyBinding? = null): SelectionCaptureResult
+    suspend fun getCurrentClipboardSnapshotToken(): ClipboardSnapshotToken?
     suspend fun restoreClipboard(snapshotToken: ClipboardSnapshotToken)
+    suspend fun restoreClipboardIfUnchanged(snapshotToken: ClipboardSnapshotToken)
     suspend fun pasteTextToWindow(
         text: String,
         targetWindow: ForegroundWindowContext,
