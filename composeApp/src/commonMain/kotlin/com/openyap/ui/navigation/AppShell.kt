@@ -30,7 +30,7 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -69,6 +69,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -149,9 +150,8 @@ fun AppShell(
                     color = MaterialTheme.colorScheme.onBackground,
                 )
                 Spacer(Modifier.height(Spacing.sm))
-                CircularProgressIndicator(
+                CircularWavyProgressIndicator(
                     modifier = Modifier.size(24.dp),
-                    strokeWidth = 2.dp,
                 )
             }
         }
@@ -558,9 +558,15 @@ private fun PrimaryShellAction(
         text = { Text(actionLabel, style = MaterialTheme.typography.labelLargeEmphasized) },
         icon = { Icon(actionIcon, contentDescription = null, modifier = Modifier.size(24.dp)) },
         shape = FloatingActionButtonDefaults.mediumExtendedFabShape,
-        onClick = { if (enabled) onClick() },
+        onClick = onClick,
         expanded = expanded,
-        modifier = modifier.then(if (!enabled) Modifier.alpha(0.38f) else Modifier),
+        modifier = modifier.then(
+            if (!enabled) Modifier
+                .alpha(0.38f)
+                .semantics { @Suppress("DEPRECATION") disabled() }
+                .focusProperties { canFocus = false }
+            else Modifier
+        ),
         containerColor = MaterialTheme.colorScheme.primaryContainer,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
     )

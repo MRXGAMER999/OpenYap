@@ -33,7 +33,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -198,9 +198,8 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        CircularProgressIndicator(
+                        CircularWavyProgressIndicator(
                             modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp
                         )
                         Text(
                             "Loading audio devices...",
@@ -755,15 +754,15 @@ private fun SaveMessage(message: String?, onDismiss: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ModelLoadingState(message: String) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(Spacing.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CircularProgressIndicator(
+        CircularWavyProgressIndicator(
             modifier = Modifier.size(18.dp),
-            strokeWidth = 2.dp,
         )
         Text(
             message,
@@ -856,6 +855,7 @@ private fun FeatureToggleRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun UseCaseChipRow(
     selected: PrimaryUseCase,
@@ -877,6 +877,7 @@ private fun UseCaseChipRow(
             if (isSelected) {
                 Button(
                     onClick = { onSelected(useCase) },
+                    shapes = ButtonDefaults.shapes(),
                     contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm),
                 ) {
                     Text(label)
@@ -884,6 +885,7 @@ private fun UseCaseChipRow(
             } else {
                 OutlinedButton(
                     onClick = { onSelected(useCase) },
+                    shapes = ButtonDefaults.shapes(),
                     contentPadding = PaddingValues(horizontal = Spacing.md, vertical = Spacing.sm),
                 ) {
                     Text(label)

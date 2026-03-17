@@ -44,7 +44,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,7 +54,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -242,7 +242,7 @@ fun OnboardingScreen(
                             animationSpec = tween(400, easing = FastOutSlowInEasing),
                             label = "progressAnim",
                         )
-                        LinearProgressIndicator(
+                        LinearWavyProgressIndicator(
                             progress = { animatedProgress },
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -373,9 +373,8 @@ fun OnboardingScreen(
                                         trailingIcon = {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 if (state.isValidatingKey) {
-                                                    CircularProgressIndicator(
+                                                    CircularWavyProgressIndicator(
                                                         modifier = Modifier.size(18.dp),
-                                                        strokeWidth = 2.dp,
                                                     )
                                                 } else if (state.keyValidationSuccess == true) {
                                                     Icon(
@@ -405,9 +404,8 @@ fun OnboardingScreen(
                                         enabled = apiKeyInput.isNotBlank() && !state.isValidatingKey && keyFormatError == null,
                                     ) {
                                         if (state.isValidatingKey) {
-                                            CircularProgressIndicator(
+                                            CircularWavyProgressIndicator(
                                                 modifier = Modifier.size(16.dp),
-                                                strokeWidth = 2.dp,
                                             )
                                         } else {
                                             Text("Save & Verify")
@@ -472,9 +470,8 @@ fun OnboardingScreen(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(Spacing.md),
                                         ) {
-                                            CircularProgressIndicator(
+                                            CircularWavyProgressIndicator(
                                                 modifier = Modifier.size(18.dp),
-                                                strokeWidth = 2.dp,
                                             )
                                             Text(
                                                 "Loading available models\u2026",
@@ -534,12 +531,11 @@ fun OnboardingScreen(
                             }
                         }
 
-                        // CTA — premium "Enter OpenYap" button
                         Button(
                             onClick = { onEvent(OnboardingEvent.CompleteOnboarding) },
                             enabled = state.canComplete,
                             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
-                            shape = RoundedCornerShape(14.dp),
+                            shapes = ButtonDefaults.shapes(),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary,
                             ),
