@@ -363,7 +363,7 @@ class RecordingViewModel(
             if (settings.audioFeedbackEnabled) {
                 audioFeedbackPlayer.playError()
             }
-            _effects.emit(RecordingEffect.ShowError(e.message ?: "Recording failed"))
+            _effects.tryEmit(RecordingEffect.ShowError(e.message ?: "Recording failed"))
             return@withLock
         }
 
