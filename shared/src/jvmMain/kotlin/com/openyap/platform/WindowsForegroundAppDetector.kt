@@ -2,18 +2,22 @@ package com.openyap.platform
 
 import com.sun.jna.platform.win32.Kernel32
 import com.sun.jna.platform.win32.User32
+import com.sun.jna.platform.win32.WinDef
 import com.sun.jna.platform.win32.WinNT
 import com.sun.jna.ptr.IntByReference
+import com.sun.jna.Pointer
 
 class WindowsForegroundAppDetector : ForegroundAppDetector {
 
     override fun getForegroundWindowContext(): ForegroundWindowContext {
         return try {
             val hwnd = User32.INSTANCE.GetForegroundWindow() ?: return ForegroundWindowContext(
+                windowHandle = null,
                 appName = null,
                 windowTitle = null,
             )
             val windowTitle = getWindowTitle(hwnd)
+            val windowHandle = Pointer.nativeValue(hwnd.pointer)
             val pidRef = IntByReference()
             User32.INSTANCE.GetWindowThreadProcessId(hwnd, pidRef)
             val pid = pidRef.value
@@ -23,6 +27,7 @@ class WindowsForegroundAppDetector : ForegroundAppDetector {
                 false,
                 pid,
             ) ?: return ForegroundWindowContext(
+                windowHandle = windowHandle,
                 appName = null,
                 windowTitle = windowTitle,
             )
@@ -40,6 +45,7 @@ class WindowsForegroundAppDetector : ForegroundAppDetector {
                     null
                 }
                 ForegroundWindowContext(
+                    windowHandle = windowHandle,
                     appName = appName,
                     windowTitle = windowTitle,
                 )
@@ -48,13 +54,14 @@ class WindowsForegroundAppDetector : ForegroundAppDetector {
             }
         } catch (_: Exception) {
             ForegroundWindowContext(
+                windowHandle = null,
                 appName = null,
                 windowTitle = null,
             )
         }
     }
 
-    private fun getWindowTitle(hwnd: com.sun.jna.platform.win32.WinDef.HWND): String? {
+    private fun getWindowTitle(hwnd: WinDef.HWND): String? {
         val buffer = CharArray(512)
         val length = User32.INSTANCE.GetWindowText(hwnd, buffer, buffer.size)
         return if (length > 0) String(buffer, 0, length) else null

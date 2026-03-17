@@ -25,6 +25,7 @@ data class AppSettings(
     val groqModel: String = "whisper-large-v3",
     val groqLLMModel: String = "moonshotai/kimi-k2-instruct-0905",
     val hotkeyConfig: HotkeyConfig = HotkeyConfig(),
+    val whisperModeEnabled: Boolean = false,
     val genZEnabled: Boolean = false,
     val phraseExpansionEnabled: Boolean = false,
     val dictionaryEnabled: Boolean = true,
@@ -39,3 +40,5 @@ data class AppSettings(
     val useCaseContext: String = "",
     val whisperLanguage: String = "en",
 )
+
+fun AppSettings.effectiveHotkeyConfig(): HotkeyConfig = hotkeyConfig.effectiveRuntimeConfig()

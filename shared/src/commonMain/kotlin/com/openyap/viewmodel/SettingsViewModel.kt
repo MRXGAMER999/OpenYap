@@ -5,6 +5,10 @@ import androidx.lifecycle.viewModelScope
 import com.openyap.model.AppSettings
 import com.openyap.model.AudioDevice
 import com.openyap.model.HotkeyBinding
+import com.openyap.model.HotkeyConfig
+import com.openyap.model.commandHotkeyValidationError
+import com.openyap.model.effectiveHotkeyConfig
+import com.openyap.model.hasCommandHotkeyConflict
 import com.openyap.model.PrimaryUseCase
 import com.openyap.model.TranscriptionProvider
 import com.openyap.platform.AppDataResetter
@@ -56,9 +60,14 @@ data class SettingsUiState(
     val isLoadingGroqLLMModels: Boolean = false,
     val modelsFetchError: String? = null,
     val groqLLMModelsFetchError: String? = null,
-    val hotkeyLabel: String = "Ctrl+Shift+R",
-    val isCapturingHotkey: Boolean = false,
-    val hotkeyError: String? = null,
+    val whisperModeEnabled: Boolean = false,
+    val dictationHotkeyLabel: String = "Ctrl+Shift+R",
+    val commandHotkeyLabel: String = "Ctrl+Shift+C",
+    val commandHotkeyEnabled: Boolean = true,
+    val isCapturingDictationHotkey: Boolean = false,
+    val isCapturingCommandHotkey: Boolean = false,
+    val dictationHotkeyError: String? = null,
+    val commandHotkeyError: String? = null,
     val appVersion: String = "",
     val audioDevices: List<AudioDevice> = emptyList(),
     val selectedAudioDeviceId: String? = null,
@@ -67,7 +76,10 @@ data class SettingsUiState(
     val primaryUseCase: PrimaryUseCase = PrimaryUseCase.GENERAL,
     val useCaseContext: String = "",
     val whisperLanguage: String = "en",
-)
+) {
+    val hotkeyLabel: String
+        get() = dictationHotkeyLabel
+}
 
 sealed interface SettingsEffect {
     data object ResetAppDataSucceeded : SettingsEffect
@@ -92,13 +104,25 @@ sealed interface SettingsEvent {
     data object RefreshGroqLLMModels : SettingsEvent
     data class SelectAudioDevice(val deviceId: String?) : SettingsEvent
     data object RefreshDevices : SettingsEvent
-    data object CaptureHotkey : SettingsEvent
-    data object ClearHotkeyMessage : SettingsEvent
+    data class ToggleWhisperMode(val enabled: Boolean) : SettingsEvent
+    data class ToggleCommandHotkey(val enabled: Boolean) : SettingsEvent
+    data object CaptureDictationHotkey : SettingsEvent
+    data object CaptureCommandHotkey : SettingsEvent
     data object DismissSaveMessage : SettingsEvent
     data class SelectUseCase(val useCase: PrimaryUseCase) : SettingsEvent
     data class SaveUseCaseContext(val context: String) : SettingsEvent
     data class SelectWhisperLanguage(val language: String) : SettingsEvent
 }
+
+private enum class HotkeyCaptureTarget {
+    DICTATION,
+    COMMAND,
+}
+
+private data class HotkeyValidationState(
+    val dictationError: String? = null,
+    val commandError: String? = null,
+)
 
 class SettingsViewModel(
     private val settingsRepository: SettingsRepository,
@@ -140,6 +164,7 @@ class SettingsViewModel(
                     ?.trim()
                     ?: ""
             }.getOrDefault("")
+            val hotkeyValidation = validateHotkeys(settings.hotkeyConfig)
             _state.update {
                 it.copy(
                     transcriptionProvider = settings.transcriptionProvider,
@@ -156,7 +181,12 @@ class SettingsViewModel(
                     startMinimized = settings.startMinimized,
                     launchOnStartup = launchOnStartup,
                     startupSupported = startupManager.isSupported,
-                    hotkeyLabel = formatHotkey(settings.hotkeyConfig.startHotkey),
+                    whisperModeEnabled = settings.whisperModeEnabled,
+                    dictationHotkeyLabel = formatHotkey(settings.hotkeyConfig.startHotkey),
+                    commandHotkeyLabel = formatHotkey(settings.hotkeyConfig.commandHotkey),
+                    commandHotkeyEnabled = settings.hotkeyConfig.commandHotkeyEnabled,
+                    dictationHotkeyError = hotkeyValidation.dictationError,
+                    commandHotkeyError = hotkeyValidation.commandError,
                     appVersion = version,
                     selectedAudioDeviceId = settings.audioDeviceId,
                     primaryUseCase = settings.primaryUseCase,
@@ -188,8 +218,10 @@ class SettingsViewModel(
             is SettingsEvent.ResetAppData -> resetAppData()
             is SettingsEvent.RefreshModels -> refreshModels()
             is SettingsEvent.RefreshGroqLLMModels -> refreshGroqLLMModels()
-            is SettingsEvent.CaptureHotkey -> captureHotkey()
-            is SettingsEvent.ClearHotkeyMessage -> _state.update { it.copy(hotkeyError = null) }
+            is SettingsEvent.ToggleWhisperMode -> toggleWhisperMode(event.enabled)
+            is SettingsEvent.ToggleCommandHotkey -> toggleCommandHotkey(event.enabled)
+            is SettingsEvent.CaptureDictationHotkey -> captureHotkey(HotkeyCaptureTarget.DICTATION)
+            is SettingsEvent.CaptureCommandHotkey -> captureHotkey(HotkeyCaptureTarget.COMMAND)
             is SettingsEvent.DismissSaveMessage -> _state.update { it.copy(saveMessage = null) }
             is SettingsEvent.SelectAudioDevice -> selectAudioDevice(event.deviceId)
             is SettingsEvent.RefreshDevices -> refreshDevices()
@@ -199,12 +231,14 @@ class SettingsViewModel(
         }
     }
 
-    private fun captureHotkey() {
+    private fun captureHotkey(target: HotkeyCaptureTarget) {
         viewModelScope.launch {
             _state.update {
                 it.copy(
-                    isCapturingHotkey = true,
-                    hotkeyError = null,
+                    isCapturingDictationHotkey = target == HotkeyCaptureTarget.DICTATION,
+                    isCapturingCommandHotkey = target == HotkeyCaptureTarget.COMMAND,
+                    dictationHotkeyError = if (target == HotkeyCaptureTarget.DICTATION) null else it.dictationHotkeyError,
+                    commandHotkeyError = if (target == HotkeyCaptureTarget.COMMAND) null else it.commandHotkeyError,
                     saveMessage = null
                 )
             }
@@ -214,31 +248,87 @@ class SettingsViewModel(
                     platformKeyCode = capture.platformKeyCode,
                     modifiers = capture.modifiers,
                 )
-                val updatedSettings = settingsRepository.updateSettings { settings ->
-                    settings.copy(
-                        hotkeyConfig = settings.hotkeyConfig.copy(startHotkey = binding)
-                    )
+                val currentSettings = settingsRepository.loadSettings()
+                val updatedHotkeyConfig = when (target) {
+                    HotkeyCaptureTarget.DICTATION -> currentSettings.hotkeyConfig.copy(startHotkey = binding)
+                    HotkeyCaptureTarget.COMMAND -> currentSettings.hotkeyConfig.copy(commandHotkey = binding)
                 }
-                hotkeyManager.setConfig(updatedSettings.hotkeyConfig)
+
+                val validation = validateHotkeys(updatedHotkeyConfig)
+                if (target == HotkeyCaptureTarget.COMMAND && validation.commandError != null) {
+                    _state.update {
+                        it.copy(
+                            isCapturingDictationHotkey = false,
+                            isCapturingCommandHotkey = false,
+                            dictationHotkeyError = validation.dictationError,
+                            commandHotkeyError = validation.commandError,
+                        )
+                    }
+                    return@launch
+                }
+                if (target == HotkeyCaptureTarget.DICTATION && validation.dictationError != null) {
+                    _state.update {
+                        it.copy(
+                            isCapturingDictationHotkey = false,
+                            isCapturingCommandHotkey = false,
+                            dictationHotkeyError = validation.dictationError,
+                            commandHotkeyError = validation.commandError,
+                        )
+                    }
+                    return@launch
+                }
+
+                val updatedSettings = settingsRepository.updateSettings { settings ->
+                    settings.copy(hotkeyConfig = updatedHotkeyConfig)
+                }
+                hotkeyManager.setConfig(updatedSettings.effectiveHotkeyConfig())
                 _state.update {
                     it.copy(
-                        hotkeyLabel = capture.displayLabel,
-                        isCapturingHotkey = false,
-                        saveMessage = "Hotkey updated to ${capture.displayLabel}",
+                        dictationHotkeyLabel = formatHotkey(updatedSettings.hotkeyConfig.startHotkey),
+                        commandHotkeyLabel = formatHotkey(updatedSettings.hotkeyConfig.commandHotkey),
+                        commandHotkeyEnabled = updatedSettings.hotkeyConfig.commandHotkeyEnabled,
+                        isCapturingDictationHotkey = false,
+                        isCapturingCommandHotkey = false,
+                        dictationHotkeyError = validation.dictationError,
+                        commandHotkeyError = validation.commandError,
+                        saveMessage = when (target) {
+                            HotkeyCaptureTarget.DICTATION -> "Dictation hotkey updated to ${capture.displayLabel}"
+                            HotkeyCaptureTarget.COMMAND -> "Command hotkey updated to ${capture.displayLabel}"
+                        },
                     )
                 }
             } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
                 _state.update {
                     it.copy(
-                        isCapturingHotkey = false,
-                        hotkeyError = "Hotkey capture timed out. Please try again.",
+                        isCapturingDictationHotkey = false,
+                        isCapturingCommandHotkey = false,
+                        dictationHotkeyError = if (target == HotkeyCaptureTarget.DICTATION) {
+                            "Hotkey capture timed out. Please try again."
+                        } else {
+                            it.dictationHotkeyError
+                        },
+                        commandHotkeyError = if (target == HotkeyCaptureTarget.COMMAND) {
+                            "Hotkey capture timed out. Please try again."
+                        } else {
+                            it.commandHotkeyError
+                        },
                     )
                 }
             } catch (e: Exception) {
                 _state.update {
                     it.copy(
-                        isCapturingHotkey = false,
-                        hotkeyError = e.message ?: "Failed to capture hotkey",
+                        isCapturingDictationHotkey = false,
+                        isCapturingCommandHotkey = false,
+                        dictationHotkeyError = if (target == HotkeyCaptureTarget.DICTATION) {
+                            e.message ?: "Failed to capture hotkey"
+                        } else {
+                            it.dictationHotkeyError
+                        },
+                        commandHotkeyError = if (target == HotkeyCaptureTarget.COMMAND) {
+                            e.message ?: "Failed to capture hotkey"
+                        } else {
+                            it.commandHotkeyError
+                        },
                     )
                 }
             }
@@ -379,6 +469,49 @@ class SettingsViewModel(
         }
     }
 
+    private fun toggleWhisperMode(enabled: Boolean) {
+        viewModelScope.launch {
+            val updatedSettings = settingsRepository.updateSettings { it.copy(whisperModeEnabled = enabled) }
+            _state.update {
+                it.copy(
+                    whisperModeEnabled = enabled,
+                    dictationHotkeyError = validateHotkeys(updatedSettings.hotkeyConfig).dictationError,
+                    commandHotkeyError = validateHotkeys(updatedSettings.hotkeyConfig).commandError,
+                )
+            }
+        }
+    }
+
+    private fun toggleCommandHotkey(enabled: Boolean) {
+        viewModelScope.launch {
+            val currentSettings = settingsRepository.loadSettings()
+            val updatedHotkeyConfig = currentSettings.hotkeyConfig.copy(commandHotkeyEnabled = enabled)
+            val validation = validateHotkeys(updatedHotkeyConfig)
+            if (enabled && validation.commandError != null) {
+                _state.update {
+                    it.copy(
+                        commandHotkeyEnabled = false,
+                        dictationHotkeyError = validation.dictationError,
+                        commandHotkeyError = validation.commandError,
+                    )
+                }
+                return@launch
+            }
+
+            val updatedSettings = settingsRepository.updateSettings { settings ->
+                settings.copy(hotkeyConfig = updatedHotkeyConfig)
+            }
+            hotkeyManager.setConfig(updatedSettings.effectiveHotkeyConfig())
+            _state.update {
+                it.copy(
+                    commandHotkeyEnabled = updatedSettings.hotkeyConfig.commandHotkeyEnabled,
+                    dictationHotkeyError = validation.dictationError,
+                    commandHotkeyError = validation.commandError,
+                )
+            }
+        }
+    }
+
     private fun togglePhraseExpansion(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.updateSettings { it.copy(phraseExpansionEnabled = enabled) }
@@ -453,7 +586,8 @@ class SettingsViewModel(
             try {
                 appDataResetter.reset()
                 runCatching { startupManager.setEnabled(false) }
-                hotkeyManager.setConfig(defaults.hotkeyConfig)
+                hotkeyManager.setConfig(defaults.effectiveHotkeyConfig())
+                val hotkeyValidation = validateHotkeys(defaults.hotkeyConfig)
                 _state.update {
                     it.copy(
                         transcriptionProvider = defaults.transcriptionProvider,
@@ -469,6 +603,7 @@ class SettingsViewModel(
                         soundFeedbackVolume = defaults.soundFeedbackVolume,
                         startMinimized = defaults.startMinimized,
                         launchOnStartup = defaults.launchOnStartup,
+                        whisperModeEnabled = defaults.whisperModeEnabled,
                         primaryUseCase = defaults.primaryUseCase,
                         useCaseContext = defaults.useCaseContext,
                         whisperLanguage = defaults.whisperLanguage,
@@ -478,7 +613,13 @@ class SettingsViewModel(
                         isLoadingGroqLLMModels = false,
                         modelsFetchError = null,
                         groqLLMModelsFetchError = null,
-                        hotkeyLabel = formatHotkey(defaults.hotkeyConfig.startHotkey),
+                        dictationHotkeyLabel = formatHotkey(defaults.hotkeyConfig.startHotkey),
+                        commandHotkeyLabel = formatHotkey(defaults.hotkeyConfig.commandHotkey),
+                        commandHotkeyEnabled = defaults.hotkeyConfig.commandHotkeyEnabled,
+                        isCapturingDictationHotkey = false,
+                        isCapturingCommandHotkey = false,
+                        dictationHotkeyError = hotkeyValidation.dictationError,
+                        commandHotkeyError = hotkeyValidation.commandError,
                         isResettingData = false,
                         saveMessage = "App data reset. OpenYap will walk you through onboarding again.",
                         selectedAudioDeviceId = null,
@@ -541,6 +682,19 @@ class SettingsViewModel(
             settingsRepository.updateSettings { it.copy(audioDeviceId = deviceId) }
             _state.update { it.copy(selectedAudioDeviceId = deviceId) }
         }
+    }
+
+    private fun validateHotkeys(config: HotkeyConfig): HotkeyValidationState {
+        val commandError = config.commandHotkeyValidationError()
+        val dictationError = if (config.hasCommandHotkeyConflict()) {
+            "Dictation hotkey must be different from the command hotkey."
+        } else {
+            null
+        }
+        return HotkeyValidationState(
+            dictationError = dictationError,
+            commandError = commandError,
+        )
     }
 
     private fun formatHotkey(binding: HotkeyBinding?): String {

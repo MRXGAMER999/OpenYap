@@ -28,9 +28,12 @@ class NativeAudioRecorder(
         private const val Channels = 1
         private const val Bitrate = 96000
         private const val VadFrameSamples = 960
-        private const val LeadingMarginFrames = 10
-        private const val TrailingMarginFrames = 10
-        private const val HangoverFrames = 15
+        private const val NormalLeadingMarginFrames = 10
+        private const val NormalTrailingMarginFrames = 10
+        private const val NormalHangoverFrames = 15
+        private const val WhisperLeadingMarginFrames = 18
+        private const val WhisperTrailingMarginFrames = 18
+        private const val WhisperHangoverFrames = 28
     }
 
     private val _amplitudeFlow = MutableStateFlow(0f)
@@ -39,6 +42,7 @@ class NativeAudioRecorder(
     private val pcmBuffer = ConcurrentLinkedQueue<ShortArray>()
     private val isRecording = AtomicBoolean(false)
     private val pendingWarning = AtomicReference<String?>(null)
+    private val sensitivityPreset = AtomicReference(RecordingSensitivityPreset.NORMAL)
 
     @Volatile
     private var outputPath: String? = null
@@ -57,11 +61,16 @@ class NativeAudioRecorder(
         )
     }
 
-    override suspend fun startRecording(outputPath: String, deviceId: String?) {
+    override suspend fun startRecording(
+        outputPath: String,
+        deviceId: String?,
+        sensitivityPreset: RecordingSensitivityPreset,
+    ) {
         check(isRecording.compareAndSet(false, true)) { "Recording already in progress." }
 
         try {
             this.outputPath = outputPath
+            this.sensitivityPreset.set(sensitivityPreset)
             pendingWarning.set(null)
             pcmBuffer.clear()
             _amplitudeFlow.value = 0f
@@ -199,6 +208,19 @@ class NativeAudioRecorder(
         native.openyap_vad_reset()
 
         val totalFrames = (samples.size + VadFrameSamples - 1) / VadFrameSamples
+        val preset = sensitivityPreset.get()
+        val leadingMarginFrames = when (preset) {
+            RecordingSensitivityPreset.NORMAL -> NormalLeadingMarginFrames
+            RecordingSensitivityPreset.WHISPER -> WhisperLeadingMarginFrames
+        }
+        val trailingMarginFrames = when (preset) {
+            RecordingSensitivityPreset.NORMAL -> NormalTrailingMarginFrames
+            RecordingSensitivityPreset.WHISPER -> WhisperTrailingMarginFrames
+        }
+        val hangoverFrames = when (preset) {
+            RecordingSensitivityPreset.NORMAL -> NormalHangoverFrames
+            RecordingSensitivityPreset.WHISPER -> WhisperHangoverFrames
+        }
         var firstSpeechFrame = -1
         var lastSpeechFrame = -1
 
@@ -222,10 +244,10 @@ class NativeAudioRecorder(
             return samples
         }
 
-        val startFrame = (firstSpeechFrame - LeadingMarginFrames).coerceAtLeast(0)
+        val startFrame = (firstSpeechFrame - leadingMarginFrames).coerceAtLeast(0)
         val endFrameExclusive = min(
             totalFrames,
-            lastSpeechFrame + 1 + TrailingMarginFrames + HangoverFrames,
+            lastSpeechFrame + 1 + trailingMarginFrames + hangoverFrames,
         )
         val startSample = startFrame * VadFrameSamples
         val endSample = min(samples.size, endFrameExclusive * VadFrameSamples)

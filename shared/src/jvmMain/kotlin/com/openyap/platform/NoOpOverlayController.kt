@@ -8,6 +8,7 @@ import com.openyap.model.OverlayState
 class NoOpOverlayController : OverlayController {
     override fun show() {}
     override fun updateState(state: OverlayState) {}
+    override fun updateProcessingMessage(message: String?) {}
     override fun updateLevel(level: Float) {}
     override fun updateDuration(seconds: Int) {}
     override fun dismiss() {}

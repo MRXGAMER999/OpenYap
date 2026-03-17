@@ -74,6 +74,7 @@ fun RecordingOverlay(
     state: OverlayState,
     level: Float,
     durationSeconds: Int,
+    processingMessage: String,
     flashMessage: String?,
 ) {
     val capsuleShape = RoundedCornerShape(50)
@@ -119,6 +120,7 @@ fun RecordingOverlay(
                         state = s,
                         level = level,
                         durationSeconds = durationSeconds,
+                        processingMessage = processingMessage,
                     )
 
                     OverlayState.SUCCESS -> SuccessBar()
@@ -152,6 +154,7 @@ private fun ActiveBar(
     state: OverlayState,
     level: Float,
     durationSeconds: Int,
+    processingMessage: String,
 ) {
     Row(
         modifier = Modifier.heightIn(min = 20.dp),
@@ -195,7 +198,7 @@ private fun ActiveBar(
                 )
 
                 OverlayState.PROCESSING -> Text(
-                    text = "Refining...",
+                    text = processingMessage,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     color = OverlayAccent.copy(alpha = 0.85f),

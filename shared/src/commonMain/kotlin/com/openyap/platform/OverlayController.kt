@@ -5,6 +5,7 @@ import com.openyap.model.OverlayState
 interface OverlayController {
     fun show()
     fun updateState(state: OverlayState)
+    fun updateProcessingMessage(message: String?)
     fun updateLevel(level: Float)
     fun updateDuration(seconds: Int)
     fun dismiss()

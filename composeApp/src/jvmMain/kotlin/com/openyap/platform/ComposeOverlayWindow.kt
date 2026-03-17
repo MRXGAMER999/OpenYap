@@ -92,6 +92,7 @@ fun ComposeOverlayWindow(uiState: OverlayUiState) {
                 state = uiState.state,
                 level = uiState.level,
                 durationSeconds = uiState.durationSeconds,
+                processingMessage = uiState.processingMessage,
                 flashMessage = uiState.flashMessage,
             )
         }

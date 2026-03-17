@@ -42,7 +42,11 @@ class JvmAudioRecorder : AudioRecorder {
     @Volatile
     private var currentOutputPath: String? = null
 
-    override suspend fun startRecording(outputPath: String, deviceId: String?) =
+    override suspend fun startRecording(
+        outputPath: String,
+        deviceId: String?,
+        sensitivityPreset: RecordingSensitivityPreset,
+    ) =
         withContext(Dispatchers.IO) {
             stopRecordingInternal()
 
