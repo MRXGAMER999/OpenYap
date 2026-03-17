@@ -2,6 +2,7 @@ package com.openyap.database
 
 import androidx.room3.Database
 import androidx.room3.RoomDatabase
+import androidx.room3.Transaction
 import androidx.room3.migration.Migration
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.execSQL
@@ -25,7 +26,8 @@ abstract class OpenYapDatabase : RoomDatabase() {
     abstract fun appToneDao(): AppToneDao
     abstract fun appPromptDao(): AppPromptDao
 
-    suspend fun deleteAllData() {
+    @Transaction
+    open suspend fun deleteAllData() {
         appSettingsDao().deleteAll()
         recordingEntryDao().deleteAll()
         dictionaryEntryDao().deleteAll()

@@ -9,5 +9,8 @@ import org.koin.core.annotation.Single
 class ComposeAppModule {
 
     @Single
-    fun provideOverlayController(): OverlayController = ComposeOverlayController()
+    fun provideComposeOverlayController(): ComposeOverlayController = ComposeOverlayController()
+
+    @Single
+    fun provideOverlayController(impl: ComposeOverlayController): OverlayController = impl
 }

@@ -45,6 +45,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,8 +66,9 @@ import com.openyap.model.OverlayState
 // ── Overlay-specific palette (always dark glass, independent of app theme) ──
 private val OverlayBg = Color(0xFF1A1A2E)
 private val OverlayText = Color.White
-private val OverlayAccent = Color(0xFF76D1C1)   // teal – matches app primary
-private val OverlaySuccess = Color(0xFF4ADE80)   // green
+private val OverlayAccent = Color(0xFF76D1C1)
+private val OverlaySuccess = Color(0xFF4ADE80)
+private val OverlayError = Color(0xFFFF6B6B)
 private val OverlayBorder = Color.White
 
 @Composable
@@ -127,7 +129,7 @@ fun RecordingOverlay(
             }
 
             var lastFlashMessage by remember { mutableStateOf<String?>(null) }
-            if (flashMessage != null) lastFlashMessage = flashMessage
+            SideEffect { if (flashMessage != null) lastFlashMessage = flashMessage }
 
             AnimatedVisibility(
                 visible = flashMessage != null,
@@ -255,23 +257,22 @@ private fun ErrorBar() {
             imageVector = Icons.Default.ErrorOutline,
             contentDescription = null,
             modifier = Modifier.size(14.dp),
-            tint = MaterialTheme.colorScheme.error,
+            tint = OverlayError,
         )
         Text(
             text = "Could not paste",
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.error,
+            color = OverlayError,
         )
     }
 }
 
 @Composable
 private fun FlashMessageRow(message: String, state: OverlayState) {
-    val errorColor = MaterialTheme.colorScheme.error
     val (icon, tint) = when (state) {
         OverlayState.SUCCESS -> Icons.Default.CheckCircle to OverlaySuccess
-        OverlayState.ERROR -> Icons.Default.WarningAmber to errorColor
+        OverlayState.ERROR -> Icons.Default.WarningAmber to OverlayError
         else -> Icons.Default.WarningAmber to OverlayText.copy(alpha = 0.60f)
     }
 

@@ -154,7 +154,7 @@ class RecordingViewModel(
     @Volatile
     private var currentProcessingPath: String? = null
     private var recordingStartedAt: TimeMark? = null
-    private val sessionContextEntries = ArrayDeque<SessionContextEntry>()
+    private val sessionContextEntries = java.util.concurrent.ConcurrentLinkedDeque<SessionContextEntry>()
     private var lastSuccessfulPasteAt: Instant? = null
 
     init {
@@ -309,8 +309,8 @@ class RecordingViewModel(
         }
     }
 
-    private suspend fun stopRecording() {
-        if (_state.value.recordingState !is RecordingState.Recording) return
+    private suspend fun stopRecording() { recordingMutex.withLock {
+        if (_state.value.recordingState !is RecordingState.Recording) return@withLock
 
         durationJob?.cancel()
         durationJob = null
@@ -341,7 +341,7 @@ class RecordingViewModel(
             overlayController.dismiss()
             currentRecordingPath?.let { deleteFile(it) }
             currentRecordingPath = null
-            return
+            return@withLock
         }
 
         val settings = settingsRepository.loadSettings()
@@ -364,7 +364,7 @@ class RecordingViewModel(
                 audioFeedbackPlayer.playError()
             }
             _effects.emit(RecordingEffect.ShowError(e.message ?: "Recording failed"))
-            return
+            return@withLock
         }
 
         if (settings.audioFeedbackEnabled) {
@@ -637,9 +637,9 @@ class RecordingViewModel(
                 deleteFile(path)
             }
         }
-    }
+    } }
 
-    private suspend fun cancelRecording() {
+    private suspend fun cancelRecording() { recordingMutex.withLock {
         val current = _state.value.recordingState
         when (current) {
             is RecordingState.Recording -> {
@@ -663,7 +663,7 @@ class RecordingViewModel(
 
             else -> {}
         }
-    }
+    } }
 
     fun refreshPermissions() {
         viewModelScope.launch {
@@ -690,6 +690,13 @@ class RecordingViewModel(
     }
 
     override fun onCleared() {
+        durationJob?.cancel()
+        durationJob = null
+        runCatching { kotlinx.coroutines.runBlocking { audioRecorder.stopRecording() } }
+        currentRecordingPath?.let { deleteFile(it) }
+        currentRecordingPath = null
+        currentProcessingPath?.let { deleteFile(it) }
+        currentProcessingPath = null
         clearSessionContext()
         super.onCleared()
     }
@@ -819,7 +826,7 @@ class RecordingViewModel(
             )
         )
         while (sessionContextEntries.size > MAX_SESSION_CONTEXT_ENTRIES) {
-            sessionContextEntries.removeFirst()
+            sessionContextEntries.pollFirst() ?: break
         }
     }
 
