@@ -21,7 +21,11 @@ import java.awt.datatransfer.Transferable
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
-class WindowsPasteAutomation : PasteAutomation {
+class WindowsPasteAutomation(
+    private val clipboardContentWriter: (Transferable) -> Unit = {
+        Toolkit.getDefaultToolkit().systemClipboard.setContents(it, null)
+    },
+) : PasteAutomation {
 
     private interface ClipboardUser32 : com.sun.jna.win32.StdCallLibrary {
         fun GetClipboardSequenceNumber(): Int
@@ -49,9 +53,11 @@ class WindowsPasteAutomation : PasteAutomation {
         val contents: Transferable,
     )
 
-    private val clipboardUser32 = Native.load("user32", ClipboardUser32::class.java)
+    private val clipboardUser32 by lazy {
+        Native.load("user32", ClipboardUser32::class.java)
+    }
 
-    private val foregroundDetector = WindowsForegroundAppDetector()
+    private val foregroundDetector by lazy { WindowsForegroundAppDetector() }
     private val clipboardSnapshots = ConcurrentHashMap<String, ClipboardSnapshot>()
 
     override suspend fun captureSelectedText(activeCommandHotkey: HotkeyBinding?): SelectionCaptureResult = withContext(Dispatchers.IO) {
@@ -100,8 +106,9 @@ class WindowsPasteAutomation : PasteAutomation {
     }
 
     override suspend fun restoreClipboard(snapshotToken: ClipboardSnapshotToken) = withContext(Dispatchers.IO) {
-        val snapshot = clipboardSnapshots.remove(snapshotToken.id) ?: return@withContext
-        Toolkit.getDefaultToolkit().systemClipboard.setContents(snapshot.contents, null)
+        val snapshot = clipboardSnapshots[snapshotToken.id] ?: return@withContext
+        writeClipboardContents(snapshot.contents)
+        clipboardSnapshots.remove(snapshotToken.id, snapshot)
     }
 
     override suspend fun pasteTextToWindow(
@@ -122,7 +129,7 @@ class WindowsPasteAutomation : PasteAutomation {
                     throw IllegalStateException("Paste target changed before replacement.")
                 }
 
-                Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
+                writeClipboardContents(StringSelection(text))
                 delay(CLIPBOARD_WRITE_DELAY_MS)
                 val pasteForegroundHandle = currentForegroundHandle()
                 if (pasteForegroundHandle != targetHandle) {
@@ -166,24 +173,24 @@ class WindowsPasteAutomation : PasteAutomation {
     private suspend fun pasteJna(text: String, restoreClipboard: Boolean) {
         val clipboard = Toolkit.getDefaultToolkit().systemClipboard
         val originalContent = clipboard.getContents(null)
-        clipboard.setContents(StringSelection(text), null)
+        writeClipboardContents(StringSelection(text))
         delay(CLIPBOARD_WRITE_DELAY_MS)
         sendCtrlV()
         if (restoreClipboard) {
             delay(PASTE_SETTLE_DELAY_MS)
-            clipboard.setContents(originalContent, null)
+            writeClipboardContents(originalContent)
         }
     }
 
     private fun pasteJnaBlocking(text: String, restoreClipboard: Boolean) {
         val clipboard = Toolkit.getDefaultToolkit().systemClipboard
         val originalContent = clipboard.getContents(null)
-        clipboard.setContents(StringSelection(text), null)
+        writeClipboardContents(StringSelection(text))
         Thread.sleep(CLIPBOARD_WRITE_DELAY_MS)
         sendCtrlV()
         if (restoreClipboard) {
             Thread.sleep(PASTE_SETTLE_DELAY_MS)
-            clipboard.setContents(originalContent, null)
+            writeClipboardContents(originalContent)
         }
     }
 
@@ -192,6 +199,18 @@ class WindowsPasteAutomation : PasteAutomation {
         val snapshot = ClipboardSnapshot(originalContent ?: StringSelection(""))
         clipboardSnapshots[token.id] = snapshot
         return token
+    }
+
+    internal fun createClipboardSnapshotForTest(originalContent: Transferable?): ClipboardSnapshotToken {
+        return storeClipboardSnapshot(originalContent)
+    }
+
+    internal fun hasClipboardSnapshotForTest(snapshotToken: ClipboardSnapshotToken): Boolean {
+        return clipboardSnapshots.containsKey(snapshotToken.id)
+    }
+
+    private fun writeClipboardContents(contents: Transferable) {
+        clipboardContentWriter(contents)
     }
 
     private fun readClipboardText(clipboard: java.awt.datatransfer.Clipboard): String? {

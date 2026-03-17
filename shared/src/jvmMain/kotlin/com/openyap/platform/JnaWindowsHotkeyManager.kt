@@ -167,11 +167,11 @@ internal class JnaWindowsHotkeyManager : HotkeyManager, Closeable {
             return false
         }
 
-        val binding = matchedBinding.binding
-        val modifierOnlyBinding = bindingUsesOnlyModifiers(binding)
-
         when (msgType) {
             WM_KEYDOWN, WM_SYSKEYDOWN -> {
+                if (activeHold != null && activeHold != matchedBinding.kind) {
+                    return true
+                }
                 if (activeHold != matchedBinding.kind) {
                     activeHold = matchedBinding.kind
                     emitHoldDown(matchedBinding.kind)

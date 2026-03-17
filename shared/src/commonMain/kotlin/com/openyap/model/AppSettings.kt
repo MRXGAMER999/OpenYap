@@ -41,6 +41,4 @@ data class AppSettings(
     val whisperLanguage: String = "en",
 )
 
-fun AppSettings.effectiveHotkeyConfig(): HotkeyConfig {
-    return hotkeyConfig.effectiveRuntimeConfig()
-}
+fun AppSettings.effectiveHotkeyConfig(): HotkeyConfig = hotkeyConfig.effectiveRuntimeConfig()

@@ -3,6 +3,7 @@ package com.openyap.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.openyap.model.AppSettings
+import com.openyap.model.effectiveHotkeyConfig
 import com.openyap.model.HotkeyEvent
 import com.openyap.model.OverlayState
 import com.openyap.model.PermissionStatus
@@ -35,7 +36,9 @@ import com.openyap.service.TranscriptionService
 import com.openyap.service.WhisperPromptBuilder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -45,9 +48,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.coroutineContext
 import kotlin.math.roundToInt
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
@@ -174,6 +179,8 @@ class RecordingViewModel(
     @Volatile
     private var durationJob: Job? = null
     @Volatile
+    private var processingJob: Job? = null
+    @Volatile
     private var currentRecordingPath: String? = null
 
     @Volatile
@@ -286,7 +293,7 @@ class RecordingViewModel(
             return
         }
         val session = sessionOverride ?: prepareCommandSession(settings) ?: return
-        activeSession = session
+        setActiveSession(session)
 
         if (settings.audioFeedbackEnabled) {
             audioFeedbackPlayer.playStart()
@@ -306,8 +313,7 @@ class RecordingViewModel(
         } catch (e: Exception) {
             currentRecordingPath = null
             recordingStartedAt = null
-            restoreCommandClipboardIfNeeded(session)
-            activeSession = null
+            setActiveSession(null)
             _state.update {
                 it.copy(
                     recordingState = RecordingState.Error(e.message ?: "Failed to start recording"),
@@ -380,8 +386,7 @@ class RecordingViewModel(
             overlayController.dismiss()
             currentRecordingPath?.let { deleteFile(it) }
             currentRecordingPath = null
-            restoreCommandClipboardIfNeeded(session)
-            activeSession = null
+            setActiveSession(null)
             return
         }
 
@@ -394,8 +399,7 @@ class RecordingViewModel(
             currentRecordingPath?.let { deleteFile(it) }
             currentRecordingPath = null
             currentProcessingPath = null
-            restoreCommandClipboardIfNeeded(session)
-            activeSession = null
+            setActiveSession(null)
             overlayController.dismiss()
             _state.update {
                 it.copy(
@@ -426,7 +430,7 @@ class RecordingViewModel(
         )
         recorderWarning?.let(overlayController::flashMessage)
 
-        viewModelScope.launch {
+        processingJob = viewModelScope.launch {
             try {
                 val targetWindow = when (session) {
                     RecordingSession.Dictation -> foregroundAppDetector.getForegroundWindowContext()
@@ -509,10 +513,7 @@ class RecordingViewModel(
                     TranscriptionProvider.GROQ_WHISPER_GROQ -> "${settings.groqModel} -> ${settings.groqLLMModel}"
                 }
 
-                if (generation != processingGeneration.get()) {
-                    deleteFile(path)
-                    return@launch
-                }
+                ensureProcessingStillActive(generation)
 
                 var usedFallback = false
                 val response = when (session) {
@@ -621,11 +622,7 @@ class RecordingViewModel(
                     )
                 }
 
-                if (generation != processingGeneration.get()) {
-                    deleteFile(path)
-                    return@launch
-                }
-
+                ensureProcessingStillActive(generation)
                 when (session) {
                     RecordingSession.Dictation -> pasteAutomation.pasteText(response, restoreClipboard = false)
                     is RecordingSession.Command -> pasteAutomation.pasteTextToWindow(
@@ -635,10 +632,7 @@ class RecordingViewModel(
                     )
                 }
 
-                if (generation != processingGeneration.get()) {
-                    deleteFile(path)
-                    return@launch
-                }
+                ensureProcessingStillActive(generation)
 
                 val successfulPasteAt = Clock.System.now()
                 if (session is RecordingSession.Dictation) {
@@ -650,6 +644,7 @@ class RecordingViewModel(
                 }
                 lastSuccessfulPasteAt = successfulPasteAt
 
+                ensureProcessingStillActive(generation)
                 historyRepository.addEntry(
                     RecordingEntry(
                         id = successfulPasteAt.toEpochMilliseconds().toString(),
@@ -663,6 +658,7 @@ class RecordingViewModel(
                     )
                 )
 
+                ensureProcessingStillActive(generation)
                 _state.update {
                     it.copy(
                         recordingState = RecordingState.Success(
@@ -685,7 +681,7 @@ class RecordingViewModel(
                     }
                 }
 
-                activeSession = null
+                setActiveSession(null)
                 currentProcessingPath = null
                 delay(2000)
                 overlayController.dismiss()
@@ -698,11 +694,13 @@ class RecordingViewModel(
                 }
 
                 deleteFile(path)
+            } catch (e: CancellationException) {
+                currentProcessingPath = null
+                deleteFile(path)
             } catch (e: Exception) {
                 currentProcessingPath = null
                 if (generation == processingGeneration.get()) {
-                    restoreCommandClipboardIfNeeded(session)
-                    activeSession = null
+                    setActiveSession(null)
                     _state.update {
                         it.copy(
                             recordingState = RecordingState.Error(e.message ?: "Processing failed"),
@@ -715,13 +713,16 @@ class RecordingViewModel(
                     overlayController.dismiss()
                 }
                 deleteFile(path)
+            } finally {
+                if (processingJob === coroutineContext[Job]) {
+                    processingJob = null
+                }
             }
         }
     }
 
     private suspend fun cancelRecording() {
         val current = _state.value.recordingState
-        val session = activeSession
         when (current) {
             is RecordingState.Recording -> {
                 durationJob?.cancel()
@@ -732,18 +733,18 @@ class RecordingViewModel(
                 currentRecordingPath = null
                 overlayController.dismiss()
                 _state.update { it.copy(recordingState = RecordingState.Idle) }
-                session?.let { restoreCommandClipboardIfNeeded(it) }
-                activeSession = null
+                setActiveSession(null)
             }
 
             is RecordingState.Processing -> {
                 processingGeneration.incrementAndGet()
+                processingJob?.cancelAndJoin()
+                processingJob = null
                 currentProcessingPath?.let { deleteFile(it) }
                 currentProcessingPath = null
                 overlayController.dismiss()
                 _state.update { it.copy(recordingState = RecordingState.Idle) }
-                session?.let { restoreCommandClipboardIfNeeded(it) }
-                activeSession = null
+                setActiveSession(null)
             }
 
             else -> {}
@@ -775,6 +776,12 @@ class RecordingViewModel(
     }
 
     override fun onCleared() {
+        runBlocking {
+            processingGeneration.incrementAndGet()
+            processingJob?.cancel()
+            processingJob = null
+            setActiveSession(null)
+        }
         clearSessionContext()
         super.onCleared()
     }
@@ -791,7 +798,11 @@ class RecordingViewModel(
     }
 
     private suspend fun prepareCommandSession(settings: AppSettings): RecordingSession.Command? {
-        return when (val captureResult = pasteAutomation.captureSelectedText(settings.hotkeyConfig.commandHotkey)) {
+        val effectiveHotkeys = settings.effectiveHotkeyConfig()
+        val commandHotkey = effectiveHotkeys.commandHotkey?.takeIf {
+            effectiveHotkeys.commandHotkeyEnabled && it.enabled
+        }
+        return when (val captureResult = pasteAutomation.captureSelectedText(commandHotkey)) {
             SelectionCaptureResult.Empty -> {
                 overlayController.flashMessage("No text selected")
                 null
@@ -923,6 +934,21 @@ class RecordingViewModel(
     private suspend fun restoreCommandClipboardIfNeeded(session: RecordingSession) {
         if (session is RecordingSession.Command) {
             pasteAutomation.restoreClipboard(session.clipboardSnapshotToken)
+        }
+    }
+
+    private suspend fun setActiveSession(session: RecordingSession?) {
+        val previousSession = activeSession
+        if (previousSession != null && previousSession !== session) {
+            restoreCommandClipboardIfNeeded(previousSession)
+        }
+        activeSession = session
+    }
+
+    private suspend fun ensureProcessingStillActive(generation: Int) {
+        coroutineContext.ensureActive()
+        if (generation != processingGeneration.get()) {
+            throw CancellationException("Stale processing request")
         }
     }
 

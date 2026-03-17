@@ -42,7 +42,7 @@ fun HotkeyConfig.commandHotkeyValidationError(): String? {
 }
 
 fun HotkeyConfig.effectiveRuntimeConfig(): HotkeyConfig {
-    val commandEnabled = commandHotkeyValidationError() == null
+    val commandEnabled = commandHotkeyEnabled && commandHotkeyValidationError() == null
     return copy(commandHotkeyEnabled = commandEnabled)
 }
 
