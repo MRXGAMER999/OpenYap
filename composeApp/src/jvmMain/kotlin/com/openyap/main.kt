@@ -200,7 +200,7 @@ fun main() {
                     val isDark = isSystemInDarkTheme()
                     DisposableEffect(isDark) {
                         val bgColor = if (isDark) {
-                            java.awt.Color(0x1F, 0x29, 0x37)
+                            java.awt.Color(0x12, 0x1B, 0x26)  // #121B26 – matches app background
                         } else {
                             java.awt.Color(0xFB, 0xFC, 0xFF)
                         }

@@ -85,8 +85,8 @@ object WindowsThemeHelper {
             // ── 2. Set caption and border color (Win11 22000+) ─────
             // COLORREF format: 0x00BBGGRR
             val colorRef = if (dark) {
-                // surface = Color(0xFF1F2937) → R=0x1F, G=0x29, B=0x37
-                0x0037291F
+                // #121B26 (app background) → R=0x12, G=0x1B, B=0x26
+                0x00261B12
             } else {
                 // surface = Color(0xFFFBFCFF) → R=0xFB, G=0xFC, B=0xFF
                 0x00FFFCFB
