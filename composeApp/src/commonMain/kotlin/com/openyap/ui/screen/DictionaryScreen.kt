@@ -1,7 +1,10 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.openyap.ui.screen
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
@@ -36,6 +40,7 @@ import com.openyap.ui.theme.Spacing
 import com.openyap.viewmodel.DictionaryEvent
 import com.openyap.viewmodel.DictionaryUiState
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun DictionaryScreen(
     state: DictionaryUiState,
@@ -49,7 +54,7 @@ fun DictionaryScreen(
         modifier = Modifier.fillMaxSize().padding(Spacing.lg),
         verticalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        Text("Dictionary", style = MaterialTheme.typography.headlineLarge)
+        Text("Dictionary", style = MaterialTheme.typography.displaySmallEmphasized)
         Text(
             "Teach OpenYap your preferred replacements, shortcuts, and repeated phrases so every paste sounds like you.",
             style = MaterialTheme.typography.bodyMedium,
@@ -57,10 +62,17 @@ fun DictionaryScreen(
             modifier = Modifier.widthIn(max = 620.dp),
         )
         if (state.entries.isNotEmpty()) {
-            AssistChip(
-                onClick = {},
-                enabled = false,
-                label = { Text("${state.entries.count { it.isEnabled }} active phrases") })
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                shape = MaterialTheme.shapes.medium,
+            ) {
+                Text(
+                    "${state.entries.count { it.isEnabled }} active phrases",
+                    modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
         }
 
         if (!isDictionaryEnabled) {
@@ -76,36 +88,40 @@ fun DictionaryScreen(
 
         // Input row — stays as ElevatedCard (primary action area)
         ElevatedCard {
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth().padding(Spacing.md),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                verticalAlignment = Alignment.Bottom,
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
-                OutlinedTextField(
-                    value = newOriginal,
-                    onValueChange = { newOriginal = it },
-                    label = { Text("Original phrase") },
-                    modifier = Modifier.weight(1f),
-                    enabled = isDictionaryEnabled,
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = newReplacement,
-                    onValueChange = { newReplacement = it },
-                    label = { Text("Replacement") },
-                    modifier = Modifier.weight(1f),
-                    enabled = isDictionaryEnabled,
-                    singleLine = true,
-                )
-                FilledTonalButton(
-                    onClick = {
-                        onEvent(DictionaryEvent.AddEntry(newOriginal, newReplacement))
-                        newOriginal = ""
-                        newReplacement = ""
-                    },
-                    enabled = isDictionaryEnabled && newOriginal.isNotBlank() && newReplacement.isNotBlank(),
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.sm),
                 ) {
-                    Text("Add")
+                    OutlinedTextField(
+                        value = newOriginal,
+                        onValueChange = { newOriginal = it },
+                        label = { Text("Original phrase") },
+                        modifier = Modifier.widthIn(min = 220.dp).weight(1f, fill = false),
+                        enabled = isDictionaryEnabled,
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        value = newReplacement,
+                        onValueChange = { newReplacement = it },
+                        label = { Text("Replacement") },
+                        modifier = Modifier.widthIn(min = 220.dp).weight(1f, fill = false),
+                        enabled = isDictionaryEnabled,
+                        singleLine = true,
+                    )
+                    FilledTonalButton(
+                        onClick = {
+                            onEvent(DictionaryEvent.AddEntry(newOriginal, newReplacement))
+                            newOriginal = ""
+                            newReplacement = ""
+                        },
+                        enabled = isDictionaryEnabled && newOriginal.isNotBlank() && newReplacement.isNotBlank(),
+                    ) {
+                        Text("Add")
+                    }
                 }
             }
         }

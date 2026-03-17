@@ -36,6 +36,7 @@ import com.openyap.viewmodel.DictionaryViewModel
 import com.openyap.viewmodel.HistoryViewModel
 import com.openyap.viewmodel.OnboardingEvent
 import com.openyap.viewmodel.OnboardingViewModel
+import kotlinx.coroutines.flow.first
 import com.openyap.viewmodel.RecordingEffect
 import com.openyap.viewmodel.RecordingEvent
 import com.openyap.viewmodel.RecordingViewModel
@@ -83,6 +84,35 @@ fun main() {
             }
 
             var isVisible by remember { mutableStateOf(true) }
+
+            LaunchedEffect(onboardingViewModel) {
+                val envGroqKey = System.getenv("groq api key")
+                    ?: System.getenv("GROQ_API_KEY")
+                    ?: ""
+                if (envGroqKey.isNotBlank()) {
+                    onboardingViewModel.state.first { it.isLoaded }
+                    val initial = onboardingViewModel.state.value
+                    if (!initial.isComplete && initial.apiKey.isBlank()) {
+                        onboardingViewModel.onEvent(OnboardingEvent.SkipMicPermission)
+                        onboardingViewModel.onEvent(OnboardingEvent.SaveApiKey(envGroqKey))
+                        kotlinx.coroutines.withTimeoutOrNull(30_000L) {
+                            onboardingViewModel.state.first { state ->
+                                !state.isValidatingKey && !state.isLoadingModels &&
+                                    state.keyValidationSuccess == true
+                            }
+                        }?.let {
+                            val afterFetch = onboardingViewModel.state.value
+                            if (afterFetch.availableModels.isNotEmpty() && afterFetch.selectedModel.isBlank()) {
+                                onboardingViewModel.onEvent(
+                                    OnboardingEvent.SelectModel(afterFetch.availableModels.first().id)
+                                )
+                            }
+                            kotlinx.coroutines.delay(100)
+                            onboardingViewModel.onEvent(OnboardingEvent.CompleteOnboarding)
+                        }
+                    }
+                }
+            }
 
             LaunchedEffect(Unit) {
                 val settings = settingsRepo.loadSettings()

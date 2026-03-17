@@ -1,7 +1,10 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.openyap.ui.screen
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,9 +18,11 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -36,6 +41,7 @@ import com.openyap.ui.util.toRelativeString
 import com.openyap.viewmodel.HistoryEvent
 import com.openyap.viewmodel.HistoryUiState
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun HistoryScreen(
     state: HistoryUiState,
@@ -67,13 +73,12 @@ fun HistoryScreen(
         modifier = Modifier.fillMaxSize().padding(Spacing.lg),
         verticalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                Text("History", style = MaterialTheme.typography.headlineLarge)
+                Text("History", style = MaterialTheme.typography.displaySmallEmphasized)
                 Text(
                     "Review recent captures, copy them again, or clear old entries when the trail gets noisy.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -81,7 +86,7 @@ fun HistoryScreen(
                     modifier = Modifier.widthIn(max = 560.dp),
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                 FilledTonalButton(onClick = { onEvent(HistoryEvent.Refresh) }) { Text("Refresh") }
                 if (state.entries.isNotEmpty()) {
                     TextButton(onClick = { showClearConfirm = true }) { Text("Clear all") }
@@ -89,10 +94,17 @@ fun HistoryScreen(
             }
         }
         if (state.entries.isNotEmpty()) {
-            AssistChip(
-                onClick = {},
-                enabled = false,
-                label = { Text("${state.entries.size} saved captures") })
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                shape = MaterialTheme.shapes.medium,
+            ) {
+                Text(
+                    "${state.entries.size} saved captures",
+                    modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
         }
 
         if (state.isLoading) {
@@ -102,8 +114,6 @@ fun HistoryScreen(
                 icon = Icons.Default.History,
                 title = "No recordings yet",
                 subtitle = "Your captured phrases will show up here.",
-                actionLabel = "Go record",
-                onAction = { /* navigate home handled upstream */ },
             )
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {

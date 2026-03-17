@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.openyap.ui.screen
 
 import androidx.compose.animation.AnimatedVisibility
@@ -14,6 +16,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -61,6 +65,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -68,6 +76,7 @@ import com.openyap.model.AudioDevice
 import com.openyap.model.PrimaryUseCase
 import com.openyap.model.TranscriptionProvider
 import com.openyap.ui.theme.Spacing
+import com.openyap.ui.theme.reducedMotionEnabled
 import com.openyap.viewmodel.SettingsEvent
 import com.openyap.viewmodel.SettingsUiState
 
@@ -82,6 +91,7 @@ fun SettingsScreen(
     var showKey by remember { mutableStateOf(false) }
     var showGroqKey by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
+    val reducedMotion = reducedMotionEnabled()
 
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
@@ -94,7 +104,7 @@ fun SettingsScreen(
                 .padding(Spacing.lg),
             verticalArrangement = Arrangement.spacedBy(Spacing.lg),
         ) {
-            Text("Settings", style = MaterialTheme.typography.headlineLarge)
+            Text("Settings", style = MaterialTheme.typography.displaySmallEmphasized)
             Text(
                 "Choose a transcription provider, configure API keys, pick a model, and control how OpenYap processes what you say.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -187,6 +197,7 @@ fun SettingsScreen(
 
                 if (!state.isLoadingDevices && state.audioDevices.isNotEmpty()) {
                     MicrophoneDropdown(
+                        label = "Microphone",
                         devices = state.audioDevices,
                         selectedDeviceId = state.selectedAudioDeviceId,
                         onDeviceSelected = { onEvent(SettingsEvent.SelectAudioDevice(it)) },
@@ -213,6 +224,7 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 ProviderDropdown(
+                    label = "Transcription provider",
                     selectedProvider = state.transcriptionProvider,
                     onProviderSelected = { onEvent(SettingsEvent.SelectProvider(it)) },
                 )
@@ -234,6 +246,7 @@ fun SettingsScreen(
                             onValueChange = { apiKeyInput = it },
                             modifier = Modifier.weight(1f),
                             singleLine = true,
+                            label = { Text("Gemini API key") },
                             placeholder = { Text("Enter your Gemini API key") },
                             visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
                             isError = geminiKeyFormatError != null,
@@ -277,6 +290,7 @@ fun SettingsScreen(
                             onValueChange = { groqApiKeyInput = it },
                             modifier = Modifier.weight(1f),
                             singleLine = true,
+                            label = { Text("Groq API key") },
                             placeholder = { Text("Enter your Groq API key") },
                             visualTransformation = if (showGroqKey) VisualTransformation.None else PasswordVisualTransformation(),
                             isError = groqKeyFormatError != null,
@@ -307,43 +321,13 @@ fun SettingsScreen(
                     AnimatedVisibility(
                         visible = state.isLoadingModels,
                         enter = fadeIn(),
-                        exit = fadeOut()
+                        exit = fadeOut(),
                     ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Text(
-                                "Loading available models...",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        ModelLoadingState("Loading available models...")
                     }
 
                     state.modelsFetchError?.let { error ->
-                        Surface(color = MaterialTheme.colorScheme.errorContainer) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(Spacing.md),
-                                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = error,
-                                    modifier = Modifier.weight(1f),
-                                    color = MaterialTheme.colorScheme.onErrorContainer,
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                                TextButton(onClick = { onEvent(SettingsEvent.RefreshModels) }) {
-                                    Text(
-                                        "Retry"
-                                    )
-                                }
-                            }
-                        }
+                        ModelErrorBanner(error = error, onRetry = { onEvent(SettingsEvent.RefreshModels) })
                     }
 
                     AnimatedVisibility(
@@ -357,6 +341,7 @@ fun SettingsScreen(
                             state = rememberTooltipState(),
                         ) {
                             ModelDropdown(
+                                label = "Gemini model",
                                 models = state.availableModels.map { it.id to it.displayName },
                                 selectedModelId = state.geminiModel,
                                 onModelSelected = { onEvent(SettingsEvent.SelectModel(it)) },
@@ -373,6 +358,7 @@ fun SettingsScreen(
                     }
                 } else if (state.transcriptionProvider == TranscriptionProvider.GROQ_WHISPER) {
                     ModelDropdown(
+                        label = "Groq transcription model",
                         models = state.groqModels.map { it.id to it.displayName },
                         selectedModelId = state.groqModel,
                         onModelSelected = { onEvent(SettingsEvent.SelectGroqModel(it)) },
@@ -383,6 +369,7 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.titleMedium,
                     )
                     ModelDropdown(
+                        label = "Groq transcription model",
                         models = state.groqModels.map { it.id to it.displayName },
                         selectedModelId = state.groqModel,
                         onModelSelected = { onEvent(SettingsEvent.SelectGroqModel(it)) },
@@ -402,41 +389,13 @@ fun SettingsScreen(
                     AnimatedVisibility(
                         visible = state.isLoadingGroqLLMModels,
                         enter = fadeIn(),
-                        exit = fadeOut()
+                        exit = fadeOut(),
                     ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Text(
-                                "Loading available Groq models...",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        ModelLoadingState("Loading available Groq models...")
                     }
 
                     state.groqLLMModelsFetchError?.let { error ->
-                        Surface(color = MaterialTheme.colorScheme.errorContainer) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(Spacing.md),
-                                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = error,
-                                    modifier = Modifier.weight(1f),
-                                    color = MaterialTheme.colorScheme.onErrorContainer,
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                                TextButton(onClick = { onEvent(SettingsEvent.RefreshGroqLLMModels) }) {
-                                    Text("Retry")
-                                }
-                            }
-                        }
+                        ModelErrorBanner(error = error, onRetry = { onEvent(SettingsEvent.RefreshGroqLLMModels) })
                     }
 
                     AnimatedVisibility(
@@ -445,6 +404,7 @@ fun SettingsScreen(
                         exit = fadeOut(),
                     ) {
                         ModelDropdown(
+                            label = "Groq correction model",
                             models = state.groqLLMModels.map { it.id to it.displayName },
                             selectedModelId = state.groqLLMModel,
                             onModelSelected = { onEvent(SettingsEvent.SelectGroqLLMModel(it)) },
@@ -464,6 +424,7 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.titleMedium,
                     )
                     ModelDropdown(
+                        label = "Groq transcription model",
                         models = state.groqModels.map { it.id to it.displayName },
                         selectedModelId = state.groqModel,
                         onModelSelected = { onEvent(SettingsEvent.SelectGroqModel(it)) },
@@ -478,43 +439,13 @@ fun SettingsScreen(
                     AnimatedVisibility(
                         visible = state.isLoadingModels,
                         enter = fadeIn(),
-                        exit = fadeOut()
+                        exit = fadeOut(),
                     ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Text(
-                                "Loading available Gemini models...",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        ModelLoadingState("Loading available Gemini models...")
                     }
 
                     state.modelsFetchError?.let { error ->
-                        Surface(color = MaterialTheme.colorScheme.errorContainer) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(Spacing.md),
-                                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = error,
-                                    modifier = Modifier.weight(1f),
-                                    color = MaterialTheme.colorScheme.onErrorContainer,
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                                TextButton(onClick = { onEvent(SettingsEvent.RefreshModels) }) {
-                                    Text(
-                                        "Retry"
-                                    )
-                                }
-                            }
-                        }
+                        ModelErrorBanner(error = error, onRetry = { onEvent(SettingsEvent.RefreshModels) })
                     }
 
                     AnimatedVisibility(
@@ -523,6 +454,7 @@ fun SettingsScreen(
                         exit = fadeOut(),
                     ) {
                         ModelDropdown(
+                            label = "Gemini correction model",
                             models = state.availableModels.map { it.id to it.displayName },
                             selectedModelId = state.geminiModel,
                             onModelSelected = { onEvent(SettingsEvent.SelectModel(it)) },
@@ -544,6 +476,7 @@ fun SettingsScreen(
                 description = "Set the language for Whisper-based transcription. Gemini auto-detects language.",
             ) {
                 WhisperLanguageDropdown(
+                    label = "Whisper transcription language",
                     selectedLanguage = state.whisperLanguage,
                     onLanguageSelected = { onEvent(SettingsEvent.SelectWhisperLanguage(it)) },
                 )
@@ -605,8 +538,8 @@ fun SettingsScreen(
                 )
                 AnimatedVisibility(
                     visible = state.primaryUseCase != PrimaryUseCase.GENERAL,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically(),
+                    enter = if (reducedMotion) fadeIn() else fadeIn() + expandVertically(),
+                    exit = if (reducedMotion) fadeOut() else fadeOut() + shrinkVertically(),
                 ) {
                     var contextInput by remember(state.useCaseContext) {
                         mutableStateOf(state.useCaseContext)
@@ -654,7 +587,11 @@ fun SettingsScreen(
                     checked = state.audioFeedbackEnabled,
                     onCheckedChange = { onEvent(SettingsEvent.ToggleAudioFeedback(it)) },
                 )
-                AnimatedVisibility(visible = state.audioFeedbackEnabled) {
+                AnimatedVisibility(
+                    visible = state.audioFeedbackEnabled,
+                    enter = if (reducedMotion) fadeIn() else fadeIn() + expandVertically(),
+                    exit = if (reducedMotion) fadeOut() else fadeOut() + shrinkVertically(),
+                ) {
                     Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -768,15 +705,57 @@ fun SettingsScreen(
 @Composable
 private fun SaveMessage(message: String?, onDismiss: () -> Unit) {
     if (message != null) {
-        LaunchedEffect(message) {
-            kotlinx.coroutines.delay(2000)
-            onDismiss()
+        Surface(
+            color = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            shape = MaterialTheme.shapes.small,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(Spacing.sm),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(message, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                TextButton(onClick = onDismiss) { Text("Dismiss") }
+            }
         }
+    }
+}
+
+@Composable
+private fun ModelLoadingState(message: String) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(18.dp),
+            strokeWidth = 2.dp,
+        )
         Text(
             message,
-            color = MaterialTheme.colorScheme.primary,
-            style = MaterialTheme.typography.bodySmall
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+@Composable
+private fun ModelErrorBanner(error: String, onRetry: () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.errorContainer) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(Spacing.md),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = error,
+                modifier = Modifier.weight(1f),
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            TextButton(onClick = onRetry) { Text("Retry") }
+        }
     }
 }
 
@@ -896,7 +875,14 @@ private fun FeatureToggleRow(
     onCheckedChange: (Boolean) -> Unit,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = checked,
+                enabled = enabled,
+                role = androidx.compose.ui.semantics.Role.Switch,
+                onValueChange = onCheckedChange,
+            ),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -914,7 +900,7 @@ private fun FeatureToggleRow(
         Switch(
             checked = checked,
             enabled = enabled,
-            onCheckedChange = onCheckedChange,
+            onCheckedChange = null,
         )
     }
 }
@@ -931,7 +917,7 @@ private fun UseCaseChipRow(
         PrimaryUseCase.CREATIVE_WRITING to "Writing",
     )
 
-    Row(
+    FlowRow(
         horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -959,6 +945,7 @@ private fun UseCaseChipRow(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ModelDropdown(
+    label: String,
     models: List<Pair<String, String>>,
     selectedModelId: String,
     onModelSelected: (String) -> Unit,
@@ -975,6 +962,7 @@ private fun ModelDropdown(
             modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                 .fillMaxWidth(),
             singleLine = true,
+            label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
         )
@@ -1005,6 +993,7 @@ private fun ModelDropdown(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MicrophoneDropdown(
+    label: String,
     devices: List<AudioDevice>,
     selectedDeviceId: String?,
     onDeviceSelected: (String?) -> Unit,
@@ -1025,6 +1014,7 @@ private fun MicrophoneDropdown(
             modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                 .fillMaxWidth(),
             singleLine = true,
+            label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
         )
@@ -1068,6 +1058,7 @@ private fun MicrophoneDropdown(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ProviderDropdown(
+    label: String,
     selectedProvider: TranscriptionProvider,
     onProviderSelected: (TranscriptionProvider) -> Unit,
 ) {
@@ -1089,6 +1080,7 @@ private fun ProviderDropdown(
             modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                 .fillMaxWidth(),
             singleLine = true,
+            label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
         )
@@ -1133,6 +1125,7 @@ private val WHISPER_LANGUAGES = listOf(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WhisperLanguageDropdown(
+    label: String,
     selectedLanguage: String,
     onLanguageSelected: (String) -> Unit,
 ) {
@@ -1148,6 +1141,7 @@ private fun WhisperLanguageDropdown(
             modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                 .fillMaxWidth(),
             singleLine = true,
+            label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
         )

@@ -62,3 +62,5 @@ val railRoutes = listOf(
     RailDestination(Route.Customization, "Per-App", Icons.Filled.Tune, Icons.Outlined.Tune),
     RailDestination(Route.Settings, "Settings", Icons.Filled.Settings, Icons.Outlined.Settings),
 )
+
+val primaryRailRoutes = railRoutes.take(7)
