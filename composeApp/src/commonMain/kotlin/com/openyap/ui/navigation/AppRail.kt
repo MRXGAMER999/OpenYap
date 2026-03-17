@@ -67,6 +67,7 @@ fun AppRail(
                 },
                 label = { Text(destination.label) },
                 railExpanded = isExpanded,
+                iconPosition = WideNavigationRailItemDefaults.iconPositionFor(isExpanded),
                 colors = colors,
             )
         }
