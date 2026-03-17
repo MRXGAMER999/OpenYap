@@ -692,7 +692,15 @@ class RecordingViewModel(
     override fun onCleared() {
         durationJob?.cancel()
         durationJob = null
-        runCatching { kotlinx.coroutines.runBlocking { audioRecorder.stopRecording() } }
+        runCatching {
+            kotlinx.coroutines.runBlocking {
+                kotlinx.coroutines.withTimeout(5000) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        audioRecorder.stopRecording()
+                    }
+                }
+            }
+        }
         currentRecordingPath?.let { deleteFile(it) }
         currentRecordingPath = null
         currentProcessingPath?.let { deleteFile(it) }

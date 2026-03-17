@@ -12,5 +12,7 @@ interface HotkeyManager : Closeable {
     fun stopListening()
     suspend fun captureNextHotkey(): HotkeyCapture
     val hotkeyEvents: SharedFlow<HotkeyEvent>
-    override fun close() {}
+    override fun close() {
+        stopListening()
+    }
 }

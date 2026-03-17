@@ -1,6 +1,6 @@
 # OpenYap PR Review — Issues & M3 Expressive Migration Candidates
 
-Reviewed against the `cursor/navigation-rail-material-design-6a59` branch (M3 Expressive shell redesign + Koin DI refactor + Groq pipeline + recording overlay).
+Reviewed against the pre-fix snapshot (M3 Expressive shell redesign + Koin DI refactor + Groq pipeline + recording overlay).
 
 ---
 

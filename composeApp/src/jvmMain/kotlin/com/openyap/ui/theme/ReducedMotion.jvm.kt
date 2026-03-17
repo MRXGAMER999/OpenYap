@@ -27,11 +27,11 @@ private fun windowsAnimationsEnabled(): Boolean? {
             .start()
     }.getOrNull() ?: return null
 
-    val output = process.inputStream.bufferedReader().use { it.readText() }
     if (!process.waitFor(3, TimeUnit.SECONDS) || process.exitValue() != 0) {
         process.destroyForcibly()
         return null
     }
+    val output = process.inputStream.bufferedReader().use { it.readText() }
 
     val bytes = Regex("""([0-9A-Fa-f]{2})""")
         .findAll(output.substringAfter("UserPreferencesMask", ""))

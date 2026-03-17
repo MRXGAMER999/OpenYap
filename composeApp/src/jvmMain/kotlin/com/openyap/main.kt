@@ -164,9 +164,9 @@ fun main() {
                     Item("Show", onClick = { isVisible = true })
                     Item("Quit", onClick = {
                         runCatching { (audioRecorder as? java.io.Closeable)?.close() }
-                        runCatching { (overlayController as? java.io.Closeable)?.close() }
-                        runCatching { audioFeedbackService.close() }
-                        runCatching { hotkeyManager.close() }
+                        runCatching { (overlayController as? java.io.Closeable)?.close() }.onFailure { System.err.println("Failed to close overlayController: $it") }
+                        runCatching { audioFeedbackService.close() }.onFailure { System.err.println("Failed to close audioFeedbackService: $it") }
+                        runCatching { hotkeyManager.close() }.onFailure { System.err.println("Failed to close hotkeyManager: $it") }
                         exitApplication()
                     })
                 },

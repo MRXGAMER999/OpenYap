@@ -558,7 +558,7 @@ private fun PrimaryShellAction(
         text = { Text(actionLabel, style = MaterialTheme.typography.labelLargeEmphasized) },
         icon = { Icon(actionIcon, contentDescription = null, modifier = Modifier.size(24.dp)) },
         shape = FloatingActionButtonDefaults.mediumExtendedFabShape,
-        onClick = onClick,
+        onClick = { if (enabled) onClick() },
         expanded = expanded,
         modifier = modifier.then(
             if (!enabled) Modifier

@@ -27,7 +27,7 @@ abstract class OpenYapDatabase : RoomDatabase() {
     abstract fun appPromptDao(): AppPromptDao
 
     @Transaction
-    open suspend fun deleteAllData() {
+    suspend fun deleteAllData() {
         appSettingsDao().deleteAll()
         recordingEntryDao().deleteAll()
         dictionaryEntryDao().deleteAll()

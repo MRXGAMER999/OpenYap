@@ -174,8 +174,9 @@ class GeminiClient(private val client: HttpClient) : TranscriptionService {
             ?.firstOrNull()
             ?.content
             ?.parts
-            ?.lastOrNull { it.text != null }
-            ?.text
+            ?.mapNotNull { it.text }
+            ?.takeIf { it.isNotEmpty() }
+            ?.joinToString("")
 
         if (rewrittenText.isNullOrBlank()) {
             val blockReason = geminiResponse.promptFeedback?.blockReason
