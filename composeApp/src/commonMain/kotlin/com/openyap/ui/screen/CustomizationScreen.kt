@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -39,7 +40,9 @@ import androidx.compose.ui.unit.dp
 import com.openyap.service.PromptBuilder
 import com.openyap.ui.component.EmptyState
 import com.openyap.ui.theme.Spacing
+import com.openyap.ui.theme.reducedMotionEnabled
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun CustomizationScreen(
     appTones: Map<String, String>,
@@ -56,7 +59,7 @@ fun CustomizationScreen(
         modifier = Modifier.fillMaxSize().padding(Spacing.lg),
         verticalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        Text("Per-app customization", style = MaterialTheme.typography.headlineLarge)
+        Text("Per-app customization", style = MaterialTheme.typography.displaySmallEmphasized)
         Text(
             "Give each app its own tone and instructions so OpenYap adapts to email, chat, docs, and everything in between.",
             style = MaterialTheme.typography.bodyMedium,
@@ -105,7 +108,7 @@ fun CustomizationScreen(
             )
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                items(apps) { app ->
+                items(apps, key = { it }) { app ->
                     AppCustomizationCard(
                         appName = app,
                         currentTone = appTones[app] ?: "normal",
@@ -133,6 +136,7 @@ private fun AppCustomizationCard(
     var prompt by remember(currentPrompt) { mutableStateOf(currentPrompt) }
     var expanded by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    val reducedMotion = reducedMotionEnabled()
 
     if (showDeleteConfirm) {
         AlertDialog(
@@ -181,8 +185,8 @@ private fun AppCustomizationCard(
 
             AnimatedVisibility(
                 visible = expanded,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically()
+                enter = if (reducedMotion) fadeIn() else fadeIn() + expandVertically(),
+                exit = if (reducedMotion) fadeOut() else fadeOut() + shrinkVertically(),
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
                     FlowRow(

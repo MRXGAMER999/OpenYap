@@ -20,6 +20,7 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.openyap.ui.component.EmptyState
 import com.openyap.ui.theme.Spacing
+import com.openyap.ui.theme.reducedMotionEnabled
 import com.openyap.viewmodel.StatsUiState
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -44,7 +46,7 @@ fun StatsScreen(state: StatsUiState, onRefresh: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                Text("Stats", style = MaterialTheme.typography.headlineLarge)
+                Text("Stats", style = MaterialTheme.typography.displaySmallEmphasized)
                 Text(
                     "A snapshot of how often OpenYap is capturing and refining your voice.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -55,10 +57,17 @@ fun StatsScreen(state: StatsUiState, onRefresh: () -> Unit) {
             FilledTonalButton(onClick = onRefresh) { Text("Refresh") }
         }
         if (!state.isLoading && state.totalRecordings > 0) {
-            AssistChip(
-                onClick = {},
-                enabled = false,
-                label = { Text("${state.totalRecordings} recordings analyzed") })
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                shape = MaterialTheme.shapes.medium,
+            ) {
+                Text(
+                    "${state.totalRecordings} recordings analyzed",
+                    modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
         }
 
         if (state.isLoading) {
@@ -114,8 +123,13 @@ fun StatsScreen(state: StatsUiState, onRefresh: () -> Unit) {
 @Composable
 private fun StatCard(label: String, targetValue: Int) {
     val animatedValue = remember { Animatable(0f) }
+    val reducedMotion = reducedMotionEnabled()
+    val motionScheme = MaterialTheme.motionScheme
     LaunchedEffect(targetValue) {
-        animatedValue.animateTo(targetValue.toFloat(), tween(800))
+        animatedValue.animateTo(
+            targetValue.toFloat(),
+            if (reducedMotion) motionScheme.fastEffectsSpec() else motionScheme.defaultEffectsSpec(),
+        )
     }
     ElevatedCard(modifier = Modifier.widthIn(min = 180.dp)) {
         Column(

@@ -12,19 +12,25 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.openyap.ui.theme.Spacing
 import com.openyap.viewmodel.UserProfileEvent
 import com.openyap.viewmodel.UserProfileUiState
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun UserInfoScreen(
     state: UserProfileUiState,
@@ -40,7 +46,7 @@ fun UserInfoScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                Text("User profile", style = MaterialTheme.typography.headlineLarge)
+                Text("User profile", style = MaterialTheme.typography.displaySmallEmphasized)
                 Text(
                     "These details power phrase expansion so OpenYap can turn shortcuts into polished personal answers.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -49,10 +55,17 @@ fun UserInfoScreen(
                 )
             }
             if (state.saveMessage == null) {
-                AssistChip(
-                    onClick = {},
-                    enabled = false,
-                    label = { Text("Phrase expansion profile") })
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Text(
+                        "Phrase expansion profile",
+                        modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
             }
         }
         Text(
@@ -84,15 +97,29 @@ fun UserInfoScreen(
                 Text(if (state.isSaving) "Saving..." else "Save profile")
             }
             state.saveMessage?.let { message ->
-                LaunchedEffect(message) {
-                    kotlinx.coroutines.delay(2000)
-                    onEvent(UserProfileEvent.DismissSaveMessage)
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth().semantics {
+                        liveRegion = LiveRegionMode.Polite
+                    },
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(Spacing.sm),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.widthIn(max = 520.dp),
+                        )
+                        TextButton(onClick = { onEvent(UserProfileEvent.DismissSaveMessage) }) {
+                            Text("Dismiss")
+                        }
+                    }
                 }
-                Text(
-                    message,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
             }
         }
     }
