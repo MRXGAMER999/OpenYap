@@ -34,11 +34,13 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.MediumExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SmallExtendedFloatingActionButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -181,10 +183,8 @@ fun AppShell(
     val timeLabel = rememberSystemTimeLabel()
 
     fun navigateTo(route: Route) {
-        if (currentRoute != route) {
-            backStack.clear()
-            backStack.add(route)
-        }
+        backStack.clear()
+        backStack.add(route)
         menuExpanded = false
     }
 
@@ -362,8 +362,12 @@ private fun ShellRailPane(
             .semantics { traversalIndex = 2f },
         header = {
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
+                horizontalAlignment = if (isExpanded) Alignment.Start else Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                modifier = Modifier.padding(
+                    start = if (isExpanded) Spacing.md else 16.dp,
+                    end = if (isExpanded) 0.dp else 16.dp,
+                )
             ) {
                 RailToggleButton(
                     isExpanded = isExpanded,
@@ -550,9 +554,10 @@ private fun PrimaryShellAction(
     val actionLabel = if (stopsRecording) "Stop recording" else "Record thought"
     val actionIcon = if (stopsRecording) Icons.Default.Stop else Icons.Default.Mic
 
-    ExtendedFloatingActionButton(
+    SmallExtendedFloatingActionButton(
         text = { Text(actionLabel, style = MaterialTheme.typography.labelLargeEmphasized) },
-        icon = { Icon(actionIcon, contentDescription = null, modifier = Modifier.size(20.dp)) },
+        icon = { Icon(actionIcon, contentDescription = null, modifier = Modifier.size(24.dp)) },
+        shape = FloatingActionButtonDefaults.mediumExtendedFabShape,
         onClick = { if (enabled) onClick() },
         expanded = expanded,
         modifier = modifier.then(if (!enabled) Modifier.alpha(0.38f) else Modifier),
