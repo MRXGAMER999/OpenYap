@@ -23,6 +23,45 @@ namespace {
     constexpr DWORD
     kInjectedFlag = 0x10;
 
+    int normalize_letter_vk(int vk_code, DWORD scan_code, DWORD flags) {
+        if (vk_code >= 'A' && vk_code <= 'Z') {
+            return vk_code;
+        }
+        if ((flags & kInjectedFlag) != 0) {
+            return vk_code;
+        }
+
+        switch (scan_code) {
+            case 0x1E: return 'A';
+            case 0x30: return 'B';
+            case 0x2E: return 'C';
+            case 0x20: return 'D';
+            case 0x12: return 'E';
+            case 0x21: return 'F';
+            case 0x22: return 'G';
+            case 0x23: return 'H';
+            case 0x17: return 'I';
+            case 0x24: return 'J';
+            case 0x25: return 'K';
+            case 0x26: return 'L';
+            case 0x32: return 'M';
+            case 0x31: return 'N';
+            case 0x18: return 'O';
+            case 0x19: return 'P';
+            case 0x10: return 'Q';
+            case 0x13: return 'R';
+            case 0x1F: return 'S';
+            case 0x14: return 'T';
+            case 0x16: return 'U';
+            case 0x2F: return 'V';
+            case 0x11: return 'W';
+            case 0x2D: return 'X';
+            case 0x15: return 'Y';
+            case 0x2C: return 'Z';
+            default: return vk_code;
+        }
+    }
+
     bool is_key_down(UINT
     msg_type) {
     return msg_type == kWmKeyDown || msg_type ==
@@ -381,23 +420,25 @@ namespace openyap::hotkey {
 
         {
             std::lock_guard <std::mutex> lock(mutex_);
-            const int vk_code = static_cast<int>(info->vkCode);
+            const int raw_vk_code = static_cast<int>(info->vkCode);
+            const int vk_code = normalize_letter_vk(raw_vk_code, info->scanCode, info->flags);
             const UINT msg_type = static_cast<UINT>(wParam);
 
-            update_modifier_state(vk_code, msg_type);
-            const unsigned int key_modifiers = modifiers_for_key(vk_code);
+            update_modifier_state(raw_vk_code, msg_type);
+            const unsigned int key_modifiers = modifiers_for_key(raw_vk_code);
 
             if (capture_active_) {
                 const bool is_modifier_key = modifier_mask_for_vk(vk_code) != 0;
                 const bool should_capture =
                         (msg_type == kWmKeyDown || msg_type == kWmSysKeyDown) &&
-                                (!is_modifier_key || key_modifiers != 0);
+                                !is_modifier_key;
                 if (should_capture) {
                     capture_active_ = false;
                     event_type = OPENYAP_HOTKEY_EVENT_CAPTURED;
                     event_vk_code = vk_code;
                     event_modifiers = key_modifiers;
                 }
+                consume = true;
             } else if (binding_.enabled && binding_.key_code != 0) {
                 const bool modifier_only_binding = binding_uses_only_modifiers();
                 const bool matches_binding = modifier_only_binding
@@ -410,13 +451,13 @@ namespace openyap::hotkey {
                             hold_active_ = true;
                             event_type = OPENYAP_HOTKEY_EVENT_HOLD_DOWN;
                         }
-                        consume = !modifier_only_binding;
+                        consume = true;
                     } else if (msg_type == kWmKeyUp || msg_type == kWmSysKeyUp) {
                         if (hold_active_) {
                             hold_active_ = false;
                             event_type = OPENYAP_HOTKEY_EVENT_HOLD_UP;
                         }
-                        consume = !modifier_only_binding;
+                        consume = true;
                     }
                 } else if (hold_active_ && is_key_up(msg_type)) {
                     const bool is_main_key = modifier_only_binding ? is_modifier_part_of_binding(vk_code) : vk_code == binding_.key_code;
@@ -424,7 +465,7 @@ namespace openyap::hotkey {
                     if (is_main_key || is_required_modifier) {
                         hold_active_ = false;
                         event_type = OPENYAP_HOTKEY_EVENT_HOLD_UP;
-                        consume = is_main_key && !modifier_only_binding && modifier_mask_for_vk(vk_code) == 0;
+                        consume = true;
                     }
                 }
 

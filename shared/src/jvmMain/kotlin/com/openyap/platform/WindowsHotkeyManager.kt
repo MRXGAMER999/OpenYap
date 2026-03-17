@@ -50,10 +50,16 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
     private var usingFallback = native == null
 
     @Volatile
+    private var nativePermanentlyUnavailable = native == null
+
+    @Volatile
     private var config: HotkeyConfig = HotkeyConfig()
 
     @Volatile
     private var isListening = false
+
+    @Volatile
+    private var nativeListenerRunning = false
 
     @Volatile
     private var pendingCapture: CompletableDeferred<HotkeyCapture>? = null
@@ -61,8 +67,8 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
     private val nativeCallback =
         NativeAudioBridge.OpenYapNative.HotkeyCallback { eventType, vkCode, modifiersMask, _ ->
             when (eventType) {
-                HOTKEY_EVENT_HOLD_DOWN -> _hotkeyEvents.tryEmit(HotkeyEvent.HoldDown)
-                HOTKEY_EVENT_HOLD_UP -> _hotkeyEvents.tryEmit(HotkeyEvent.HoldUp)
+                HOTKEY_EVENT_HOLD_DOWN -> _hotkeyEvents.tryEmit(HotkeyEvent.DictationHoldDown)
+                HOTKEY_EVENT_HOLD_UP -> _hotkeyEvents.tryEmit(HotkeyEvent.DictationHoldUp)
                 HOTKEY_EVENT_CANCEL_RECORDING -> _hotkeyEvents.tryEmit(HotkeyEvent.CancelRecording)
                 HOTKEY_EVENT_CAPTURED -> {
                     val binding = HotkeyBinding(vkCode, modifiersFromMask(modifiersMask))
@@ -92,13 +98,16 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
 
     override fun setConfig(config: HotkeyConfig) {
         this.config = config
+        val shouldUseFallback = shouldUseFallback(config)
+        reconfigureBackend(shouldUseFallback)
+
         if (usingFallback) {
             getOrCreateFallback().setConfig(config)
             return
         }
 
         val nativeInstance = native ?: run {
-            switchToFallback("Native DLL is unavailable while updating hotkey config.")
+            switchToFallback("Native DLL is unavailable while updating hotkey config.", permanent = true)
             getOrCreateFallback().setConfig(config)
             return
         }
@@ -121,42 +130,51 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
         if (result != 0) {
             switchToFallback(
                 nativeInstance.readLastError()
-                    ?: "Failed to update native hotkey config (code $result)."
+                    ?: "Failed to update native hotkey config (code $result).",
+                permanent = true,
             )
             getOrCreateFallback().setConfig(config)
         }
     }
 
     override fun startListening() {
-        isListening = true
+        if (isListening) return
+        reconfigureBackend(shouldUseFallback(config))
         if (usingFallback) {
             getOrCreateFallback().startListening()
+            isListening = true
             return
         }
 
         val nativeInstance = native ?: run {
-            switchToFallback("Native DLL is unavailable while starting hotkeys.")
+            switchToFallback("Native DLL is unavailable while starting hotkeys.", permanent = true)
             getOrCreateFallback().startListening()
+            isListening = true
             return
         }
 
-        val result = runNativeIntCall(
+        val result = startNativeListener(
+            nativeInstance = nativeInstance,
             action = "start native hotkey listener",
             fallbackReason = "Native DLL is missing required hotkey exports while starting hotkeys.",
-        ) {
-            nativeInstance.openyap_hotkey_start_listening(nativeCallback, null)
-        }
+        )
         if (usingFallback) {
             getOrCreateFallback().startListening()
+            isListening = true
             return
         }
         if (result != 0) {
             switchToFallback(
                 nativeInstance.readLastError()
-                    ?: "Failed to start native hotkey listener (code $result)."
+                    ?: "Failed to start native hotkey listener (code $result).",
+                permanent = true,
             )
             getOrCreateFallback().startListening()
+            isListening = true
+            return
         }
+
+        isListening = true
     }
 
     override fun stopListening() {
@@ -170,35 +188,36 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
         }
 
         runCatching { native?.openyap_hotkey_cancel_capture() }
-        runCatching { native?.openyap_hotkey_stop_listening() }
+        stopNativeListener()
     }
 
     override suspend fun captureNextHotkey(): HotkeyCapture = captureMutex.withLock {
+        reconfigureBackend(shouldUseFallback(config))
         if (usingFallback) {
             return@withLock getOrCreateFallback().captureNextHotkey()
         }
 
         val nativeInstance = native ?: run {
-            switchToFallback("Native DLL is unavailable while capturing a hotkey.")
+            switchToFallback("Native DLL is unavailable while capturing a hotkey.", permanent = true)
             return@withLock getOrCreateFallback().captureNextHotkey()
         }
 
         controlMutex.withLock {
             val wasListening = isListening
             if (!wasListening) {
-                val startResult = runNativeIntCall(
+                val startResult = startNativeListener(
+                    nativeInstance = nativeInstance,
                     action = "start native hotkey listener for capture",
                     fallbackReason = "Native DLL is missing required hotkey exports while capturing a hotkey.",
-                ) {
-                    nativeInstance.openyap_hotkey_start_listening(nativeCallback, null)
-                }
+                )
                 if (usingFallback) {
                     return@withLock getOrCreateFallback().captureNextHotkey()
                 }
                 if (startResult != 0) {
                     switchToFallback(
                         nativeInstance.readLastError()
-                            ?: "Failed to start native hotkey listener for capture (code $startResult)."
+                            ?: "Failed to start native hotkey listener for capture (code $startResult).",
+                        permanent = true,
                     )
                     return@withLock getOrCreateFallback().captureNextHotkey()
                 }
@@ -215,18 +234,19 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
             if (usingFallback) {
                 pendingCapture = null
                 if (!wasListening) {
-                    runCatching { nativeInstance.openyap_hotkey_stop_listening() }
+                    stopNativeListener(nativeInstance)
                 }
                 return@withLock getOrCreateFallback().captureNextHotkey()
             }
             if (beginResult != 0) {
                 pendingCapture = null
                 if (!wasListening) {
-                    runCatching { nativeInstance.openyap_hotkey_stop_listening() }
+                    stopNativeListener(nativeInstance)
                 }
                 switchToFallback(
                     nativeInstance.readLastError()
-                        ?: "Failed to begin native hotkey capture (code $beginResult)."
+                        ?: "Failed to begin native hotkey capture (code $beginResult).",
+                    permanent = true,
                 )
                 return@withLock getOrCreateFallback().captureNextHotkey()
             }
@@ -240,7 +260,7 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
                 runCatching { nativeInstance.openyap_hotkey_cancel_capture() }
                 deferred.cancel()
                 if (!wasListening) {
-                    runCatching { nativeInstance.openyap_hotkey_stop_listening() }
+                    stopNativeListener(nativeInstance)
                 }
             }
         }
@@ -268,13 +288,87 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
         }
     }
 
-    private fun switchToFallback(reason: String) {
+    private fun shouldUseFallback(config: HotkeyConfig): Boolean {
+        return nativePermanentlyUnavailable || (config.commandHotkeyEnabled && config.commandHotkey?.enabled == true)
+    }
+
+    private fun reconfigureBackend(shouldUseFallback: Boolean) {
         synchronized(fallbackLock) {
+            if (usingFallback == shouldUseFallback) return
+            usingFallback = shouldUseFallback
+        }
+
+        if (shouldUseFallback) {
+            runCatching { native?.openyap_hotkey_cancel_capture() }
+            stopNativeListener()
+            pendingCapture?.cancel(CancellationException("Switching to JNA hotkey backend."))
+            pendingCapture = null
+            val fallback = getOrCreateFallback()
+            fallback.setConfig(config)
+            if (isListening) {
+                fallback.startListening()
+            }
+            return
+        }
+
+        fallbackManager?.stopListening()
+        pendingCapture?.cancel(CancellationException("Switching to native hotkey backend."))
+        pendingCapture = null
+        val nativeInstance = native ?: run {
+            switchToFallback("Native DLL is unavailable while restoring native hotkeys.", permanent = true)
+            return
+        }
+        val binding = config.startHotkey
+        val result = runNativeIntCall(
+            action = "restore native hotkey config",
+            fallbackReason = "Native DLL is missing required hotkey exports while restoring native hotkeys.",
+        ) {
+            nativeInstance.openyap_hotkey_set_config(
+                keyCode = binding?.platformKeyCode ?: 0,
+                modifiersMask = binding?.modifiers?.toMask() ?: 0,
+                enabled = if (binding?.enabled == true) 1 else 0,
+            )
+        }
+        if (usingFallback) {
+            getOrCreateFallback().setConfig(config)
+            if (isListening) {
+                getOrCreateFallback().startListening()
+            }
+            return
+        }
+        if (result != 0) {
+            switchToFallback(
+                nativeInstance.readLastError() ?: "Failed to restore native hotkey config (code $result).",
+                permanent = true,
+            )
+            return
+        }
+        if (isListening) {
+            val startResult = startNativeListener(
+                nativeInstance = nativeInstance,
+                action = "restart native hotkey listener",
+                fallbackReason = "Native DLL is missing required hotkey exports while restoring native hotkeys.",
+            )
+            if (usingFallback || startResult == 0) {
+                return
+            }
+            switchToFallback(
+                nativeInstance.readLastError() ?: "Failed to restart native hotkey listener (code $startResult).",
+                permanent = true,
+            )
+        }
+    }
+
+    private fun switchToFallback(reason: String, permanent: Boolean) {
+        synchronized(fallbackLock) {
+            if (permanent) {
+                nativePermanentlyUnavailable = true
+            }
             if (usingFallback) return
             usingFallback = true
         }
         runCatching { native?.openyap_hotkey_cancel_capture() }
-        runCatching { native?.openyap_hotkey_stop_listening() }
+        stopNativeListener()
         pendingCapture?.cancel(CancellationException(reason))
         pendingCapture = null
         System.err.println("Native hotkeys failed, using JNA fallback: $reason")
@@ -294,12 +388,34 @@ class WindowsHotkeyManager : HotkeyManager, Closeable {
         return try {
             block()
         } catch (_: UnsatisfiedLinkError) {
-            switchToFallback(fallbackReason)
+            switchToFallback(fallbackReason, permanent = true)
             -1
         } catch (error: NoSuchMethodError) {
-            switchToFallback("$fallbackReason (${error.message ?: action})")
+            switchToFallback("$fallbackReason (${error.message ?: action})", permanent = true)
             -1
         }
+    }
+
+    private fun startNativeListener(
+        nativeInstance: NativeAudioBridge.OpenYapNative,
+        action: String,
+        fallbackReason: String,
+    ): Int {
+        if (nativeListenerRunning) return 0
+        val result = runNativeIntCall(action, fallbackReason) {
+            nativeInstance.openyap_hotkey_start_listening(nativeCallback, null)
+        }
+        if (!usingFallback && result == 0) {
+            nativeListenerRunning = true
+        }
+        return result
+    }
+
+    private fun stopNativeListener(nativeInstance: NativeAudioBridge.OpenYapNative? = native) {
+        if (nativeListenerRunning) {
+            runCatching { nativeInstance?.openyap_hotkey_stop_listening() }
+        }
+        nativeListenerRunning = false
     }
 
     private fun modifiersFromMask(mask: Int): Set<HotkeyModifier> = buildSet {

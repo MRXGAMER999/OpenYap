@@ -12,4 +12,5 @@ data class RecordingEntryEntity(
     val targetApp: String = "",
     val model: String = "",
     val isFallback: Boolean = false,
+    val workflowType: String = "DICTATION",
 )

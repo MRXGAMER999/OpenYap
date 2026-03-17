@@ -4,6 +4,12 @@ import kotlinx.serialization.Serializable
 import kotlin.time.Instant
 
 @Serializable
+enum class RecordingWorkflowType {
+    DICTATION,
+    COMMAND,
+}
+
+@Serializable
 data class RecordingEntry(
     val id: String,
     val recordedAt: Instant,
@@ -12,4 +18,5 @@ data class RecordingEntry(
     val targetApp: String = "",
     val model: String = "",
     val isFallback: Boolean = false,
+    val workflowType: RecordingWorkflowType = RecordingWorkflowType.DICTATION,
 )

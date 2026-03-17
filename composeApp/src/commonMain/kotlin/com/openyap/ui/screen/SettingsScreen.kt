@@ -48,9 +48,6 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -94,23 +91,9 @@ fun SettingsScreen(
     var showKey by remember { mutableStateOf(false) }
     var showGroqKey by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
-    val snackbarHostState = remember { SnackbarHostState() }
     val reducedMotion = reducedMotionEnabled()
 
-    // Snackbar for hotkey errors
-    LaunchedEffect(state.hotkeyError) {
-        state.hotkeyError?.let {
-            snackbarHostState.showSnackbar(
-                message = it,
-                actionLabel = "Dismiss",
-                duration = SnackbarDuration.Short,
-            )
-            onEvent(SettingsEvent.ClearHotkeyMessage)
-        }
-    }
-
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
     ) { innerPadding ->
         Column(
@@ -131,58 +114,43 @@ fun SettingsScreen(
 
             SettingsSectionCard(
                 title = "Input controls",
-                description = "Tune the global hotkey and the microphone OpenYap listens to.",
+                description = "Tune dictation and command shortcuts, then choose the microphone OpenYap listens to.",
             ) {
-                Text("Recording hotkey", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    text = "Current shortcut: ${state.hotkeyLabel}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                FeatureToggleRow(
+                    label = "Whisper mode",
+                    description = "Keep quiet or whispered speech from being trimmed too aggressively before transcription.",
+                    checked = state.whisperModeEnabled,
+                    onCheckedChange = { onEvent(SettingsEvent.ToggleWhisperMode(it)) },
                 )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    val reducedMotion = reducedMotionEnabled()
-                    val hotkeyBorderAlpha = if (reducedMotion) {
-                        1f
-                    } else {
-                        val hotkeyPulse = rememberInfiniteTransition(label = "hotkeyPulse")
-                        hotkeyPulse.animateFloat(
-                            initialValue = 0.35f,
-                            targetValue = 1f,
-                            animationSpec = infiniteRepeatable(tween(850), RepeatMode.Reverse),
-                            label = "hotkeyBorderAlpha",
-                        ).value
-                    }
-                    TooltipBox(
-                        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
-                        tooltip = { PlainTooltip { Text("Press new key combination to reassign the global recording hotkey") } },
-                        state = rememberTooltipState(),
-                    ) {
-                        FilledTonalButton(
-                            onClick = { onEvent(SettingsEvent.CaptureHotkey) },
-                            enabled = !state.isCapturingHotkey,
-                            border = if (state.isCapturingHotkey) {
-                                BorderStroke(
-                                    2.dp,
-                                    MaterialTheme.colorScheme.primary.copy(alpha = hotkeyBorderAlpha)
-                                )
-                            } else {
-                                null
-                            },
-                        ) {
-                            Text(if (state.isCapturingHotkey) "Press keys..." else "Change hotkey")
-                        }
-                    }
-                    if (state.isCapturingHotkey) {
-                        Text(
-                            text = "Press the new shortcut now.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
+                HorizontalDivider()
+                HotkeyControlCard(
+                    title = "Dictation hotkey",
+                    description = "Hold to record dictation, then release to transcribe and paste.",
+                    currentLabel = state.dictationHotkeyLabel,
+                    buttonLabel = if (state.isCapturingDictationHotkey) "Press keys..." else "Change dictation hotkey",
+                    enabled = !state.isCapturingCommandHotkey,
+                    isCapturing = state.isCapturingDictationHotkey,
+                    error = state.dictationHotkeyError,
+                    onCapture = { onEvent(SettingsEvent.CaptureDictationHotkey) },
+                )
+                HotkeyControlCard(
+                    title = "Command hotkey",
+                    description = "Hold to capture the current selection, speak an editing instruction, then replace the selection with the transformed result.",
+                    currentLabel = state.commandHotkeyLabel,
+                    buttonLabel = if (state.isCapturingCommandHotkey) "Press keys..." else "Change command hotkey",
+                    enabled = !state.isCapturingDictationHotkey,
+                    isCapturing = state.isCapturingCommandHotkey,
+                    error = state.commandHotkeyError,
+                    supportingContent = {
+                        FeatureToggleRow(
+                            label = "Enable command hotkey",
+                            description = "Register the separate command shortcut alongside dictation.",
+                            checked = state.commandHotkeyEnabled,
+                            onCheckedChange = { onEvent(SettingsEvent.ToggleCommandHotkey(it)) },
                         )
-                    }
-                }
+                    },
+                    onCapture = { onEvent(SettingsEvent.CaptureCommandHotkey) },
+                )
                 Text(
                     "Microphone",
                     style = MaterialTheme.typography.titleMedium,
@@ -813,6 +781,87 @@ private fun SettingsSectionCard(
                 )
             }
             content()
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HotkeyControlCard(
+    title: String,
+    description: String,
+    currentLabel: String,
+    buttonLabel: String,
+    enabled: Boolean,
+    isCapturing: Boolean,
+    error: String?,
+    supportingContent: @Composable ColumnScope.() -> Unit = {},
+    onCapture: () -> Unit,
+) {
+    val hotkeyPulse = rememberInfiniteTransition(label = "hotkeyPulse")
+    val hotkeyBorderAlpha by hotkeyPulse.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(850), RepeatMode.Reverse),
+        label = "hotkeyBorderAlpha",
+    )
+
+    OutlinedCard {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(Spacing.md),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+        ) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "Current shortcut: $currentLabel",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TooltipBox(
+                    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+                    tooltip = { PlainTooltip { Text("Press a new key combination to update this shortcut") } },
+                    state = rememberTooltipState(),
+                ) {
+                    FilledTonalButton(
+                        onClick = onCapture,
+                        enabled = enabled && !isCapturing,
+                        border = if (isCapturing) {
+                            BorderStroke(
+                                2.dp,
+                                MaterialTheme.colorScheme.primary.copy(alpha = hotkeyBorderAlpha)
+                            )
+                        } else {
+                            null
+                        },
+                    ) {
+                        Text(buttonLabel)
+                    }
+                }
+                if (isCapturing) {
+                    Text(
+                        text = "Press the new shortcut now.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+            supportingContent()
+            if (error != null) {
+                Text(
+                    text = error,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
         }
     }
 }

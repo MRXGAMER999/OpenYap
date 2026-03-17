@@ -3,20 +3,26 @@ package com.openyap.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.openyap.model.AppSettings
+import com.openyap.model.effectiveHotkeyConfig
 import com.openyap.model.HotkeyEvent
 import com.openyap.model.OverlayState
 import com.openyap.model.PermissionStatus
 import com.openyap.model.RecordingEntry
 import com.openyap.model.RecordingState
+import com.openyap.model.RecordingWorkflowType
 import com.openyap.model.TranscriptionProvider
 import com.openyap.platform.AudioRecorder
 import com.openyap.platform.AudioRecorderDiagnostics
+import com.openyap.platform.ClipboardSnapshotToken
 import com.openyap.platform.FileOperations
 import com.openyap.platform.ForegroundAppDetector
+import com.openyap.platform.ForegroundWindowContext
 import com.openyap.platform.HotkeyManager
 import com.openyap.platform.OverlayController
 import com.openyap.platform.PasteAutomation
 import com.openyap.platform.PermissionManager
+import com.openyap.platform.RecordingSensitivityPreset
+import com.openyap.platform.SelectionCaptureResult
 import com.openyap.repository.DictionaryRepository
 import com.openyap.repository.HistoryRepository
 import com.openyap.repository.SettingsRepository
@@ -30,7 +36,9 @@ import com.openyap.service.TranscriptionService
 import com.openyap.service.WhisperPromptBuilder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -40,9 +48,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.coroutineContext
 import kotlin.math.roundToInt
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
@@ -75,6 +85,24 @@ private sealed interface CorrectionOutcome {
     data class Applied(val text: String) : CorrectionOutcome
     data class FallbackRaw(val rawTranscript: String, val reason: String) : CorrectionOutcome
 }
+
+private sealed interface RecordingSession {
+    val workflowType: RecordingWorkflowType
+
+    data object Dictation : RecordingSession {
+        override val workflowType = RecordingWorkflowType.DICTATION
+    }
+
+    data class Command(
+        val selectedText: String,
+        val clipboardSnapshotToken: ClipboardSnapshotToken,
+        val sourceWindow: ForegroundWindowContext,
+    ) : RecordingSession {
+        override val workflowType = RecordingWorkflowType.COMMAND
+    }
+}
+
+private class UserVisibleCommandFailure(message: String) : IllegalStateException(message)
 
 private data class SessionContextEntry(
     val text: String,
@@ -129,6 +157,8 @@ class RecordingViewModel(
         private const val MAX_CONTEXT_ITEM_CHARS = 400
         private const val MAX_TOTAL_CONTEXT_CHARS = 1800
         private const val MAX_WARNING_DETAIL_CHARS = 160
+        private const val MAX_COMMAND_SELECTION_CHARS = 12_000
+        private const val COMMAND_PROCESSING_MESSAGE = "Transforming selection..."
         private val SESSION_CONTEXT_IDLE_TIMEOUT = 30.minutes
     }
 
@@ -149,11 +179,15 @@ class RecordingViewModel(
     @Volatile
     private var durationJob: Job? = null
     @Volatile
+    private var processingJob: Job? = null
+    @Volatile
     private var currentRecordingPath: String? = null
 
     @Volatile
     private var currentProcessingPath: String? = null
     private var recordingStartedAt: TimeMark? = null
+    @Volatile
+    private var activeSession: RecordingSession? = null
     private val sessionContextEntries = ArrayDeque<SessionContextEntry>()
     private var lastSuccessfulPasteAt: Instant? = null
 
@@ -161,11 +195,13 @@ class RecordingViewModel(
         viewModelScope.launch {
             hotkeyManager.hotkeyEvents.collect { event ->
                 when (event) {
-                    is HotkeyEvent.HoldDown -> startRecording()
-                    is HotkeyEvent.HoldUp -> stopRecording()
+                    is HotkeyEvent.DictationHoldDown -> startRecording(RecordingSession.Dictation)
+                    is HotkeyEvent.DictationHoldUp -> stopRecording()
+                    is HotkeyEvent.CommandHoldDown -> startRecording(null)
+                    is HotkeyEvent.CommandHoldUp -> stopRecording()
                     is HotkeyEvent.CancelRecording -> cancelRecording()
                     is HotkeyEvent.ToggleRecording -> toggleRecording()
-                    is HotkeyEvent.StartRecording -> startRecording()
+                    is HotkeyEvent.StartRecording -> startRecording(RecordingSession.Dictation)
                     is HotkeyEvent.StopRecording -> stopRecording()
                 }
             }
@@ -208,11 +244,11 @@ class RecordingViewModel(
             current is RecordingState.Error ||
             current is RecordingState.Success
         ) {
-            startRecording()
+            startRecording(RecordingSession.Dictation)
         }
     }
 
-    private suspend fun startRecording() {
+    private suspend fun startRecording(sessionOverride: RecordingSession?) {
         recordingMutex.withLock {
         val currentState = _state.value.recordingState
 
@@ -256,6 +292,9 @@ class RecordingViewModel(
             }
             return
         }
+        val session = sessionOverride ?: prepareCommandSession(settings) ?: return
+        setActiveSession(session)
+
         if (settings.audioFeedbackEnabled) {
             audioFeedbackPlayer.playStart()
         }
@@ -266,10 +305,15 @@ class RecordingViewModel(
         recordingStartedAt = TimeSource.Monotonic.markNow()
 
         try {
-            audioRecorder.startRecording(path, settings.audioDeviceId)
+            audioRecorder.startRecording(
+                outputPath = path,
+                deviceId = settings.audioDeviceId,
+                sensitivityPreset = settings.recordingSensitivityPreset(),
+            )
         } catch (e: Exception) {
             currentRecordingPath = null
             recordingStartedAt = null
+            setActiveSession(null, session.commandClipboardSnapshotTokenOrNull())
             _state.update {
                 it.copy(
                     recordingState = RecordingState.Error(e.message ?: "Failed to start recording"),
@@ -311,6 +355,7 @@ class RecordingViewModel(
 
     private suspend fun stopRecording() {
         if (_state.value.recordingState !is RecordingState.Recording) return
+        val session = activeSession ?: RecordingSession.Dictation
 
         durationJob?.cancel()
         durationJob = null
@@ -341,6 +386,7 @@ class RecordingViewModel(
             overlayController.dismiss()
             currentRecordingPath?.let { deleteFile(it) }
             currentRecordingPath = null
+            setActiveSession(null, activeSession.commandClipboardSnapshotTokenOrNull())
             return
         }
 
@@ -353,6 +399,7 @@ class RecordingViewModel(
             currentRecordingPath?.let { deleteFile(it) }
             currentRecordingPath = null
             currentProcessingPath = null
+            setActiveSession(null, activeSession.commandClipboardSnapshotTokenOrNull())
             overlayController.dismiss()
             _state.update {
                 it.copy(
@@ -378,13 +425,19 @@ class RecordingViewModel(
 
         _state.update { it.copy(recordingState = RecordingState.Processing) }
         overlayController.updateState(OverlayState.PROCESSING)
+        overlayController.updateProcessingMessage(
+            if (session is RecordingSession.Command) COMMAND_PROCESSING_MESSAGE else null
+        )
         recorderWarning?.let(overlayController::flashMessage)
 
-        viewModelScope.launch {
+        processingJob = viewModelScope.launch {
             try {
-                val foregroundWindowContext = foregroundAppDetector.getForegroundWindowContext()
-                val targetApp = foregroundWindowContext.appName
-                val windowTitle = foregroundWindowContext.windowTitle
+                val targetWindow = when (session) {
+                    RecordingSession.Dictation -> foregroundAppDetector.getForegroundWindowContext()
+                    is RecordingSession.Command -> session.sourceWindow
+                }
+                val targetApp = targetWindow.appName
+                val windowTitle = targetWindow.windowTitle
                 val geminiApiKey = settingsRepository.loadApiKey()
                 val groqApiKey = settingsRepository.loadGroqApiKey()
                 val audioBytes = readFileBytes(path)
@@ -453,73 +506,6 @@ class RecordingViewModel(
                 val correctionTemperature = buildCorrectionTemperature(settings)
                 val directAudioTemperature = buildDirectAudioTemperature(settings)
 
-                val correctionOutcome = when (settings.transcriptionProvider) {
-                    TranscriptionProvider.GEMINI -> {
-                        CorrectionOutcome.Applied(
-                            geminiClient.transcribe(
-                                audioBytes = audioBytes,
-                                mimeType = audioMimeType,
-                                systemPrompt = transcriptionSystemPrompt,
-                                apiKey = geminiApiKey!!,
-                                model = settings.geminiModel,
-                                temperature = directAudioTemperature,
-                            )
-                        )
-                    }
-
-                    TranscriptionProvider.GROQ_WHISPER -> {
-                        CorrectionOutcome.Applied(
-                            groqWhisperClient.transcribe(
-                                audioBytes = audioBytes,
-                                mimeType = audioMimeType,
-                                systemPrompt = "",
-                                apiKey = groqApiKey!!,
-                                model = settings.groqModel,
-                                whisperPrompt = whisperPrompt,
-                                language = settings.whisperLanguage,
-                            )
-                        )
-                    }
-
-                    TranscriptionProvider.GROQ_WHISPER_GEMINI -> {
-                        val transcript = groqWhisperClient.transcribe(
-                            audioBytes = audioBytes,
-                            mimeType = audioMimeType,
-                            systemPrompt = "",
-                            apiKey = groqApiKey!!,
-                            model = settings.groqModel,
-                            whisperPrompt = whisperPrompt,
-                            language = settings.whisperLanguage,
-                        )
-                        rewriteWithGeminiFallback(
-                            transcript = transcript,
-                            systemPrompt = correctionSystemPrompt,
-                            apiKey = geminiApiKey!!,
-                            model = settings.geminiModel,
-                            temperature = correctionTemperature,
-                        )
-                    }
-
-                    TranscriptionProvider.GROQ_WHISPER_GROQ -> {
-                        val transcript = groqWhisperClient.transcribe(
-                            audioBytes = audioBytes,
-                            mimeType = audioMimeType,
-                            systemPrompt = "",
-                            apiKey = groqApiKey!!,
-                            model = settings.groqModel,
-                            whisperPrompt = whisperPrompt,
-                            language = settings.whisperLanguage,
-                        )
-                        rewriteWithGroqFallback(
-                            transcript = transcript,
-                            systemPrompt = correctionSystemPrompt,
-                            apiKey = groqApiKey,
-                            model = settings.groqLLMModel,
-                            temperature = correctionTemperature,
-                        )
-                    }
-                }
-
                 val modelUsed = when (settings.transcriptionProvider) {
                     TranscriptionProvider.GEMINI -> settings.geminiModel
                     TranscriptionProvider.GROQ_WHISPER -> settings.groqModel
@@ -527,74 +513,159 @@ class RecordingViewModel(
                     TranscriptionProvider.GROQ_WHISPER_GROQ -> "${settings.groqModel} -> ${settings.groqLLMModel}"
                 }
 
-                if (generation != processingGeneration.get()) {
-                    deleteFile(path)
-                    return@launch
-                }
+                ensureProcessingStillActive(generation)
 
-                val response = when (correctionOutcome) {
-                    is CorrectionOutcome.Applied -> correctionOutcome.text
-                    is CorrectionOutcome.FallbackRaw -> {
-                        showCorrectionSkippedWarning(correctionOutcome.reason)
-                        correctionOutcome.rawTranscript
+                var usedFallback = false
+                val response = when (session) {
+                    RecordingSession.Dictation -> {
+                        val correctionOutcome = when (settings.transcriptionProvider) {
+                            TranscriptionProvider.GEMINI -> {
+                                CorrectionOutcome.Applied(
+                                    geminiClient.transcribe(
+                                        audioBytes = audioBytes,
+                                        mimeType = audioMimeType,
+                                        systemPrompt = transcriptionSystemPrompt,
+                                        apiKey = geminiApiKey!!,
+                                        model = settings.geminiModel,
+                                        temperature = directAudioTemperature,
+                                    )
+                                )
+                            }
+
+                            TranscriptionProvider.GROQ_WHISPER -> {
+                                CorrectionOutcome.Applied(
+                                    groqWhisperClient.transcribe(
+                                        audioBytes = audioBytes,
+                                        mimeType = audioMimeType,
+                                        systemPrompt = "",
+                                        apiKey = groqApiKey!!,
+                                        model = settings.groqModel,
+                                        whisperPrompt = whisperPrompt,
+                                        language = settings.whisperLanguage,
+                                    )
+                                )
+                            }
+
+                            TranscriptionProvider.GROQ_WHISPER_GEMINI -> {
+                                val transcript = groqWhisperClient.transcribe(
+                                    audioBytes = audioBytes,
+                                    mimeType = audioMimeType,
+                                    systemPrompt = "",
+                                    apiKey = groqApiKey!!,
+                                    model = settings.groqModel,
+                                    whisperPrompt = whisperPrompt,
+                                    language = settings.whisperLanguage,
+                                )
+                                rewriteWithGeminiFallback(
+                                    transcript = transcript,
+                                    systemPrompt = correctionSystemPrompt,
+                                    apiKey = geminiApiKey!!,
+                                    model = settings.geminiModel,
+                                    temperature = correctionTemperature,
+                                )
+                            }
+
+                            TranscriptionProvider.GROQ_WHISPER_GROQ -> {
+                                val transcript = groqWhisperClient.transcribe(
+                                    audioBytes = audioBytes,
+                                    mimeType = audioMimeType,
+                                    systemPrompt = "",
+                                    apiKey = groqApiKey!!,
+                                    model = settings.groqModel,
+                                    whisperPrompt = whisperPrompt,
+                                    language = settings.whisperLanguage,
+                                )
+                                rewriteWithGroqFallback(
+                                    transcript = transcript,
+                                    systemPrompt = correctionSystemPrompt,
+                                    apiKey = groqApiKey,
+                                    model = settings.groqLLMModel,
+                                    temperature = correctionTemperature,
+                                )
+                            }
+                        }
+
+                        val dictationResponse = when (correctionOutcome) {
+                            is CorrectionOutcome.Applied -> correctionOutcome.text
+                            is CorrectionOutcome.FallbackRaw -> {
+                                usedFallback = true
+                                showCorrectionSkippedWarning(correctionOutcome.reason)
+                                correctionOutcome.rawTranscript
+                            }
+                        }
+
+                        val profile = userProfileRepository.loadProfile()
+                        val dictEntries = if (settings.dictionaryEnabled) {
+                            dictionaryRepository.loadEntries()
+                        } else {
+                            emptyList()
+                        }
+                        PhraseExpansionEngine.expandText(
+                            text = dictationResponse,
+                            profile = profile,
+                            dictionaryEntries = dictEntries,
+                            enabled = settings.phraseExpansionEnabled,
+                        )
                     }
-                }
-                val correctionApplied = correctionOutcome is CorrectionOutcome.Applied
 
-                val profile = userProfileRepository.loadProfile()
-                val dictEntries = if (settings.dictionaryEnabled) {
-                    dictionaryRepository.loadEntries()
-                } else {
-                    emptyList()
-                }
-                val expandedResponse = PhraseExpansionEngine.expandText(
-                    text = response,
-                    profile = profile,
-                    dictionaryEntries = dictEntries,
-                    enabled = settings.phraseExpansionEnabled,
-                )
-
-                if (generation != processingGeneration.get()) {
-                    deleteFile(path)
-                    return@launch
+                    is RecordingSession.Command -> runCommandWorkflow(
+                        session = session,
+                        settings = settings,
+                        audioBytes = audioBytes,
+                        geminiApiKey = geminiApiKey,
+                        groqApiKey = groqApiKey,
+                        whisperPrompt = whisperPrompt,
+                        targetApp = targetApp,
+                        windowTitle = windowTitle,
+                        directAudioTemperature = directAudioTemperature,
+                        correctionTemperature = correctionTemperature,
+                    )
                 }
 
-                pasteAutomation.pasteText(expandedResponse, restoreClipboard = false)
-
-                if (generation != processingGeneration.get()) {
-                    deleteFile(path)
-                    return@launch
+                ensureProcessingStillActive(generation)
+                when (session) {
+                    RecordingSession.Dictation -> pasteAutomation.pasteText(response, restoreClipboard = false)
+                    is RecordingSession.Command -> pasteAutomation.pasteTextToWindow(
+                        text = response,
+                        targetWindow = session.sourceWindow,
+                        snapshotToken = session.clipboardSnapshotToken,
+                    )
                 }
+
+                ensureProcessingStillActive(generation)
 
                 val successfulPasteAt = Clock.System.now()
-                if (correctionApplied) {
+                if (session is RecordingSession.Dictation) {
                     rememberSessionContext(
-                        text = expandedResponse,
+                        text = response,
                         capturedAt = successfulPasteAt,
                         targetApp = targetApp,
                     )
                 }
                 lastSuccessfulPasteAt = successfulPasteAt
 
+                ensureProcessingStillActive(generation)
                 historyRepository.addEntry(
                     RecordingEntry(
                         id = successfulPasteAt.toEpochMilliseconds().toString(),
                         recordedAt = successfulPasteAt,
                         durationSeconds = duration,
-                        response = expandedResponse,
+                        response = response,
                         targetApp = targetApp ?: "",
                         model = modelUsed,
-                        isFallback = !correctionApplied,
+                        isFallback = usedFallback,
+                        workflowType = session.workflowType,
                     )
                 )
 
+                ensureProcessingStillActive(generation)
                 _state.update {
                     it.copy(
                         recordingState = RecordingState.Success(
-                            expandedResponse,
-                            expandedResponse.length
+                            response,
+                            response.length
                         ),
-                        lastResultText = expandedResponse,
+                        lastResultText = response,
                     )
                 }
                 _effects.emit(RecordingEffect.PasteSuccess)
@@ -603,11 +674,14 @@ class RecordingViewModel(
 
                 if (settings.dictionaryEnabled) {
                     try {
-                        dictionaryEngine.ingestObservedText(expandedResponse)
+                        if (session is RecordingSession.Dictation) {
+                            dictionaryEngine.ingestObservedText(response)
+                        }
                     } catch (_: Exception) {
                     }
                 }
 
+                setActiveSession(null, session.commandClipboardSnapshotTokenOrNull())
                 currentProcessingPath = null
                 delay(2000)
                 overlayController.dismiss()
@@ -620,9 +694,13 @@ class RecordingViewModel(
                 }
 
                 deleteFile(path)
+            } catch (e: CancellationException) {
+                currentProcessingPath = null
+                deleteFile(path)
             } catch (e: Exception) {
                 currentProcessingPath = null
                 if (generation == processingGeneration.get()) {
+                    setActiveSession(null, activeSession.commandClipboardSnapshotTokenOrNull())
                     _state.update {
                         it.copy(
                             recordingState = RecordingState.Error(e.message ?: "Processing failed"),
@@ -635,6 +713,10 @@ class RecordingViewModel(
                     overlayController.dismiss()
                 }
                 deleteFile(path)
+            } finally {
+                if (processingJob === coroutineContext[Job]) {
+                    processingJob = null
+                }
             }
         }
     }
@@ -651,14 +733,18 @@ class RecordingViewModel(
                 currentRecordingPath = null
                 overlayController.dismiss()
                 _state.update { it.copy(recordingState = RecordingState.Idle) }
+                setActiveSession(null, activeSession.commandClipboardSnapshotTokenOrNull())
             }
 
             is RecordingState.Processing -> {
                 processingGeneration.incrementAndGet()
+                processingJob?.cancelAndJoin()
+                processingJob = null
                 currentProcessingPath?.let { deleteFile(it) }
                 currentProcessingPath = null
                 overlayController.dismiss()
                 _state.update { it.copy(recordingState = RecordingState.Idle) }
+                setActiveSession(null, activeSession.commandClipboardSnapshotTokenOrNull())
             }
 
             else -> {}
@@ -690,6 +776,12 @@ class RecordingViewModel(
     }
 
     override fun onCleared() {
+        runBlocking {
+            processingGeneration.incrementAndGet()
+            processingJob?.cancel()
+            processingJob = null
+            setActiveSession(null, activeSession.commandClipboardSnapshotTokenOrNull())
+        }
         clearSessionContext()
         super.onCleared()
     }
@@ -703,6 +795,173 @@ class RecordingViewModel(
     private fun buildDirectAudioTemperature(settings: AppSettings): Float = when (settings.transcriptionProvider) {
         TranscriptionProvider.GEMINI -> if (settings.genZEnabled) 0.5f else 0.3f
         else -> 0.3f
+    }
+
+    private suspend fun prepareCommandSession(settings: AppSettings): RecordingSession.Command? {
+        val effectiveHotkeys = settings.effectiveHotkeyConfig()
+        val commandHotkey = effectiveHotkeys.commandHotkey?.takeIf {
+            effectiveHotkeys.commandHotkeyEnabled && it.enabled
+        }
+        return when (val captureResult = pasteAutomation.captureSelectedText(commandHotkey)) {
+            SelectionCaptureResult.Empty -> {
+                overlayController.flashMessage("No text selected")
+                null
+            }
+
+            SelectionCaptureResult.Failure -> {
+                overlayController.flashMessage("Selection capture failed")
+                null
+            }
+
+            is SelectionCaptureResult.Success -> {
+                val session = RecordingSession.Command(
+                    selectedText = captureResult.selectedText,
+                    clipboardSnapshotToken = captureResult.clipboardSnapshotToken,
+                    sourceWindow = captureResult.sourceWindow,
+                )
+                if (!settings.transcriptionProvider.supportsCommandWorkflow()) {
+                    restoreCommandClipboardIfNeeded(session)
+                    overlayController.flashMessage("Command Mode requires a rewrite model")
+                    return null
+                }
+                if (captureResult.selectedText.length > MAX_COMMAND_SELECTION_CHARS) {
+                    restoreCommandClipboardIfNeeded(session)
+                    overlayController.flashMessage("Selection too long")
+                    return null
+                }
+                session
+            }
+        }
+    }
+
+    private suspend fun runCommandWorkflow(
+        session: RecordingSession.Command,
+        settings: AppSettings,
+        audioBytes: ByteArray,
+        geminiApiKey: String?,
+        groqApiKey: String?,
+        whisperPrompt: String,
+        targetApp: String?,
+        windowTitle: String?,
+        directAudioTemperature: Float,
+        correctionTemperature: Float,
+    ): String {
+        val spokenInstruction = transcribeCommandInstruction(
+            settings = settings,
+            audioBytes = audioBytes,
+            geminiApiKey = geminiApiKey,
+            groqApiKey = groqApiKey,
+            whisperPrompt = whisperPrompt,
+            directAudioTemperature = directAudioTemperature,
+        ).trim()
+        if (!PromptBuilder.isMeaningfulCommandInstruction(spokenInstruction)) {
+            val message = "Didn't catch a clear command. Try again with a specific editing instruction."
+            overlayController.flashMessage(message)
+            throw UserVisibleCommandFailure(message)
+        }
+
+        val commandPrompt = PromptBuilder.buildCommandTransformationPrompt(
+            targetApp = targetApp,
+            windowTitle = windowTitle,
+        )
+        val commandInput = PromptBuilder.buildCommandTransformationInput(
+            selectedText = session.selectedText,
+            spokenInstruction = spokenInstruction,
+        )
+        val transformed = when (settings.transcriptionProvider) {
+            TranscriptionProvider.GEMINI,
+            TranscriptionProvider.GROQ_WHISPER_GEMINI -> geminiClient.rewriteText(
+                text = commandInput,
+                systemPrompt = commandPrompt,
+                apiKey = geminiApiKey!!,
+                model = settings.geminiModel,
+                temperature = correctionTemperature,
+            )
+
+            TranscriptionProvider.GROQ_WHISPER_GROQ -> groqLLMClient.rewriteText(
+                text = commandInput,
+                systemPrompt = commandPrompt,
+                apiKey = groqApiKey!!,
+                model = settings.groqLLMModel,
+                temperature = correctionTemperature,
+            )
+
+            TranscriptionProvider.GROQ_WHISPER -> error("Command workflow should not run without a rewrite model.")
+        }
+
+        return PromptBuilder.sanitizeCommandOutput(
+            rawOutput = transformed,
+            spokenInstruction = spokenInstruction,
+        ).ifBlank {
+            overlayController.flashMessage("Command produced no text")
+            throw UserVisibleCommandFailure("Command produced no text")
+        }
+    }
+
+    private suspend fun transcribeCommandInstruction(
+        settings: AppSettings,
+        audioBytes: ByteArray,
+        geminiApiKey: String?,
+        groqApiKey: String?,
+        whisperPrompt: String,
+        directAudioTemperature: Float,
+    ): String {
+        return when (settings.transcriptionProvider) {
+            TranscriptionProvider.GEMINI -> geminiClient.transcribe(
+                audioBytes = audioBytes,
+                mimeType = audioMimeType,
+                systemPrompt = PromptBuilder.buildCommandInstructionTranscriptionPrompt(),
+                apiKey = geminiApiKey!!,
+                model = settings.geminiModel,
+                temperature = directAudioTemperature,
+            )
+
+            TranscriptionProvider.GROQ_WHISPER_GEMINI,
+            TranscriptionProvider.GROQ_WHISPER_GROQ -> groqWhisperClient.transcribe(
+                audioBytes = audioBytes,
+                mimeType = audioMimeType,
+                systemPrompt = "",
+                apiKey = groqApiKey!!,
+                model = settings.groqModel,
+                whisperPrompt = whisperPrompt,
+                language = settings.whisperLanguage,
+            )
+
+            TranscriptionProvider.GROQ_WHISPER -> error("Command workflow should not transcribe without a rewrite model.")
+        }
+    }
+
+    private suspend fun restoreCommandClipboardIfNeeded(session: RecordingSession) {
+        if (session is RecordingSession.Command) {
+            pasteAutomation.restoreClipboardIfUnchanged(session.clipboardSnapshotToken)
+        }
+    }
+
+    private suspend fun setActiveSession(
+        session: RecordingSession?,
+        clipboardSnapshotToken: ClipboardSnapshotToken? = null,
+    ) {
+        val previousSession = activeSession
+        if (previousSession != null && previousSession !== session) {
+            val tokenToRestore = clipboardSnapshotToken ?: previousSession.commandClipboardSnapshotTokenOrNull()
+            if (tokenToRestore != null &&
+                pasteAutomation.getCurrentClipboardSnapshotToken() == tokenToRestore
+            ) {
+                pasteAutomation.restoreClipboardIfUnchanged(tokenToRestore)
+            }
+        }
+        activeSession = session
+    }
+
+    private fun RecordingSession?.commandClipboardSnapshotTokenOrNull(): ClipboardSnapshotToken? {
+        return (this as? RecordingSession.Command)?.clipboardSnapshotToken
+    }
+
+    private suspend fun ensureProcessingStillActive(generation: Int) {
+        coroutineContext.ensureActive()
+        if (generation != processingGeneration.get()) {
+            throw CancellationException("Stale processing request")
+        }
     }
 
     private suspend fun rewriteWithGeminiFallback(
@@ -885,5 +1144,13 @@ class RecordingViewModel(
             fileOperations.deleteFile(path)
         } catch (_: Exception) {
         }
+    }
+
+    private fun AppSettings.recordingSensitivityPreset(): RecordingSensitivityPreset {
+        return if (whisperModeEnabled) RecordingSensitivityPreset.WHISPER else RecordingSensitivityPreset.NORMAL
+    }
+
+    private fun TranscriptionProvider.supportsCommandWorkflow(): Boolean {
+        return this != TranscriptionProvider.GROQ_WHISPER
     }
 }
