@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.newSingleThreadContext
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -101,6 +102,7 @@ internal class JnaWindowsHotkeyManager : HotkeyManager, Closeable {
 
     @Volatile
     private var config: HotkeyConfig = HotkeyConfig()
+    @Volatile
     private var listenerJob: Job? = null
     private val formatter = WindowsHotkeyDisplayFormatter()
 
@@ -352,7 +354,11 @@ internal class JnaWindowsHotkeyManager : HotkeyManager, Closeable {
     }
 
     override fun startListening() {
-        if (listenerJob?.isCompleted == false) return
+        val existingJob = listenerJob
+        if (existingJob?.isActive == true) return
+        if (existingJob != null && !existingJob.isCompleted) {
+            runBlocking { existingJob.join() }
+        }
 
         listenerJob = scope.launch {
             try {

@@ -41,9 +41,22 @@ fun HotkeyConfig.commandHotkeyValidationError(): String? {
     return null
 }
 
+fun HotkeyConfig.dictationHotkeyValidationError(): String? {
+    val dictation = startHotkey ?: return null
+    if (!dictation.enabled) return null
+    if (dictation.modifiers.isEmpty()) {
+        return "Dictation hotkey must include at least one modifier."
+    }
+    return null
+}
+
 fun HotkeyConfig.effectiveRuntimeConfig(): HotkeyConfig {
+    val dictationBinding = startHotkey?.takeIf { dictationHotkeyValidationError() == null }
     val commandEnabled = commandHotkeyEnabled && commandHotkeyValidationError() == null
-    return copy(commandHotkeyEnabled = commandEnabled)
+    return copy(
+        startHotkey = dictationBinding,
+        commandHotkeyEnabled = commandEnabled,
+    )
 }
 
 @Serializable

@@ -7,6 +7,7 @@ import com.openyap.model.AudioDevice
 import com.openyap.model.HotkeyBinding
 import com.openyap.model.HotkeyConfig
 import com.openyap.model.commandHotkeyValidationError
+import com.openyap.model.dictationHotkeyValidationError
 import com.openyap.model.effectiveHotkeyConfig
 import com.openyap.model.hasCommandHotkeyConflict
 import com.openyap.model.PrimaryUseCase
@@ -685,14 +686,15 @@ class SettingsViewModel(
     }
 
     private fun validateHotkeys(config: HotkeyConfig): HotkeyValidationState {
+        val dictationError = config.dictationHotkeyValidationError()
         val commandError = config.commandHotkeyValidationError()
-        val dictationError = if (config.hasCommandHotkeyConflict()) {
+        val conflictError = if (config.hasCommandHotkeyConflict()) {
             "Dictation hotkey must be different from the command hotkey."
         } else {
             null
         }
         return HotkeyValidationState(
-            dictationError = dictationError,
+            dictationError = dictationError ?: conflictError,
             commandError = commandError,
         )
     }

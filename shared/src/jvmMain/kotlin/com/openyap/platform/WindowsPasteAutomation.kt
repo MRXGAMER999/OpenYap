@@ -13,6 +13,7 @@ import com.sun.jna.platform.win32.WinDef.WORD
 import com.sun.jna.platform.win32.WinUser.INPUT
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
@@ -21,6 +22,7 @@ import java.awt.datatransfer.Transferable
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.coroutineContext
 
 class WindowsPasteAutomation(
     private val clipboardContentWriter: (Transferable) -> Unit = {
@@ -137,24 +139,29 @@ class WindowsPasteAutomation(
     ) {
         withContext(Dispatchers.IO) {
             try {
+                coroutineContext.ensureActive()
                 val targetHandle = targetWindow.windowHandle
                     ?: throw IllegalStateException("Selection source window handle is unavailable.")
                 if (!restoreFocusToWindow(targetHandle)) {
                     throw IllegalStateException("Failed to restore focus to the original window.")
                 }
 
+                coroutineContext.ensureActive()
                 val foregroundHandle = currentForegroundHandle()
                 if (foregroundHandle != targetHandle) {
                     throw IllegalStateException("Paste target changed before replacement.")
                 }
 
+                coroutineContext.ensureActive()
                 writeClipboardContents(StringSelection(text))
                 delay(CLIPBOARD_WRITE_DELAY_MS)
+                coroutineContext.ensureActive()
                 snapshotToken?.let { markClipboardOwnership(it, clipboardUser32.GetClipboardSequenceNumber().toLong()) }
                 val pasteForegroundHandle = currentForegroundHandle()
                 if (pasteForegroundHandle != targetHandle) {
                     throw IllegalStateException("Paste target changed before sending paste input.")
                 }
+                coroutineContext.ensureActive()
                 sendCtrlV()
                 delay(PASTE_SETTLE_DELAY_MS)
             } finally {

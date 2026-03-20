@@ -798,6 +798,11 @@ class RecordingViewModel(
     }
 
     private suspend fun prepareCommandSession(settings: AppSettings): RecordingSession.Command? {
+        if (!settings.transcriptionProvider.supportsCommandWorkflow()) {
+            overlayController.flashMessage("Command Mode requires a rewrite model")
+            return null
+        }
+
         val effectiveHotkeys = settings.effectiveHotkeyConfig()
         val commandHotkey = effectiveHotkeys.commandHotkey?.takeIf {
             effectiveHotkeys.commandHotkeyEnabled && it.enabled
@@ -819,11 +824,6 @@ class RecordingViewModel(
                     clipboardSnapshotToken = captureResult.clipboardSnapshotToken,
                     sourceWindow = captureResult.sourceWindow,
                 )
-                if (!settings.transcriptionProvider.supportsCommandWorkflow()) {
-                    restoreCommandClipboardIfNeeded(session)
-                    overlayController.flashMessage("Command Mode requires a rewrite model")
-                    return null
-                }
                 if (captureResult.selectedText.length > MAX_COMMAND_SELECTION_CHARS) {
                     restoreCommandClipboardIfNeeded(session)
                     overlayController.flashMessage("Selection too long")
