@@ -36,7 +36,9 @@ import com.openyap.service.TranscriptionService
 import com.openyap.service.WhisperPromptBuilder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -108,6 +110,13 @@ private data class SessionContextEntry(
     val text: String,
     val capturedAt: Instant,
     val targetApp: String?,
+)
+
+private data class RecordingStartupSnapshot(
+    val settings: AppSettings,
+    val geminiApiKey: String?,
+    val groqApiKey: String?,
+    val hasMicPermission: Boolean,
 )
 
 /**
@@ -250,106 +259,141 @@ class RecordingViewModel(
 
     private suspend fun startRecording(sessionOverride: RecordingSession?) {
         recordingMutex.withLock {
-        val currentState = _state.value.recordingState
+            val currentState = _state.value.recordingState
 
-        if (currentState is RecordingState.Processing) {
-            overlayController.flashProcessing()
-            return
-        }
-
-        if (currentState !is RecordingState.Idle &&
-            currentState !is RecordingState.Error &&
-            currentState !is RecordingState.Success
-        ) return
-
-        val settings = settingsRepository.loadSettings()
-
-        val geminiApiKey = settingsRepository.loadApiKey()
-        val groqApiKey = settingsRepository.loadGroqApiKey()
-        val apiKeyError = when (settings.transcriptionProvider) {
-            TranscriptionProvider.GEMINI -> if (geminiApiKey.isNullOrBlank()) "Please set your Gemini API key in Settings." else null
-            TranscriptionProvider.GROQ_WHISPER -> if (groqApiKey.isNullOrBlank()) "Please set your Groq API key in Settings." else null
-            TranscriptionProvider.GROQ_WHISPER_GEMINI -> when {
-                groqApiKey.isNullOrBlank() && geminiApiKey.isNullOrBlank() -> "Please set both Groq and Gemini API keys in Settings."
-                groqApiKey.isNullOrBlank() -> "Please set your Groq API key in Settings."
-                geminiApiKey.isNullOrBlank() -> "Please set your Gemini API key in Settings."
-                else -> null
+            if (currentState is RecordingState.Processing) {
+                overlayController.flashProcessing()
+                return
             }
-            TranscriptionProvider.GROQ_WHISPER_GROQ -> if (groqApiKey.isNullOrBlank()) "Please set your Groq API key in Settings." else null
-        }
-        if (apiKeyError != null) {
-            _state.update { it.copy(error = apiKeyError) }
-            if (settings.audioFeedbackEnabled) {
-                audioFeedbackPlayer.playError()
-            }
-            return
-        }
 
-        if (!audioRecorder.hasPermission()) {
-            _state.update { it.copy(error = "Microphone permission denied.") }
-            if (settings.audioFeedbackEnabled) {
-                audioFeedbackPlayer.playError()
-            }
-            return
-        }
-        val session = sessionOverride ?: prepareCommandSession(settings) ?: return
-        setActiveSession(session)
+            if (currentState !is RecordingState.Idle &&
+                currentState !is RecordingState.Error &&
+                currentState !is RecordingState.Success
+            ) return
 
-        if (settings.audioFeedbackEnabled) {
-            audioFeedbackPlayer.playStart()
-        }
+            val startup = coroutineScope {
+                val settingsDeferred = async { settingsRepository.loadSettings() }
+                val geminiApiKeyDeferred = async { settingsRepository.loadApiKey() }
+                val groqApiKeyDeferred = async { settingsRepository.loadGroqApiKey() }
+                val permissionDeferred = async { audioRecorder.hasPermission() }
 
-        val timestamp = Clock.System.now().toEpochMilliseconds()
-        val path = "${fileOperations.tempDir()}/openyap_$timestamp$audioFileExtension"
-        currentRecordingPath = path
-        recordingStartedAt = TimeSource.Monotonic.markNow()
-
-        try {
-            audioRecorder.startRecording(
-                outputPath = path,
-                deviceId = settings.audioDeviceId,
-                sensitivityPreset = settings.recordingSensitivityPreset(),
-            )
-        } catch (e: Exception) {
-            currentRecordingPath = null
-            recordingStartedAt = null
-            setActiveSession(null, session.commandClipboardSnapshotTokenOrNull())
-            _state.update {
-                it.copy(
-                    recordingState = RecordingState.Error(e.message ?: "Failed to start recording"),
-                    error = e.message,
+                RecordingStartupSnapshot(
+                    settings = settingsDeferred.await(),
+                    geminiApiKey = geminiApiKeyDeferred.await(),
+                    groqApiKey = groqApiKeyDeferred.await(),
+                    hasMicPermission = permissionDeferred.await(),
                 )
             }
-            if (settings.audioFeedbackEnabled) {
-                audioFeedbackPlayer.playError()
-            }
-            return
-        }
+            val settings = startup.settings
 
-        _state.update {
-            it.copy(
-                recordingState = RecordingState.Recording(),
-                error = null,
-                amplitude = 0f,
-            )
-        }
+            val apiKeyError = when (settings.transcriptionProvider) {
+                TranscriptionProvider.GEMINI ->
+                    if (startup.geminiApiKey.isNullOrBlank()) {
+                        "Please set your Gemini API key in Settings."
+                    } else {
+                        null
+                    }
 
-        overlayController.show()
+                TranscriptionProvider.GROQ_WHISPER ->
+                    if (startup.groqApiKey.isNullOrBlank()) {
+                        "Please set your Groq API key in Settings."
+                    } else {
+                        null
+                    }
 
-        durationJob = viewModelScope.launch {
-            var seconds = 0
-            while (isActive) {
-                delay(1000)
-                seconds++
-                _state.update {
-                    val rs = it.recordingState
-                    if (rs is RecordingState.Recording) {
-                        it.copy(recordingState = rs.copy(durationSeconds = seconds))
-                    } else it
+                TranscriptionProvider.GROQ_WHISPER_GEMINI -> when {
+                    startup.groqApiKey.isNullOrBlank() && startup.geminiApiKey.isNullOrBlank() ->
+                        "Please set both Groq and Gemini API keys in Settings."
+
+                    startup.groqApiKey.isNullOrBlank() ->
+                        "Please set your Groq API key in Settings."
+
+                    startup.geminiApiKey.isNullOrBlank() ->
+                        "Please set your Gemini API key in Settings."
+
+                    else -> null
                 }
-                overlayController.updateDuration(seconds)
+
+                TranscriptionProvider.GROQ_WHISPER_GROQ ->
+                    if (startup.groqApiKey.isNullOrBlank()) {
+                        "Please set your Groq API key in Settings."
+                    } else {
+                        null
+                    }
             }
-        }
+            if (apiKeyError != null) {
+                _state.update { it.copy(error = apiKeyError) }
+                if (settings.audioFeedbackEnabled) {
+                    audioFeedbackPlayer.playError()
+                }
+                return
+            }
+
+            if (!startup.hasMicPermission) {
+                _state.update { it.copy(error = "Microphone permission denied.") }
+                if (settings.audioFeedbackEnabled) {
+                    audioFeedbackPlayer.playError()
+                }
+                return
+            }
+            val session = sessionOverride ?: prepareCommandSession(settings) ?: return
+            setActiveSession(session)
+
+            if (settings.audioFeedbackEnabled) {
+                audioFeedbackPlayer.playStart()
+            }
+
+            val timestamp = Clock.System.now().toEpochMilliseconds()
+            val path = "${fileOperations.tempDir()}/openyap_$timestamp$audioFileExtension"
+            currentRecordingPath = path
+            recordingStartedAt = TimeSource.Monotonic.markNow()
+
+            try {
+                audioRecorder.startRecording(
+                    outputPath = path,
+                    deviceId = settings.audioDeviceId,
+                    sensitivityPreset = settings.recordingSensitivityPreset(),
+                )
+            } catch (e: Exception) {
+                currentRecordingPath = null
+                recordingStartedAt = null
+                setActiveSession(null, session.commandClipboardSnapshotTokenOrNull())
+                _state.update {
+                    it.copy(
+                        recordingState = RecordingState.Error(e.message ?: "Failed to start recording"),
+                        error = e.message,
+                    )
+                }
+                if (settings.audioFeedbackEnabled) {
+                    audioFeedbackPlayer.playError()
+                }
+                return
+            }
+
+            _state.update {
+                it.copy(
+                    recordingState = RecordingState.Recording(),
+                    error = null,
+                    amplitude = 0f,
+                )
+            }
+
+            overlayController.show()
+
+            durationJob = viewModelScope.launch {
+                var seconds = 0
+                while (isActive) {
+                    delay(1000)
+                    seconds++
+                    _state.update {
+                        val rs = it.recordingState
+                        if (rs is RecordingState.Recording) {
+                            it.copy(recordingState = rs.copy(durationSeconds = seconds))
+                        } else it
+                    }
+                    overlayController.updateDuration(seconds)
+                }
+            }
         }
     }
 

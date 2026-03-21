@@ -13,11 +13,56 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.io.ByteArrayInputStream
 import java.io.Closeable
+import java.io.File
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.min
+import javax.sound.sampled.AudioFileFormat
+import javax.sound.sampled.AudioFormat
+import javax.sound.sampled.AudioInputStream
+import javax.sound.sampled.AudioSystem
+
+internal data class SpeechTrimBounds(
+    val startSample: Int,
+    val endSampleExclusive: Int,
+)
+
+internal fun calculateSpeechTrimBounds(
+    totalSamples: Int,
+    frameSamples: Int,
+    firstSpeechFrame: Int,
+    lastSpeechFrame: Int,
+    leadingMarginFrames: Int,
+    trailingMarginFrames: Int,
+    hangoverFrames: Int,
+    maxLeadingTrimFrames: Int,
+): SpeechTrimBounds? {
+    if (totalSamples <= 0 || frameSamples <= 0) {
+        return null
+    }
+    if (firstSpeechFrame < 0 || lastSpeechFrame < firstSpeechFrame) {
+        return null
+    }
+
+    val totalFrames = (totalSamples + frameSamples - 1) / frameSamples
+    val trimmedStartFrame = (firstSpeechFrame - leadingMarginFrames).coerceAtLeast(0)
+    val startFrame = minOf(trimmedStartFrame, maxLeadingTrimFrames)
+    val endFrameExclusive = min(
+        totalFrames,
+        lastSpeechFrame + 1 + trailingMarginFrames + hangoverFrames,
+    )
+    val startSample = min(totalSamples, startFrame * frameSamples)
+    val endSampleExclusive = min(totalSamples, endFrameExclusive * frameSamples)
+
+    return if (endSampleExclusive > startSample) {
+        SpeechTrimBounds(startSample = startSample, endSampleExclusive = endSampleExclusive)
+    } else {
+        null
+    }
+}
 
 class NativeAudioRecorder(
     private val native: NativeAudioBridge.OpenYapNative = NativeAudioBridge.instance
@@ -27,11 +72,11 @@ class NativeAudioRecorder(
     companion object {
         private const val SampleRate = 48000
         private const val Channels = 1
-        private const val Bitrate = 96000
         private const val VadFrameSamples = 960
         private const val NormalLeadingMarginFrames = 10
         private const val NormalTrailingMarginFrames = 10
         private const val NormalHangoverFrames = 15
+        private const val MaxLeadingTrimFrames = 30
         private const val WhisperLeadingMarginFrames = 18
         private const val WhisperTrailingMarginFrames = 18
         private const val WhisperHangoverFrames = 28
@@ -157,20 +202,7 @@ class NativeAudioRecorder(
         }
 
         val trimmedPcm = trimSilence(capturedPcm)
-        val encodeResult = native.openyap_encode_aac(
-            trimmedPcm,
-            trimmedPcm.size,
-            SampleRate,
-            Channels,
-            Bitrate,
-            path,
-        )
-        if (encodeResult != 0) {
-            val error = nativeError("Failed to encode AAC audio", encodeResult)
-            System.err.println("Native audio encoding failed: $error")
-            throw IllegalStateException(error)
-        }
-
+        writeWaveFile(trimmedPcm, path)
         return path
     }
 
@@ -282,14 +314,42 @@ class NativeAudioRecorder(
             return samples
         }
 
-        val startFrame = (firstSpeechFrame - leadingMarginFrames).coerceAtLeast(0)
-        val endFrameExclusive = min(
-            totalFrames,
-            lastSpeechFrame + 1 + trailingMarginFrames + hangoverFrames,
+        val trimBounds = calculateSpeechTrimBounds(
+            totalSamples = samples.size,
+            frameSamples = VadFrameSamples,
+            firstSpeechFrame = firstSpeechFrame,
+            lastSpeechFrame = lastSpeechFrame,
+            leadingMarginFrames = leadingMarginFrames,
+            trailingMarginFrames = trailingMarginFrames,
+            hangoverFrames = hangoverFrames,
+            maxLeadingTrimFrames = MaxLeadingTrimFrames,
+        ) ?: return samples
+        return samples.copyOfRange(trimBounds.startSample, trimBounds.endSampleExclusive)
+    }
+
+    private fun writeWaveFile(samples: ShortArray, outputPath: String) {
+        val pcmBytes = ByteArray(samples.size * 2)
+        var byteIndex = 0
+        for (sample in samples) {
+            pcmBytes[byteIndex++] = (sample.toInt() and 0xFF).toByte()
+            pcmBytes[byteIndex++] = ((sample.toInt() ushr 8) and 0xFF).toByte()
+        }
+
+        val audioFormat = AudioFormat(
+            SampleRate.toFloat(),
+            16,
+            Channels,
+            true,
+            false,
         )
-        val startSample = startFrame * VadFrameSamples
-        val endSample = min(samples.size, endFrameExclusive * VadFrameSamples)
-        return samples.copyOfRange(startSample, endSample)
+        val frameLength = samples.size.toLong() / Channels
+        AudioInputStream(
+            ByteArrayInputStream(pcmBytes),
+            audioFormat,
+            frameLength,
+        ).use { audioInputStream ->
+            AudioSystem.write(audioInputStream, AudioFileFormat.Type.WAVE, File(outputPath))
+        }
     }
 
     private fun nativeError(prefix: String, code: Int): String {

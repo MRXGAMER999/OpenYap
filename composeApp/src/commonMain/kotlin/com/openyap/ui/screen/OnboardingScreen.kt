@@ -41,7 +41,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -88,6 +87,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.openyap.model.PermissionStatus
 import com.openyap.model.PrimaryUseCase
+import com.openyap.ui.component.AppLogo
 import com.openyap.ui.theme.Spacing
 import com.openyap.viewmodel.OnboardingEvent
 import com.openyap.viewmodel.OnboardingUiState
@@ -180,20 +180,10 @@ fun OnboardingScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                         ) {
-                            Surface(
+                            AppLogo(
                                 modifier = Modifier.size(36.dp),
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Default.Mic,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(20.dp),
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    )
-                                }
-                            }
+                                contentDescription = null,
+                            )
                             Text(
                                 "OpenYap",
                                 style = MaterialTheme.typography.labelLarge,

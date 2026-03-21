@@ -9,21 +9,32 @@ import com.openyap.model.AppSettings
 import com.openyap.platform.SecureStorage
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicReference
 
 class RoomSettingsRepository(
     private val database: OpenYapDatabase,
     private val secureStorage: SecureStorage,
 ) : SettingsRepository {
 
+    private data class CachedSecureValue(val value: String?)
+
     /** Guards load-modify-save sequences against concurrent overwrites. */
     private val settingsMutex = Mutex()
+    private val cachedSettings = AtomicReference<AppSettings?>(null)
+    private val cachedGeminiApiKey = AtomicReference<CachedSecureValue?>(null)
+    private val cachedGroqApiKey = AtomicReference<CachedSecureValue?>(null)
 
     override suspend fun loadSettings(): AppSettings {
-        return database.appSettingsDao().get()?.toDomain() ?: AppSettings()
+        cachedSettings.get()?.let { return it }
+
+        val loaded = database.appSettingsDao().get()?.toDomain() ?: AppSettings()
+        cachedSettings.compareAndSet(null, loaded)
+        return cachedSettings.get() ?: loaded
     }
 
     override suspend fun saveSettings(settings: AppSettings) {
         database.appSettingsDao().upsert(settings.toEntity())
+        cachedSettings.set(settings)
     }
 
     override suspend fun updateSettings(transform: (AppSettings) -> AppSettings): AppSettings {
@@ -35,13 +46,21 @@ class RoomSettingsRepository(
         }
     }
 
-    override suspend fun loadApiKey(): String? = secureStorage.load("gemini_api_key")
+    override suspend fun loadApiKey(): String? =
+        loadCachedSecureValue(cachedGeminiApiKey, "gemini_api_key")
 
-    override suspend fun saveApiKey(key: String) = secureStorage.save("gemini_api_key", key)
+    override suspend fun saveApiKey(key: String) {
+        secureStorage.save("gemini_api_key", key)
+        cachedGeminiApiKey.set(CachedSecureValue(key))
+    }
 
-    override suspend fun loadGroqApiKey(): String? = secureStorage.load("groq_api_key")
+    override suspend fun loadGroqApiKey(): String? =
+        loadCachedSecureValue(cachedGroqApiKey, "groq_api_key")
 
-    override suspend fun saveGroqApiKey(key: String) = secureStorage.save("groq_api_key", key)
+    override suspend fun saveGroqApiKey(key: String) {
+        secureStorage.save("groq_api_key", key)
+        cachedGroqApiKey.set(CachedSecureValue(key))
+    }
 
     override suspend fun loadAppTone(appName: String): String? {
         return database.appToneDao().getByAppName(appName)?.tone
@@ -75,5 +94,16 @@ class RoomSettingsRepository(
     override suspend fun removeAppCustomization(appName: String) {
         database.appToneDao().deleteByAppName(appName)
         database.appPromptDao().deleteByAppName(appName)
+    }
+
+    private suspend fun loadCachedSecureValue(
+        cache: AtomicReference<CachedSecureValue?>,
+        key: String,
+    ): String? {
+        cache.get()?.let { return it.value }
+
+        val loaded = secureStorage.load(key)
+        cache.compareAndSet(null, CachedSecureValue(loaded))
+        return cache.get()?.value ?: loaded
     }
 }

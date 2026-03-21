@@ -77,6 +77,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
 import com.openyap.model.RecordingState
+import com.openyap.ui.component.AppLogo
 import com.openyap.ui.component.RecordingIndicator
 import com.openyap.ui.screen.CustomizationScreen
 import com.openyap.ui.screen.DictionaryScreen
@@ -438,6 +439,10 @@ private fun ShellTopBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.md),
         ) {
+            AppLogo(
+                modifier = Modifier.size(34.dp),
+                contentDescription = null,
+            )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "OpenYap",

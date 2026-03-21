@@ -71,9 +71,10 @@ val desktopMemoryJvmArgs = listOf(
     // Keep startup small and make idle memory reclaim visible in Task Manager.
     "-Xms64m",
     "-Xss512k",
+    // Skiko loads native libraries via System.load on newer JDKs.
+    "--enable-native-access=ALL-UNNAMED",
     "-XX:+IgnoreUnrecognizedVMOptions",
     "-XX:+UseZGC",
-    "-XX:+ZGenerational",
     "-XX:SoftMaxHeapSize=512m",
     "-XX:ZUncommitDelay=60",
     "-XX:+UseCompactObjectHeaders",

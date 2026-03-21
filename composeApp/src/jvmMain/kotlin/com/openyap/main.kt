@@ -92,6 +92,14 @@ fun main() {
             }
 
             var isVisible by remember { mutableStateOf(true) }
+            val hideMainWindow = {
+                isVisible = false
+                // Let Compose dispose the window first, then hint ZGC to reclaim
+                // the now-unused UI graph and start the uncommit delay countdown.
+                javax.swing.SwingUtilities.invokeLater {
+                    runCatching { System.gc() }
+                }
+            }
 
             LaunchedEffect(onboardingViewModel) {
                 val envGroqKey = System.getenv("groq api key")
@@ -196,7 +204,7 @@ fun main() {
 
             if (isVisible) {
                 Window(
-                    onCloseRequest = { isVisible = false },
+                    onCloseRequest = hideMainWindow,
                     title = "OpenYap",
                     state = windowState,
                     icon = appIcon,

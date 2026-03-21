@@ -89,8 +89,8 @@ class PlatformModule {
             logger.info("Native audio pipeline available; NativeAudioBridge.instance present, using NativeAudioRecorder")
             AudioPipelineConfig(
                 audioRecorder = NativeAudioRecorder(nativeAudio),
-                audioMimeType = "audio/mp4",
-                audioFileExtension = ".m4a",
+                audioMimeType = "audio/wav",
+                audioFileExtension = ".wav",
             )
         } else {
             logger.info("Native audio pipeline unavailable; NativeAudioBridge.instance absent, using JvmAudioRecorder fallback")
