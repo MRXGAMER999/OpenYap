@@ -51,6 +51,7 @@ import org.koin.ksp.generated.module
 import openyap.composeapp.generated.resources.Res
 import openyap.composeapp.generated.resources.ic_app_logo
 import org.jetbrains.compose.resources.painterResource
+import java.io.Closeable
 
 fun main() {
     System.setProperty("sun.awt.noerasebackground", "true")
@@ -81,6 +82,13 @@ fun main() {
             val settingsStateForVolume by settingsViewModel.state.collectAsState()
             LaunchedEffect(settingsStateForVolume.soundFeedbackVolume) {
                 audioFeedbackService.setVolume(settingsStateForVolume.soundFeedbackVolume)
+            }
+
+            val shutdownAppResources = {
+                runCatching { (audioRecorder as? Closeable)?.close() }
+                runCatching { (overlayController as? Closeable)?.close() }
+                runCatching { audioFeedbackService.close() }
+                runCatching { (hotkeyManager as? Closeable)?.close() }
             }
 
             var isVisible by remember { mutableStateOf(true) }
@@ -148,13 +156,12 @@ fun main() {
             val windowState = rememberWindowState(size = DpSize(1100.dp, 800.dp))
             val backStack = remember { mutableStateListOf<Route>(Route.Home) }
 
-            DisposableEffect(audioRecorder) {
+            DisposableEffect(audioRecorder, overlayController, audioFeedbackService, hotkeyManager) {
                 onDispose {
-                    runCatching { (audioRecorder as? java.io.Closeable)?.close() }
+                    shutdownAppResources()
                 }
             }
 
-            val recordingState by recordingViewModel.state.collectAsState()
             val appIcon = painterResource(Res.drawable.ic_app_logo)
 
             Tray(
@@ -164,10 +171,7 @@ fun main() {
                 menu = {
                     Item("Show", onClick = { isVisible = true })
                     Item("Quit", onClick = {
-                        runCatching { (audioRecorder as? java.io.Closeable)?.close() }
-                        (overlayController as? java.io.Closeable)?.close()
-                        audioFeedbackService.close()
-                        (hotkeyManager as? java.io.Closeable)?.close()
+                        shutdownAppResources()
                         exitApplication()
                     })
                 },

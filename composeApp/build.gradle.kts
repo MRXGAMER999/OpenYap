@@ -18,10 +18,10 @@ fun Project.readAppVersion(): String {
 
 fun resolvePackagingJavaHome(): String {
     val explicitCandidates = listOfNotNull(
+        System.getProperty("java.home"),
         System.getenv("JPACKAGE_JAVA_HOME"),
         System.getenv("JAVA_HOME"),
         System.getenv("JDK_HOME"),
-        System.getProperty("java.home"),
     )
         .map(::File)
         .map { it.asJdkHomeCandidate() }
@@ -40,7 +40,7 @@ fun resolvePackagingJavaHome(): String {
         .firstOrNull { it.hasJPackage() }
         ?.absolutePath
         ?: error(
-            "No full JDK with jpackage was found. Set JPACKAGE_JAVA_HOME or JAVA_HOME to a JDK 21+ installation."
+            "No full JDK with jpackage was found. Set JPACKAGE_JAVA_HOME or JAVA_HOME to a full JDK, preferably JDK 25."
         )
 }
 
@@ -67,6 +67,17 @@ val copyWindowsPackageResources by tasks.registering(Copy::class) {
 }
 
 val appVersion = project.readAppVersion()
+val desktopMemoryJvmArgs = listOf(
+    // Keep startup small and make idle memory reclaim visible in Task Manager.
+    "-Xms64m",
+    "-Xss512k",
+    "-XX:+IgnoreUnrecognizedVMOptions",
+    "-XX:+UseZGC",
+    "-XX:+ZGenerational",
+    "-XX:SoftMaxHeapSize=512m",
+    "-XX:ZUncommitDelay=60",
+    "-XX:+UseCompactObjectHeaders",
+)
 
 kotlin {
     jvm()
@@ -116,6 +127,7 @@ compose.desktop {
     application {
         mainClass = "com.openyap.MainKt"
         javaHome = resolvePackagingJavaHome()
+        jvmArgs += desktopMemoryJvmArgs
 
         buildTypes.release.proguard {
             isEnabled.set(false)

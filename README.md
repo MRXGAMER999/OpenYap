@@ -82,6 +82,7 @@ chat, drafting notes, or writing longer-form text in another app.
 
 - Windows
 - JDK `21+`
+- JDK `25` recommended for the best memory drop in Task Manager
 - A full JDK with `jpackage` available through `JPACKAGE_JAVA_HOME`, `JAVA_HOME`, or `PATH`
 - Gemini and/or Groq API keys
 
@@ -91,11 +92,20 @@ chat, drafting notes, or writing longer-form text in another app.
 .\gradlew.bat :composeApp:run
 ```
 
+The desktop run and packaged app already include lightweight memory-tuning JVM args:
+
+- `ZGC` with a 60-second uncommit delay
+- `-Xss512k` to reduce thread-stack overhead
+- `UseCompactObjectHeaders` when the runtime supports it, which is picked up automatically on JDK 25
+
 ### Package an MSI
 
 ```powershell
 .\gradlew.bat :composeApp:packageMsi
 ```
+
+For a simple before/after Task Manager check, compare the app while launching, using it for a minute,
+then minimizing it for about 60 seconds.
 
 The desktop packaging flow expects the native DLL at
 `native/prebuilt/windows-x64/openyap_native.dll`.

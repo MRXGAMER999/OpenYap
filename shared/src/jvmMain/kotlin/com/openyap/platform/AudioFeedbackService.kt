@@ -24,7 +24,9 @@ class AudioFeedbackService : Closeable {
                     val clip = AudioSystem.getLine(info) as Clip
                     clip.open(stream)
                     applyVolumeToClip(clip, volume)
-                    clips[tone] = clip
+                    clips.put(tone, clip)?.let { previousClip ->
+                        runCatching { previousClip.close() }
+                    }
                 }
             } catch (_: LineUnavailableException) {
                 // No audio device available — visual feedback is the fallback

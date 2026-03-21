@@ -2,6 +2,7 @@ package com.openyap.platform
 
 import com.openyap.model.AudioDevice
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -13,6 +14,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.Closeable
 import java.io.File
 import javax.sound.sampled.AudioFileFormat
 import javax.sound.sampled.AudioFormat
@@ -21,7 +23,7 @@ import javax.sound.sampled.AudioSystem
 import javax.sound.sampled.DataLine
 import javax.sound.sampled.TargetDataLine
 
-class JvmAudioRecorder : AudioRecorder {
+class JvmAudioRecorder : AudioRecorder, Closeable {
 
     private val _amplitudeFlow = MutableStateFlow(0f)
     override val amplitudeFlow: StateFlow<Float> = _amplitudeFlow.asStateFlow()
@@ -51,6 +53,7 @@ class JvmAudioRecorder : AudioRecorder {
             stopRecordingInternal()
 
             currentOutputPath = outputPath
+            audioData?.close()
             audioData = ByteArrayOutputStream()
 
             val info = DataLine.Info(TargetDataLine::class.java, audioFormat)
@@ -82,13 +85,14 @@ class JvmAudioRecorder : AudioRecorder {
         val data = audioData?.toByteArray() ?: throw IllegalStateException("No audio data")
         audioData = null
 
-        val audioInputStream = AudioInputStream(
+        val outFile = File(path)
+        AudioInputStream(
             ByteArrayInputStream(data),
             audioFormat,
             data.size.toLong() / audioFormat.frameSize,
-        )
-        val outFile = File(path)
-        AudioSystem.write(audioInputStream, AudioFileFormat.Type.WAVE, outFile)
+        ).use { audioInputStream ->
+            AudioSystem.write(audioInputStream, AudioFileFormat.Type.WAVE, outFile)
+        }
 
         _amplitudeFlow.value = 0f
         currentOutputPath = null
@@ -116,6 +120,15 @@ class JvmAudioRecorder : AudioRecorder {
             }
         }
         targetDataLine = null
+    }
+
+    override fun close() {
+        stopRecordingInternal()
+        audioData?.close()
+        audioData = null
+        currentOutputPath = null
+        _amplitudeFlow.value = 0f
+        scope.cancel()
     }
 
     private fun calculateRmsAmplitude(buffer: ByteArray, bytesRead: Int): Float {
