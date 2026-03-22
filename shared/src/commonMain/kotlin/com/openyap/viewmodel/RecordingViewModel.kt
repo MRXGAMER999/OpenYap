@@ -831,9 +831,9 @@ class RecordingViewModel(
     }
 
     private fun buildCorrectionTemperature(settings: AppSettings): Float = when (settings.transcriptionProvider) {
-        TranscriptionProvider.GROQ_WHISPER_GEMINI -> if (settings.genZEnabled) 0.5f else 0.2f
-        TranscriptionProvider.GROQ_WHISPER_GROQ -> 0.2f
-        else -> 0.2f
+        TranscriptionProvider.GROQ_WHISPER_GEMINI -> if (settings.genZEnabled) 0.5f else 0.3f
+        TranscriptionProvider.GROQ_WHISPER_GROQ -> 0.3f
+        else -> 0.3f
     }
 
     private fun buildDirectAudioTemperature(settings: AppSettings): Float = when (settings.transcriptionProvider) {

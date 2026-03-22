@@ -186,7 +186,8 @@ $appContext
 ─────────────────────────────────────────────
 OUTPUT RULE
 ─────────────────────────────────────────────
-Return ONLY the final corrected, cleaned, punctuated text — ready to paste. No preamble, no markdown, no commentary, no "Here is your text:" or similar. The output must faithfully represent what the user intended to say, corrected for grammar and phrasing, and ready for a professional context.""".trimIndent()
+Return ONLY the final corrected, cleaned, punctuated text — ready to paste. No preamble, no markdown, no commentary, no "Here is your text:" or similar. The output must faithfully represent what the user intended to say, corrected for grammar and phrasing, and ready for a professional context.
+NEVER censor, mask, or replace any words with asterisks or symbols. Preserve all words as spoken, including profanity and explicit language.""".trimIndent()
     }
 
     fun buildCorrectionSystemPrompt(
@@ -228,7 +229,7 @@ DOMAIN CONTEXT: The user's primary domain involves: $useCaseContext. Recognize a
         }
 
         return """
-You are doing a second-pass correction of a speech transcript that was already transcribed by a speech-to-text model. Your job is to preserve the user's intended message while making only conservative, context-aware corrections.$customSection$domainSection$whisperModelSection$appContextSection$windowTitleSection$recentSessionSection$recentAppHistorySection
+You are doing a second-pass correction of a speech transcript that was already transcribed by a speech-to-text model. Your job is to produce a coherent, natural sentence that faithfully represents what the speaker intended to say — correcting conservatively when the transcript is clear, and reconstructing freely when it is not.$customSection$domainSection$whisperModelSection$appContextSection$windowTitleSection$recentSessionSection$recentAppHistorySection
 
 INSTRUCTION PRIORITY:
 1. Preserve the original meaning, language, and intent of the transcript
@@ -236,14 +237,13 @@ INSTRUCTION PRIORITY:
 3. Never break CORRECTION, FORMAT, or OUTPUT rules
 
 CORRECTION RULES:
-- Preserve the original meaning, wording, language, and intent as closely as possible.
-- Fix obvious punctuation, capitalization, spacing, and minor grammar issues.
-- Correct likely misheard or accent-related words ONLY when the surrounding context makes the intended word highly likely.
-- Keep domain-specific, product, company, and technical terms unless you are highly confident they were misrecognized.
-- If you are uncertain, keep the original word or phrase.
-- Do not paraphrase, summarize, expand, add detail, or change tone unless clearly required by the system instructions.
-- Do not invent names, facts, or context that are not strongly implied by the transcript.
-- NEVER censor, mask, or replace any words with asterisks or symbols. Preserve all words exactly as they appear, including profanity, slang, and explicit language. If the transcript contains masked or redacted tokens (asterisks), preserve them exactly as they appear and do not attempt to reconstruct or guess the redacted words.
+- Your primary job is to produce a coherent, natural sentence that represents what the speaker intended to say.
+- First, ask yourself: does this transcript make sense as a complete thought? If yes, make conservative fixes only. If no, use the words as phonetic clues and reconstruct the most plausible sentence.
+- Non-native speakers and speakers with impaired speech (illness, accent, background noise) will produce transcripts with wrong words, missing words, or phonetically similar substitutions. This is expected — reconstruct freely.
+- Fix grammar, tense, missing words, wrong prepositions, subject-verb agreement.
+- Correct likely misheard words when the surrounding context suggests a better fit — you do not need high confidence to do this.
+- Keep names, technical terms, and proper nouns unless they are clearly wrong.
+- NEVER censor, mask, or replace any words with asterisks or symbols. Preserve all words exactly as the speaker intended, including profanity and explicit language. If the transcript contains masked tokens, preserve them as-is.
 
 FORMAT RULES:
 - Spoken control phrases are instructions, not content. Treat command-style phrases such as "format this as an email" or "make this a list" as formatting instructions and remove them from the final text.
