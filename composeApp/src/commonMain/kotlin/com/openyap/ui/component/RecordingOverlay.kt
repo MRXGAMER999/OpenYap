@@ -124,7 +124,6 @@ fun RecordingOverlay(
                     OverlayState.PROCESSING -> ActiveBar(
                         state = s,
                         level = level,
-                        durationSeconds = durationSeconds,
                         processingMessage = processingMessage,
                     )
 
@@ -158,7 +157,6 @@ fun RecordingOverlay(
 private fun ActiveBar(
     state: OverlayState,
     level: Float,
-    durationSeconds: Int,
     processingMessage: String,
 ) {
     Row(
@@ -184,34 +182,14 @@ private fun ActiveBar(
             }
         }
 
-        AnimatedContent(
-            targetState = state,
-            transitionSpec = {
-                fadeIn(tween(150)) togetherWith fadeOut(tween(150))
-            },
-            label = "overlayLabel",
-        ) { currentState ->
-            when (currentState) {
-                OverlayState.RECORDING -> Text(
-                    text = formatDuration(durationSeconds),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = FontFamily.Monospace,
-                    color = OverlayText.copy(alpha = 0.85f),
-                    letterSpacing = 0.5.sp,
-                    modifier = Modifier.widthIn(min = 32.dp),
-                )
-
-                OverlayState.PROCESSING -> Text(
-                    text = processingMessage,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = OverlayAccent.copy(alpha = 0.85f),
-                    letterSpacing = 0.5.sp,
-                )
-
-                else -> Unit
-            }
+        if (state == OverlayState.PROCESSING) {
+            Text(
+                text = processingMessage,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = OverlayAccent.copy(alpha = 0.85f),
+                letterSpacing = 0.5.sp,
+            )
         }
     }
 }
@@ -306,14 +284,14 @@ private fun FlashMessageRow(message: String, state: OverlayState) {
 @Composable
 private fun WaveformBars(level: Float) {
     val transition = rememberInfiniteTransition(label = "wave")
-    val barCount = 4
+    val barCount = 7
     val barOffsets = (0 until barCount).map { i ->
         transition.animateFloat(
             initialValue = 0.15f,
             targetValue = 0.95f,
             animationSpec = infiniteRepeatable(
                 animation = tween(
-                    durationMillis = 400 + i * 60,
+                    durationMillis = 400 + i * 50,
                     easing = FastOutSlowInEasing,
                 ),
                 repeatMode = RepeatMode.Reverse,
@@ -325,24 +303,24 @@ private fun WaveformBars(level: Float) {
     val animLevel by animateFloatAsState(
         targetValue = level.coerceIn(0f, 1f),
         animationSpec = spring(
-            dampingRatio = 0.5f,
-            stiffness = 500f
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
         ),
         label = "lvl",
     )
 
-    val effectiveLevel = if (animLevel < 0.05f) 0f else animLevel
+    val effectiveLevel = if (animLevel < 0.05f) 0.05f else animLevel
 
     val brush = Brush.verticalGradient(
-        colors = listOf(OverlayAccent.copy(alpha = 0.4f), OverlayAccent)
+        colors = listOf(OverlayAccent.copy(alpha = 0.6f), OverlayAccent)
     )
 
     Row(
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         barOffsets.forEachIndexed { _, anim ->
-            val h = if (effectiveLevel == 0f) 3.dp else (3 + 13 * anim.value * effectiveLevel).dp
+            val h = (4 + 16 * anim.value * effectiveLevel).dp
             Box(
                 Modifier
                     .width(3.dp)
