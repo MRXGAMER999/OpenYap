@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.0] - 2026-03-24
+
+feat: introduce minimalist Liquid Glass recording overlay
+
+- Replaced the dark capsule with a premium "Liquid Glass" design featuring high-refraction borders and depth simulation.
+- Removed the numerical timer to minimize visual noise and focus on pure recording status.
+- Enhanced waveform sensitivity to provide dynamic visual feedback at normal speaking volumes.
+- Refined the overlay dimensions for a more compact and integrated desktop experience.
+
 ## [1.2.1] - 2026-03-23
 
 fix: stabilize dictation correction behavior
