@@ -63,11 +63,12 @@ import androidx.compose.ui.unit.sp
 import com.openyap.model.OverlayState
 
 // ── Overlay-specific palette (always dark glass, independent of app theme) ──
-private val OverlayBg = Color(0xFF1A1A2E)
+private val OverlayBg = Color(0x401A1A2E) // 25% opacity
 private val OverlayText = Color.White
 private val OverlayAccent = Color(0xFF76D1C1)   // teal – matches app primary
 private val OverlaySuccess = Color(0xFF4ADE80)   // green
-private val OverlayBorder = Color.White
+private val OverlayBorder = Color(0x66FFFFFF) // 40% white
+private val OverlayRimHighlight = Color(0x33FFFFFF) // 20% white highlight
 
 @Composable
 fun RecordingOverlay(
@@ -83,22 +84,26 @@ fun RecordingOverlay(
         modifier = Modifier
             .padding(4.dp)
             .shadow(
-                elevation = 8.dp,
+                elevation = 12.dp,
                 shape = capsuleShape,
-                ambientColor = Color.Black.copy(alpha = 0.3f),
-                spotColor = Color.Black.copy(alpha = 0.2f),
+                ambientColor = Color.Black.copy(alpha = 0.4f),
+                spotColor = Color.Black.copy(alpha = 0.3f),
                 clip = false
             )
             .clip(capsuleShape)
-            .background(OverlayBg.copy(alpha = 0.70f))
-            .border(0.5.dp, OverlayBorder.copy(alpha = 0.08f), capsuleShape)
+            .background(OverlayBg)
+            // Outer Refractive Rim
+            .border(0.5.dp, OverlayBorder, capsuleShape)
+            // Inner Lens Thickness Simulation
+            .padding(1.dp)
+            .border(0.5.dp, OverlayRimHighlight, capsuleShape)
             .animateContentSize(
                 animationSpec = spring(
                     dampingRatio = Spring.DampingRatioNoBouncy,
                     stiffness = Spring.StiffnessMedium
                 )
             )
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = 24.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(
