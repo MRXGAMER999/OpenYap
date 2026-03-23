@@ -102,7 +102,7 @@ fun RecordingOverlay(
                     stiffness = Spring.StiffnessMedium
                 )
             )
-            .padding(horizontal = 24.dp, vertical = 12.dp),
+            .padding(horizontal = 20.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -301,7 +301,7 @@ private fun WaveformBars(level: Float) {
     }
 
     val animLevel by animateFloatAsState(
-        targetValue = level.coerceIn(0f, 1f),
+        targetValue = (level * 2f).coerceIn(0f, 1f),
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessMedium
@@ -309,7 +309,7 @@ private fun WaveformBars(level: Float) {
         label = "lvl",
     )
 
-    val effectiveLevel = if (animLevel < 0.05f) 0.05f else animLevel
+    val effectiveLevel = if (animLevel < 0.1f) 0.1f else animLevel
 
     val brush = Brush.verticalGradient(
         colors = listOf(OverlayAccent.copy(alpha = 0.6f), OverlayAccent)
@@ -320,7 +320,7 @@ private fun WaveformBars(level: Float) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         barOffsets.forEachIndexed { _, anim ->
-            val h = (4 + 16 * anim.value * effectiveLevel).dp
+            val h = (5 + 15 * anim.value * effectiveLevel).dp
             Box(
                 Modifier
                     .width(3.dp)
