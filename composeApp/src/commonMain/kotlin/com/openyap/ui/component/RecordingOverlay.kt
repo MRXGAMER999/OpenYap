@@ -211,7 +211,7 @@ private fun SuccessBar() {
     Row(
         modifier = Modifier.heightIn(min = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(
             Modifier
@@ -223,8 +223,8 @@ private fun SuccessBar() {
         Text(
             text = "Pasted",
             fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = OverlaySuccess,
+            fontWeight = FontWeight.Medium,
+            color = OverlaySuccess.copy(alpha = 0.9f),
             letterSpacing = 0.5.sp,
         )
     }
@@ -235,19 +235,20 @@ private fun ErrorBar() {
     Row(
         modifier = Modifier.heightIn(min = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Icon(
             imageVector = Icons.Default.ErrorOutline,
             contentDescription = null,
             modifier = Modifier.size(14.dp),
-            tint = MaterialTheme.colorScheme.error,
+            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.9f),
         )
         Text(
             text = "Could not paste",
             fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.error,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.error.copy(alpha = 0.9f),
+            letterSpacing = 0.5.sp,
         )
     }
 }
