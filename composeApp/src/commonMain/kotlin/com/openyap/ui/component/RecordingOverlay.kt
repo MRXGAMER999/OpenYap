@@ -74,7 +74,6 @@ private val OverlayRimHighlight = Color(0x33FFFFFF) // 20% white highlight
 fun RecordingOverlay(
     state: OverlayState,
     level: Float,
-    durationSeconds: Int,
     processingMessage: String,
     flashMessage: String?,
 ) {
@@ -331,10 +330,4 @@ private fun WaveformBars(level: Float) {
             )
         }
     }
-}
-
-private fun formatDuration(seconds: Int): String {
-    val m = seconds / 60
-    val s = seconds % 60
-    return if (m > 0) "%d:%02d".format(m, s) else "${s}s"
 }

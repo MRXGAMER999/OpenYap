@@ -91,7 +91,6 @@ fun ComposeOverlayWindow(uiState: OverlayUiState) {
             RecordingOverlay(
                 state = uiState.state,
                 level = uiState.level,
-                durationSeconds = uiState.durationSeconds,
                 processingMessage = uiState.processingMessage,
                 flashMessage = uiState.flashMessage,
             )
