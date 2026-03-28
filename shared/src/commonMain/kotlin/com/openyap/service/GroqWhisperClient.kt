@@ -17,8 +17,6 @@ import io.ktor.http.content.PartData
 import io.ktor.utils.io.ByteReadChannel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import kotlinx.io.IOException
 
 class GroqWhisperClient(private val client: HttpClient) : TranscriptionService {
@@ -97,7 +95,7 @@ class GroqWhisperClient(private val client: HttpClient) : TranscriptionService {
             )
             add(
                 PartData.FormItem(
-                    value = "json",
+                    value = "text",
                     dispose = {},
                     partHeaders = Headers.build {
                         append(HttpHeaders.ContentDisposition, fieldDisposition("response_format"))
@@ -155,11 +153,11 @@ class GroqWhisperClient(private val client: HttpClient) : TranscriptionService {
             throw GroqWhisperException("Groq API error (${response.status.value}): $errorBody")
         }
 
-        val result = response.body<GroqTranscriptionResponse>()
-        if (result.text.isBlank()) {
+        val result = response.body<String>().trim()
+        if (result.isBlank()) {
             throw GroqWhisperException("Groq Whisper returned an empty transcription.")
         }
-        return result.text
+        return result
     }
 
     override suspend fun listModels(apiKey: String): List<ModelInfo> = AVAILABLE_MODELS
@@ -206,7 +204,3 @@ class GroqWhisperException(message: String) : Exception(message)
 
 private class TemporaryGroqWhisperException(message: String) : Exception(message)
 
-@Serializable
-internal data class GroqTranscriptionResponse(
-    @SerialName("text") val text: String = "",
-)

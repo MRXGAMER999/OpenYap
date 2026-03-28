@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1] - 2026-03-28
+
+fix: switch AI transcription output to plain text
+
+- Updated Groq Whisper transcription requests to return plain text instead of JSON.
+- Removed JSON deserialization from the transcription response path to avoid failures from malformed model output.
+
 ## [1.3.0] - 2026-03-24
 
 feat: introduce minimalist Liquid Glass recording overlay
