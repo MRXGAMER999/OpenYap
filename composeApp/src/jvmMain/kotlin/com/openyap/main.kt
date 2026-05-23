@@ -176,6 +176,7 @@ fun main() {
                 state = trayState,
                 tooltip = "OpenYap",
                 icon = appIcon,
+                onClick = { isVisible = true },
                 menu = {
                     Item("Show", onClick = { isVisible = true })
                     Item("Quit", onClick = {
