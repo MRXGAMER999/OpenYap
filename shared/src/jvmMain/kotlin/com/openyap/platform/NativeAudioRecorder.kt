@@ -202,6 +202,9 @@ class NativeAudioRecorder(
         }
 
         val trimmedPcm = trimSilence(capturedPcm)
+        if (trimmedPcm.isEmpty()) {
+            throw IllegalStateException("No speech detected. Is your microphone on?")
+        }
         writeWaveFile(trimmedPcm, path)
         return path
     }
@@ -311,7 +314,7 @@ class NativeAudioRecorder(
         }
 
         if (firstSpeechFrame == -1 || lastSpeechFrame == -1) {
-            return samples
+            return ShortArray(0)
         }
 
         val trimBounds = calculateSpeechTrimBounds(
